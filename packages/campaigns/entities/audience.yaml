@@ -1,0 +1,148 @@
+- name: CampaignSettings
+  label: Campaign Settings
+  kind: settings
+  module: marketing
+  description: "Email marketing settings. The public URL (for tracking, unsubscribe and confirmation links), the hourly sending limit and the email accounts come from the Mail app's Communication Settings."
+  fields:
+    - {name: postal_address, type: text, description: "Your organization's postal address, printed in every campaign footer (anti-spam laws such as CAN-SPAM require one)"}
+    - {name: soft_bounce_limit, type: int, default: 3, min: 1, max: 20, description: "Soft bounces in a row after which an address is suppressed (an open or click resets the count)"}
+    - {name: link_expiry_days, type: int, default: 365, min: 30, max: 3650, description: "Days the tracking and unsubscribe links of a sent email keep working"}
+    - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
+    - {name: webhook_secret, type: secret, description: "Signs bounce and complaint webhooks (HMAC-SHA256). Write-only; the New Webhook Secret action creates one"}
+    - {name: signing_key, type: secret, read_only: true, hidden: true, description: "Signs tracking, unsubscribe and confirmation links; created automatically"}
+  actions:
+    - {name: rotate_webhook_secret, label: New Webhook Secret, permission: write, confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"}
+  form:
+    - {label: Compliance, fields: [postal_address]}
+    - {label: Deliverability, fields: [soft_bounce_limit, webhook_secret]}
+    - {label: Links, fields: [link_expiry_days, confirmation_hours]}
+
+- name: MarketingContact
+  label: Marketing Contact
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email, full_name]
+  description: "A person you may email: one per address (case-insensitive), with consent status and evidence, custom attributes and an optional link to the record they came from. Only the person can opt back in (signup form confirmation) once unsubscribed or after a complaint."
+  fields:
+    - {name: email, type: email, required: true, unique: true, in_list: true}
+    - {name: first_name, type: data, max_length: 100}
+    - {name: last_name, type: data, max_length: 100}
+    - {name: full_name, type: data, read_only: true, in_list: true}
+    - {name: consent_status, type: select, options: [Subscribed, Pending, Unsubscribed, Bounced, Complained], default: Subscribed, required: true, in_list: true, in_filter: true,
+       description: "Campaigns and journeys mail Subscribed contacts only. Pending: waiting for a double opt-in confirmation"}
+    - {name: consent_at, type: datetime, label: Consent Changed At, read_only: true, no_copy: true}
+    - {name: consent_source, type: data, read_only: true, no_copy: true, description: "What changed the consent last (a form, an unsubscribe link, a bounce, a person)"}
+    - {name: consent_ip_hash, type: data, label: Consent IP Hash, read_only: true, no_copy: true, description: "Keyed hash of the network address the consent or opt-out came from: evidence without storing the address"}
+    - {name: source, type: select, options: [Manual, Import, Email Group, Customer, Contact, Lead, Subscription Form, API], default: Manual, in_list: true, in_filter: true}
+    - {name: attributes, type: json, description: "Custom attributes {key: value}: keys are lowercase letters, digits and _ (at most 40 characters); values are text, numbers, true/false or dates (YYYY-MM-DD)"}
+    - {name: record_entity, type: data, label: Linked Entity, in_filter: true, description: "The record this contact came from, e.g. Customer"}
+    - {name: record_id, type: data, label: Linked Record}
+    - {name: soft_bounce_count, type: int, read_only: true, no_copy: true}
+    - {name: confirmation_sent_at, type: datetime, read_only: true, hidden: true, no_copy: true}
+  indexes: [[record_entity, record_id]]
+  form:
+    - {label: Contact, fields: [email, first_name, last_name, full_name, source]}
+    - {label: Consent, fields: [consent_status, consent_at, consent_source, consent_ip_hash, soft_bounce_count]}
+    - {label: Attributes, fields: [attributes]}
+    - {label: Linked Record, collapsible: true, fields: [record_entity, record_id]}
+  list: {columns: [email, full_name, consent_status, source], sort: email asc}
+
+- name: EmailSuppression
+  label: Email Suppression
+  label_plural: Suppression List
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "Addresses campaigns and journeys never mail, whatever their consent: unsubscribes, hard bounces, repeated soft bounces, complaints and manual blocks."
+  fields:
+    - {name: email, type: email, required: true, unique: true, in_list: true}
+    - {name: reason, type: select, options: [Manual, Unsubscribed, Hard Bounce, Soft Bounces, Complaint], default: Manual, required: true, in_list: true, in_filter: true}
+    - {name: source, type: data, read_only: true, in_list: true, description: "Where it came from: a campaign, a journey, the bounce webhook or a person"}
+    - {name: note, type: text}
+  list: {columns: [email, reason, source], sort: email asc}
+
+- name: SegmentRule
+  label: Segment Rule
+  kind: child
+  fields:
+    - {name: rule_type, type: select, options: [Contact Field, Attribute, Email Group, Engagement], default: Contact Field, required: true, in_list: true}
+    - {name: field, type: select, options: [Email, First Name, Last Name, Full Name, Source, Consent Status, Linked Entity, Created On], in_list: true,
+       description: "Contact Field rules"}
+    - {name: attribute, type: data, max_length: 40, in_list: true, description: "Attribute rules: the attribute key"}
+    - name: operator
+      type: select
+      required: true
+      in_list: true
+      options: [Equals, Not Equals, Contains, Not Contains, Starts With, Ends With, Is Empty, Is Not Empty, Greater Than, Less Than, Before, After, Within Last Days,
+                Is Member, Is Not Member, Did, Did Not]
+    - {name: value, type: data, max_length: 200, in_list: true, description: "Text to compare; a number for Greater/Less Than; YYYY-MM-DD for Before/After; days for Within Last Days"}
+    - {name: email_group, type: link, to: EmailGroup, in_list: true, description: "Email Group rules"}
+    - {name: activity, type: select, options: [Opened, Clicked, Was Sent], in_list: true, description: "Engagement rules"}
+    - {name: within_days, type: int, min: 1, max: 3650, in_list: true, description: "Engagement rules: in the last N days"}
+    - {name: campaign, type: link, to: EmailCampaign, description: "Engagement rules: only this campaign (blank = any campaign or journey email)"}
+
+- name: MarketingSegment
+  label: Marketing Segment
+  kind: master
+  module: marketing
+  title_field: segment_name
+  description: "A dynamic group of contacts defined by rules on their fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days). Evaluated whenever it is used; the Preview action counts it."
+  fields:
+    - {name: segment_name, type: data, required: true, unique: true, in_list: true}
+    - {name: match_type, type: select, options: [All, Any], default: All, required: true, label: Match, description: "All rules must hold, or at least one"}
+    - {name: rules, type: table, of: SegmentRule}
+    - {name: description, type: text}
+    - {name: contact_count, type: int, read_only: true, no_copy: true, in_list: true}
+    - {name: mailable_count, type: int, read_only: true, no_copy: true, in_list: true, description: "Of those, subscribed and not suppressed"}
+    - {name: counted_at, type: datetime, read_only: true, no_copy: true}
+  actions:
+    - {name: preview, label: Preview, permission: read}
+  form:
+    - {label: Segment, fields: [segment_name, match_type, description]}
+    - {label: Rules, fields: [rules]}
+    - {label: Last Preview, fields: [contact_count, mailable_count, counted_at]}
+  list: {columns: [segment_name, contact_count, mailable_count], sort: segment_name asc}
+
+- name: AudienceImport
+  label: Audience Import
+  kind: master
+  module: marketing
+  title_field: import_name
+  description: "Adds marketing contacts from a Mail email group, or from customers, CRM contacts or CRM leads (when the CRM app is installed), skipping addresses that already exist (case-insensitive). Opt-outs (unsubscribed group members, contacts or leads) are imported as Unsubscribed. Run it again to pick up new records."
+  fields:
+    - {name: import_name, type: data, required: true, in_list: true}
+    - {name: source, type: select, options: [Email Group, Customer, Contact, Lead], required: true, in_list: true, in_filter: true}
+    - {name: email_group, type: link, to: EmailGroup, visible_if: "doc.source == 'Email Group'", required_if: "doc.source == 'Email Group'"}
+    - {name: filters, type: json, visible_if: "doc.source != 'Email Group'", description: "Only records matching these filters, in the records API format (e.g. {\"customer_group\": \"<id>\"})"}
+    - {name: status, type: select, options: [Draft, Completed], default: Draft, read_only: true, no_copy: true, in_list: true}
+    - {name: last_run_at, type: datetime, read_only: true, no_copy: true, in_list: true}
+    - {name: created_count, type: int, label: Contacts Created, read_only: true, no_copy: true, in_list: true}
+    - {name: existing_count, type: int, label: Already Contacts, read_only: true, no_copy: true}
+    - {name: unsubscribed_count, type: int, label: Opt-outs Recorded, read_only: true, no_copy: true}
+    - {name: invalid_count, type: int, label: Skipped (No Valid Email), read_only: true, no_copy: true}
+  actions:
+    - {name: run_import, label: Run Import, permission: write}
+  list: {columns: [import_name, source, status, last_run_at, created_count], sort: import_name asc}
+
+- name: SubscriptionForm
+  label: Subscription Form
+  kind: master
+  module: marketing
+  title_field: form_name
+  description: "A public signup form with double opt-in: browsers or scripts POST to its endpoint, new subscribers get a confirmation email and become Subscribed (and join the email group) only when they confirm."
+  fields:
+    - {name: form_name, type: data, required: true, unique: true, in_list: true}
+    - {name: enabled, type: check, default: true, in_list: true}
+    - {name: endpoint, type: data, read_only: true, no_copy: true, description: "POST here (JSON or a form): email, first_name, last_name and the allowed attributes"}
+    - {name: email_group, type: link, to: EmailGroup, in_list: true, description: "Confirmed subscribers join this Mail email group"}
+    - {name: email_account, type: link, to: EmailAccount, description: "Sends the confirmation email; blank = the default outgoing account"}
+    - {name: allowed_attributes, type: data, description: "Attribute keys the form may set, comma-separated (e.g. city, interests)"}
+    - {name: confirmation_subject, type: data, required: true, default: "Please confirm your subscription", max_length: 998}
+    - {name: confirmation_content, type: text, description: "HTML with {{ confirm_url }}, {{ contact.first_name }}, {{ form_name }}; blank = a built-in message"}
+    - {name: thank_you_url, type: url, description: "Browser form posts are redirected here; blank = a built-in page"}
+    - {name: confirmed_url, type: url, description: "Shown after confirming; blank = a built-in page"}
+    - {name: submission_count, type: int, read_only: true, no_copy: true, in_list: true}
+    - {name: confirmed_count, type: int, read_only: true, no_copy: true, in_list: true}
+  list: {columns: [form_name, enabled, email_group, submission_count, confirmed_count], sort: form_name asc}

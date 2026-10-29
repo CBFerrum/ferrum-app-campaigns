@@ -1,0 +1,16 @@
+id: campaigns
+name: Campaigns
+version: 0.1.0
+publisher: cbferrum
+summary: "Email marketing: segments, campaigns with A/B tests, automated journeys, open and click tracking, suppression lists and consent"
+description: README.md
+categories: [marketing]
+license: AGPL-3.0-only
+homepage: https://github.com/CBFerrum/ferrum-app-campaigns
+support: https://github.com/CBFerrum/ferrum-app-campaigns/issues
+runtime: native
+requires:
+  comms: ">=0.1, <0.2"
+platform: ">=0.3, <0.4"
+packages: [campaigns]
+uninstall: ask
