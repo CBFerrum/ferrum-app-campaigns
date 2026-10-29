@@ -13,6 +13,10 @@ modules:
             JourneyEnrollment, CampaignSettings, report:campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
             report:audience_growth]
 
+# What a personal-data request exports and erases for a contact (their email). The suppression list
+# keeps unsubscribed addresses, so an erased person is never mailed again.
+personal_data:
+  - {entity: MarketingContact, match: email, erase: [email, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes]}
 roles:
   - name: Marketing User
     description: Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them.
