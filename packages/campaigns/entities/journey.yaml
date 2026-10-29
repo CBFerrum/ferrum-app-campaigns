@@ -1,0 +1,93 @@
+- name: JourneyStep
+  label: Journey Step
+  kind: child
+  fields:
+    - {name: step_type, type: select, options: [Send Email, Wait, Branch, Update Attribute, Add To Group, Remove From Group, Exit], required: true, in_list: true}
+    - {name: label, type: data, max_length: 100, in_list: true}
+    - {name: subject, type: data, max_length: 998, description: "Send Email"}
+    - {name: preheader, type: data, max_length: 250, description: "Send Email"}
+    - {name: content, type: text, description: "Send Email: HTML, the same template values as campaigns"}
+    - {name: email_template, type: link, to: EmailTemplate, description: "Send Email: fills a blank subject and content from a Mail email template"}
+    - {name: wait_amount, type: int, min: 1, max: 10000, in_list: true, description: "Wait"}
+    - {name: wait_unit, type: select, options: [Hours, Days], default: Days, in_list: true,
+       description: "Wait: days keep the time of day in the workspace's time zone (across daylight saving changes)"}
+    - {name: branch_on, type: select, options: [Opened Last Email, Clicked Last Email, Attribute Equals, In Segment], in_list: true, description: "Branch"}
+    - {name: attribute, type: data, max_length: 40, description: "Branch on Attribute Equals, Update Attribute: the attribute key"}
+    - {name: value, type: data, max_length: 200, description: "Branch on Attribute Equals, Update Attribute (blank removes the attribute)"}
+    - {name: segment, type: link, to: MarketingSegment, description: "Branch on In Segment"}
+    - {name: email_group, type: link, to: EmailGroup, description: "Add To Group, Remove From Group"}
+    - {name: next_step, type: int, min: 1, max: 100, in_list: true, description: "Step to go to next (blank = the following step); for Branch: when the condition holds"}
+    - {name: else_step, type: int, min: 1, max: 100, in_list: true, description: "Branch: step to go to when the condition does not hold (blank = the journey ends)"}
+
+- name: MarketingJourney
+  label: Marketing Journey
+  kind: master
+  module: marketing
+  title_field: journey_name
+  description: "An automation: contacts enter on a trigger and move through the steps (emails, waits, branches on opens, clicks, attributes or segments, attribute and email group updates) until they finish, reach the goal or unsubscribe. Steps are fixed once the journey is activated."
+  fields:
+    - {name: journey_name, type: data, required: true, unique: true, in_list: true}
+    - {name: status, type: select, options: [Draft, Active, Paused, Stopped], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
+    - {name: trigger_type, type: select, options: [Joined Email Group, Entered Segment, Attribute Changed, Date Anniversary], required: true, in_list: true}
+    - {name: trigger_group, type: link, to: EmailGroup, visible_if: "doc.trigger_type == 'Joined Email Group'", required_if: "doc.trigger_type == 'Joined Email Group'"}
+    - {name: trigger_segment, type: link, to: MarketingSegment, visible_if: "doc.trigger_type == 'Entered Segment'", required_if: "doc.trigger_type == 'Entered Segment'"}
+    - {name: trigger_attribute, type: data, max_length: 40, visible_if: "doc.trigger_type == 'Attribute Changed' || doc.trigger_type == 'Date Anniversary'",
+       required_if: "doc.trigger_type == 'Attribute Changed' || doc.trigger_type == 'Date Anniversary'",
+       description: "The attribute that changes, or that holds the date (YYYY-MM-DD) whose anniversary starts the journey"}
+    - {name: trigger_value, type: data, max_length: 200, visible_if: "doc.trigger_type == 'Attribute Changed'", description: "Only when it changes to this value (blank = any change)"}
+    - {name: anniversary_offset_days, type: int, default: 0, min: -60, max: 60, visible_if: "doc.trigger_type == 'Date Anniversary'",
+       description: "Days after (positive) or before (negative) the anniversary, in the workspace's time zone"}
+    - {name: include_existing, type: check, description: "Joined Email Group and Entered Segment: also enroll those already in it when the journey is activated"}
+    - {name: allow_reentry, type: check, description: "Contacts who left the group or segment (or finished the journey after an attribute change) can enter again"}
+    - {name: email_account, type: link, to: EmailAccount, label: From Account, description: "Blank = the default outgoing account"}
+    - {name: track_opens, type: check, default: true}
+    - {name: track_clicks, type: check, default: true}
+    - {name: goal_segment, type: link, to: MarketingSegment, description: "Contacts who enter this segment have reached the goal and leave the journey"}
+    - {name: steps, type: table, of: JourneyStep, required: true}
+    - {name: activated_at, type: datetime, read_only: true, no_copy: true}
+    - {name: trigger_cursor, type: int, read_only: true, hidden: true, no_copy: true}
+    - {name: baseline_done, type: check, read_only: true, hidden: true, no_copy: true}
+    - {name: enrolled_count, type: int, label: Enrolled, read_only: true, no_copy: true, in_list: true}
+    - {name: active_count, type: int, label: In Progress, read_only: true, no_copy: true, in_list: true}
+    - {name: completed_count, type: int, label: Completed, read_only: true, no_copy: true}
+    - {name: goal_count, type: int, label: Reached Goal, read_only: true, no_copy: true, in_list: true}
+    - {name: exited_count, type: int, label: Exited, read_only: true, no_copy: true}
+  actions:
+    - {name: activate, label: Activate, permission: write, condition: "doc.status == 'Draft' || doc.status == 'Paused'"}
+    - {name: pause, label: Pause, permission: write, condition: "doc.status == 'Active'"}
+    - {name: stop, label: Stop, permission: write, condition: "doc.status == 'Active' || doc.status == 'Paused'",
+       confirm: "Contacts still in the journey leave it and it cannot be restarted. Continue?"}
+  form:
+    - {label: Journey, fields: [journey_name, status, email_account, track_opens, track_clicks]}
+    - {label: Trigger, fields: [trigger_type, trigger_group, trigger_segment, trigger_attribute, trigger_value, anniversary_offset_days, include_existing, allow_reentry]}
+    - {label: Steps, fields: [steps]}
+    - {label: Goal, fields: [goal_segment]}
+    - {label: Results, fields: [activated_at, enrolled_count, active_count, completed_count, goal_count, exited_count]}
+  list: {columns: [journey_name, status, trigger_type, enrolled_count, active_count, goal_count], sort: journey_name asc}
+
+- name: JourneyEnrollment
+  label: Journey Enrollment
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "A contact's way through a journey: the step it is on, when it continues and how it ended. Written by the journey; managers can take a contact out."
+  fields:
+    - {name: journey, type: link, to: MarketingJourney, required: true, on_delete: cascade, in_list: true, in_filter: true}
+    - {name: contact, type: link, to: MarketingContact, required: true, on_delete: cascade, in_filter: true}
+    - {name: email, type: data, read_only: true, in_list: true}
+    - {name: status, type: select, options: [Active, Completed, Goal Reached, Exited], read_only: true, in_list: true, in_filter: true}
+    - {name: current_step, type: int, read_only: true, in_list: true}
+    - {name: waiting, type: check, read_only: true, description: "The current step is a Wait whose timer runs until Next Run At"}
+    - {name: next_run_at, type: datetime, read_only: true, in_list: true}
+    - {name: entered_at, type: datetime, read_only: true}
+    - {name: finished_at, type: datetime, read_only: true}
+    - {name: exit_reason, type: data, read_only: true}
+    - {name: last_recipient, type: link, to: CampaignRecipient, on_delete: set_null, read_only: true, description: "The last email this journey sent the contact (for branches on opens and clicks)"}
+    - {name: steps_done, type: int, read_only: true}
+    - {name: trigger_key, type: data, read_only: true, hidden: true}
+  unique: [[journey, contact, trigger_key]]
+  indexes: [[status, next_run_at]]
+  actions:
+    - {name: exit_journey, label: Take Out Of Journey, permission: write, condition: "doc.status == 'Active'"}
+  list: {columns: [email, journey, status, current_step, next_run_at], sort: email asc}

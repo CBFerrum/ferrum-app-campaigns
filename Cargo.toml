@@ -1,0 +1,51 @@
+[package]
+name = "ferrum-app-campaigns"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+description = "Email marketing: segments, campaigns with A/B tests, automated journeys, open and click tracking, suppression lists and consent"
+repository = "https://github.com/CBFerrum/ferrum-app-campaigns"
+build = "build.rs"
+
+[dependencies]
+ferrum-kernel = { git = "https://github.com/CBFerrum/Ferrum", branch = "main" }
+ferrum-meta = { git = "https://github.com/CBFerrum/Ferrum", branch = "main" }
+ferrum-domain = { git = "https://github.com/CBFerrum/Ferrum", branch = "main" }
+ferrum-calc = { git = "https://github.com/CBFerrum/Ferrum", branch = "main" }
+ferrum-app-comms = { git = "https://github.com/CBFerrum/ferrum-app-comms", branch = "main" }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.43", features = ["serde-with-str", "maths"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "uuid", "chrono", "rust_decimal", "json", "migrate", "macros"] }
+tracing = "0.1"
+uuid = { version = "1.10", features = ["v4", "v7", "serde"] }
+# Already in the tree through the Mail app and the platform (same versions).
+chrono-tz = { version = "0.10", default-features = false }
+form_urlencoded = "1"
+hex = "0.4"
+hmac = "0.12"
+mail-parser = { version = "0.11", features = ["full_encoding"] }
+minijinja = { version = "2", features = ["fuel"] }
+rand = "0.9"
+regex = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+# Imports from CRM contacts and leads are tested with the real CRM app.
+ferrum-app-crm = { git = "https://github.com/CBFerrum/ferrum-app-crm", branch = "main" }
+tokio = { version = "1.45", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net", "io-util"] }
+
+[lints.clippy]
+# Deliberate patterns shared with the platform: sqlx row tuples, index-based maths, engine entry points.
+type_complexity = "allow"
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+large_enum_variant = "allow"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

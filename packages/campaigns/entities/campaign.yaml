@@ -1,0 +1,112 @@
+- name: CampaignAudience
+  label: Campaign Audience
+  kind: child
+  fields:
+    - {name: segment, type: link, to: MarketingSegment, in_list: true}
+    - {name: email_group, type: link, to: EmailGroup, in_list: true, description: "Members of a Mail email group (unsubscribed members never); members without a marketing contact get one"}
+    - {name: exclude, type: check, in_list: true, description: "Leave these contacts out"}
+
+- name: CampaignVariant
+  label: Campaign Variant
+  kind: child
+  fields:
+    - {name: variant, type: data, read_only: true, max_length: 1, in_list: true}
+    - {name: subject, type: data, required: true, max_length: 998, in_list: true}
+    - {name: content, type: text, description: "HTML; blank = the campaign's content (a subject-only test)"}
+
+- name: EmailCampaign
+  label: Email Campaign
+  kind: document
+  submittable: true
+  module: marketing
+  title_field: campaign_name
+  numbering: {template: "EC-{YYYY}-{seq:5}"}
+  search_fields: [campaign_name, subject]
+  description: "One email to an audience of segments and email groups. Submitting schedules it; every recipient is claimed before its email goes out (never twice), sent through the Mail app within the hourly limits, with open and click tracking and a signed unsubscribe link. A/B tests send variants to a test share and the winner, by opens or clicks, to the rest. Cancel to stop sending."
+  fields:
+    - {name: campaign_name, type: data, required: true, in_list: true}
+    - {name: status, type: select, options: [Draft, Scheduled, Sending, Sent, Cancelled], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
+    - {name: subject, type: data, required: true, max_length: 998, description: "{{ contact.first_name }} and the other contact values work here too"}
+    - {name: preheader, type: data, max_length: 250, description: "Preview text most inboxes show after the subject"}
+    - {name: email_account, type: link, to: EmailAccount, label: From Account, in_filter: true, description: "Blank = the default outgoing account"}
+    - {name: email_template, type: link, to: EmailTemplate, description: "Fills a blank subject and content from a Mail email template"}
+    - {name: content, type: text, required: true,
+       description: "HTML (sandboxed template): {{ contact.first_name }}, {{ contact.last_name }}, {{ contact.email }}, {{ contact.attributes.<key> }}, {{ unsubscribe_url }}; values are HTML-escaped and missing ones render empty. A footer with the unsubscribe link and your postal address is added when the content has no {{ unsubscribe_url }}"}
+    - {name: text_content, type: text, label: Plain Text, description: "The plain-text part; blank = derived from the HTML"}
+    - {name: audience, type: table, of: CampaignAudience, required: true}
+    - {name: schedule_at, type: datetime, in_list: true, description: "Blank = as soon as it is submitted"}
+    - {name: hourly_limit, type: int, label: Emails Per Hour, default: 0, min: 0, max: 1000000,
+       description: "This campaign's own sending rate; 0 = only the workspace limit (Communication Settings, shared with newsletters and journeys)"}
+    - {name: track_opens, type: check, default: true}
+    - {name: track_clicks, type: check, default: true}
+    - {name: ab_test, type: check, label: A/B Test}
+    - {name: variants, type: table, of: CampaignVariant, visible_if: "doc.ab_test", description: "2 to 5 variants (A, B, ...): a subject each and, optionally, their own content"}
+    - {name: test_percent, type: int, label: Test Share (%), default: 20, min: 1, max: 90, visible_if: "doc.ab_test", description: "Share of the audience that receives the variants; the rest receives the winner"}
+    - {name: winner_metric, type: select, options: [Opens, Clicks], default: Opens, visible_if: "doc.ab_test", description: "Unique opens or unique clicks per delivered email"}
+    - {name: winner_after_hours, type: int, default: 4, min: 1, max: 720, visible_if: "doc.ab_test", description: "Hours after the test emails went out before the winner is chosen"}
+    - {name: winner_variant, type: data, read_only: true, no_copy: true}
+    - {name: test_sent_at, type: datetime, read_only: true, no_copy: true}
+    - {name: winner_chosen_at, type: datetime, read_only: true, no_copy: true}
+    - {name: total_recipients, type: int, read_only: true, no_copy: true, in_list: true}
+    - {name: sent_count, type: int, label: Sent, read_only: true, no_copy: true, in_list: true}
+    - {name: failed_count, type: int, label: Failed, read_only: true, no_copy: true}
+    - {name: skipped_count, type: int, label: Skipped, read_only: true, no_copy: true, description: "Unsubscribed or suppressed between scheduling and sending"}
+    - {name: unique_opens, type: int, read_only: true, no_copy: true, in_list: true}
+    - {name: total_opens, type: int, read_only: true, no_copy: true}
+    - {name: unique_clicks, type: int, read_only: true, no_copy: true, in_list: true}
+    - {name: total_clicks, type: int, read_only: true, no_copy: true}
+    - {name: unsubscribe_count, type: int, label: Unsubscribes, read_only: true, no_copy: true}
+    - {name: bounce_count, type: int, label: Bounces, read_only: true, no_copy: true}
+    - {name: complaint_count, type: int, label: Complaints, read_only: true, no_copy: true}
+    - {name: started_at, type: datetime, read_only: true, no_copy: true}
+    - {name: finished_at, type: datetime, read_only: true, no_copy: true}
+    - {name: last_error, type: text, read_only: true, no_copy: true}
+  actions:
+    - {name: preview, label: Preview, permission: read}
+    - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1]}
+  form:
+    - {label: Campaign, fields: [campaign_name, status, email_account, subject, preheader, email_template]}
+    - {label: Content, fields: [content, text_content]}
+    - {label: Audience, fields: [audience]}
+    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks]}
+    - {label: A/B Test, collapsible: true, fields: [ab_test, variants, test_percent, winner_metric, winner_after_hours, winner_variant, test_sent_at, winner_chosen_at]}
+    - {label: Results, fields: [total_recipients, sent_count, failed_count, skipped_count, unique_opens, total_opens, unique_clicks, total_clicks, unsubscribe_count,
+                                bounce_count, complaint_count, started_at, finished_at, last_error]}
+  list: {columns: [campaign_name, status, schedule_at, sent_count, unique_opens, unique_clicks], sort: schedule_at desc}
+
+- name: CampaignRecipient
+  label: Campaign Recipient
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "One marketing email to one contact, from a campaign or a journey step: claimed before the email is handed to the Mail app, then its delivery, opens (automatic ones counted apart), clicks, unsubscribe, bounce or complaint. Written by the app only."
+  fields:
+    - {name: campaign, type: link, to: EmailCampaign, on_delete: cascade, in_list: true, in_filter: true}
+    - {name: journey, type: link, to: MarketingJourney, on_delete: cascade, in_filter: true}
+    - {name: journey_step, type: int}
+    - {name: enrollment, type: link, to: JourneyEnrollment, on_delete: set_null}
+    - {name: contact, type: link, to: MarketingContact, on_delete: cascade, in_filter: true}
+    - {name: email, type: data, read_only: true, in_list: true}
+    - {name: variant, type: data, read_only: true, in_list: true, in_filter: true}
+    - {name: status, type: select, options: [Pending, Held, Queued, Sent, Failed, Skipped, Cancelled], read_only: true, in_list: true, in_filter: true,
+       description: "Pending: waiting for its batch; Held: waiting for the A/B winner; Queued: handed to the Mail app; Sent: accepted by the mail server"}
+    - {name: skip_reason, type: data, read_only: true}
+    - {name: communication, type: link, to: Communication, on_delete: set_null, read_only: true}
+    - {name: queued_at, type: datetime, read_only: true}
+    - {name: sent_at, type: datetime, read_only: true, in_list: true}
+    - {name: opened_at, type: datetime, label: First Opened At, read_only: true}
+    - {name: last_opened_at, type: datetime, read_only: true}
+    - {name: open_count, type: int, label: Opens, read_only: true, in_list: true}
+    - {name: machine_open_count, type: int, label: Automatic Opens, read_only: true, description: "Opens that looked automatic (privacy proxies prefetching images, security scanners); not counted as opens"}
+    - {name: clicked_at, type: datetime, label: First Clicked At, read_only: true}
+    - {name: last_clicked_at, type: datetime, read_only: true}
+    - {name: click_count, type: int, label: Clicks, read_only: true, in_list: true}
+    - {name: unsubscribed_at, type: datetime, read_only: true}
+    - {name: bounced_at, type: datetime, read_only: true}
+    - {name: bounce_type, type: select, options: [Hard, Soft], read_only: true, in_filter: true}
+    - {name: complained_at, type: datetime, read_only: true}
+    - {name: error, type: text, read_only: true}
+  unique: [[campaign, contact]]
+  indexes: [[status, queued_at], [queued_at], [communication], [journey, journey_step]]
+  list: {columns: [email, campaign, variant, status, sent_at, open_count, click_count], sort: email asc}

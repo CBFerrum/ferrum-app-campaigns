@@ -1,0 +1,50 @@
+package: campaigns
+version: 0.1.0
+label: Campaigns
+description: Email marketing - contacts with consent, segments, campaigns with A/B tests, automated journeys, open and click tracking, bounces, suppression list and double opt-in signup forms.
+depends: [core, comms]
+
+modules:
+  - name: marketing
+    label: Marketing
+    icon: megaphone
+    order: 42
+    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
+            JourneyEnrollment, CampaignSettings, report:campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
+            report:audience_growth]
+
+roles:
+  - name: Marketing User
+    description: Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them.
+    permissions:
+      - {entity: MarketingContact, read: true, write: true, create: true, export: true, import: true}
+      - {entity: MarketingSegment, read: true, write: true, create: true}
+      - {entity: EmailCampaign, read: true, write: true, create: true, delete: true, if_owner: true}
+      - {entity: CampaignRecipient, read: true}
+      - {entity: MarketingJourney, read: true}
+      - {entity: JourneyEnrollment, read: true}
+      - {entity: EmailSuppression, read: true, create: true}
+      - {entity: AudienceImport, read: true, write: true, create: true, if_owner: true}
+      - {entity: SubscriptionForm, read: true}
+      - {entity: EmailGroup, read: true}
+      - {entity: EmailGroupMember, read: true, write: true, create: true}
+      - {entity: EmailTemplate, read: true}
+      - {entity: EmailAccount, read: true}
+  - name: Marketing Manager
+    description: Runs email marketing - sends and cancels campaigns, builds journeys and signup forms, manages consent, the suppression list, settings and the bounce webhook.
+    permissions:
+      - {entity: MarketingContact, read: true, write: true, create: true, delete: true, export: true, import: true}
+      - {entity: MarketingSegment, read: true, write: true, create: true, delete: true}
+      - {entity: EmailCampaign, read: true, write: true, create: true, delete: true, submit: true, cancel: true, export: true}
+      - {entity: CampaignRecipient, read: true, export: true}
+      - {entity: MarketingJourney, read: true, write: true, create: true, delete: true}
+      - {entity: JourneyEnrollment, read: true, write: true, export: true}
+      - {entity: EmailSuppression, read: true, write: true, create: true, delete: true, export: true, import: true}
+      - {entity: AudienceImport, read: true, write: true, create: true, delete: true}
+      - {entity: SubscriptionForm, read: true, write: true, create: true, delete: true}
+      - {entity: CampaignSettings, read: true, write: true, create: true}
+      - {entity: EmailGroup, read: true, write: true, create: true}
+      - {entity: EmailGroupMember, read: true, write: true, create: true, delete: true, export: true, import: true}
+      - {entity: EmailTemplate, read: true, write: true, create: true}
+      - {entity: EmailAccount, read: true}
+      - {entity: Customer, read: true}
