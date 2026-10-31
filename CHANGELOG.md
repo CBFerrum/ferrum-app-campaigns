@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
+- Installs beside today's Mail app: it required Comms 0.1, so a workspace with Mail, Chat and
+  Calendar as they are now (Comms 0.7) could not install it. It now requires Comms 0.7, the
+  version its tests run against.
 - Declares where it keeps people's personal data, so Administration → Personal data exports and
   erases it for a person (by email).
 
