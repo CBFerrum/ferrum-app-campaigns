@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.1.0
+version: 0.1.1
 publisher: cbferrum
 summary: "Email marketing: segments, campaigns with A/B tests, automated journeys, open and click tracking, suppression lists and consent"
 description: README.md
@@ -10,7 +10,7 @@ homepage: https://github.com/CBFerrum/ferrum-app-campaigns
 support: https://github.com/CBFerrum/ferrum-app-campaigns/issues
 runtime: native
 requires:
-  comms: ">=0.1, <0.2"
+  comms: ">=0.7, <0.8"
 platform: ">=0.3, <0.4"
 packages: [campaigns]
 uninstall: ask
