@@ -1,60 +1,268 @@
-# Ferrum Campaigns
+<div align="center">
 
-A native app for [Ferrum](https://github.com/CBFerrum/Ferrum), the open-source, AI-first ERP.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img alt="Ferrum Campaigns" src="docs/assets/banner-light.svg" width="100%">
+</picture>
 
-- Marketing contacts, one per address (case-insensitive), with consent status and evidence (time, source, keyed IP hash), custom attributes and a link to the record they came from; only the person can opt back in
-- Imports from Mail email groups, customers, CRM contacts and CRM leads, deduplicated, with opt-outs carried over
-- Segments on contact fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days), compiled to parameterized SQL, with live preview counts
-- Email campaigns with preheader, sandboxed templates (or a Mail template), a plain-text part, audiences of segments and email groups with exclusions, schedules and per-campaign hourly limits within the workspace's limit
-- A/B tests of subjects and content on a test share, the winner by opens or clicks after N hours sent to the rest; the split is a deterministic hash
-- Every recipient claimed before its email goes to the Mail app, so concurrent workers never send twice
-- Open and click tracking with signed links (automatic opens from privacy proxies and scanners counted apart, no open redirect), signed unsubscribe pages and one-click POST
-- A suppression list honoured by every send; a signed bounce and complaint webhook (hard bounces and complaints suppress at once, soft bounces at a limit)
-- Double opt-in signup forms with a honeypot and signed, expiring confirmation links
-- Journeys: triggers (joined an email group, entered a segment, attribute changed, date anniversary), steps (send, wait in local time across DST, branch on opens, clicks, attributes or segments, update attributes, join or leave groups, exit), goals and exits on unsubscribe
-- Reports: campaign performance, A/B results, link clicks, journey funnel, audience growth; Marketing Manager and Marketing User roles
-- `packages/campaigns/README.md` documents every entity, action, endpoint, setting and background job
+[![CI](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml/badge.svg)](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-0.1.1-a63089?style=flat-square) ![Ferrum](https://img.shields.io/badge/Ferrum-%3E%3D0.3%2C%20%3C0.4-2f5bea?style=flat-square) ![License](https://img.shields.io/badge/license-AGPL--3.0-3b82f6?style=flat-square) ![Rust](https://img.shields.io/badge/Rust-native%20app-b7410e?style=flat-square&logo=rust&logoColor=white) ![MCP](https://img.shields.io/badge/AI%20agents-MCP-8b5cf6?style=flat-square)
+
+**A native app for [Ferrum](https://github.com/CBFerrum/Ferrum), the open-source, AI-first business platform.**
+
+[Overview](#overview) · [Highlights](#highlights) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [Data model](#data-model) · [Install](#install) · [Develop](#develop) · [Changelog](#changelog)
+
+</div>
+
+---
+
+## Overview
+
+Ferrum Campaigns runs email marketing on top of the Mail app: marketing contacts with consent
+evidence, segments compiled to parameterized SQL, campaigns with A/B tests and schedules, open and
+click tracking with signed links, a suppression list honoured by every send, double opt-in signup
+forms, and journeys that send, wait and branch over time.
+
+
+| At a glance | |
+|---|---|
+| 📦 Version | `0.1.1` |
+| 🧱 Platform | Ferrum `>=0.3, <0.4` |
+| 🔗 Requires | comms `>=0.7, <0.8` |
+| 🖥️ Interface | Ferrum's records screens (`/data/campaigns/`) |
+| 🗃️ Records | 14 entities in 1 package |
+| 👥 Roles | 2: Marketing User, Marketing Manager |
+| 📊 Reports | 5 |
+| 🧪 Tests | 19 Rust tests |
+
+
+## Highlights
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 👥 Contacts with consent
+One per address, consent evidence, attributes; only the person can opt back in.
+
+</td>
+<td width="50%" valign="top">
+
+### 🎯 Segments
+Fields, attributes, groups and engagement, compiled to parameterized SQL with live counts.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🧪 Campaigns and A/B tests
+Subjects and content tested on a share; the winner goes to the rest.
+
+</td>
+<td width="50%" valign="top">
+
+### 📈 Tracking
+Signed open and click tracking; privacy proxies and scanners counted apart.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🚫 Suppression and bounces
+A suppression list and a signed bounce and complaint webhook.
+
+</td>
+<td width="50%" valign="top">
+
+### 🛤️ Journeys
+Triggers, waits in local time, branches and attribute updates.
+
+</td>
+</tr>
+</table>
+
+## Screenshots
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/campaigns-dark.webp">
+  <img alt="Marketing contacts with their consent status." src="docs/assets/campaigns-light.webp" width="100%">
+</picture>
+
+<p align="center"><sub>Marketing contacts with their consent status.</sub></p>
+
+> [!TIP]
+> The screenshots follow your GitHub theme: switch between light and dark to see both.
+
+## How it works
+
+### Sending a campaign
+
+```mermaid
+flowchart LR
+    AUD["🎯 Audience<br/><small>segments · groups − exclusions</small>"] --> SUP{{"Suppressed?"}}
+    SUP -->|no| CL["🔒 Recipient claimed<br/><small>never sent twice</small>"]
+    SUP -->|yes| SK["Skipped"]
+    CL --> MAIL["✉️ Mail app<br/><small>hourly limits</small>"]
+    MAIL --> TR["📈 Opens · clicks<br/><small>signed links</small>"]
+    MAIL --> BN["↩️ Bounces · complaints → suppression"]
+    classDef app fill:#a63089,color:#fff,stroke:#a63089
+    class AUD,CL app
+```
+
+### Inside Ferrum
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI["Records screens<br/><small>/data/campaigns/</small>"]
+        BAR["Ferrum bar<br/><small>launcher · search · bell</small>"]
+    end
+    subgraph Server["Ferrum server"]
+        API["REST · MCP · live"]
+        K["Kernel<br/><small>permissions · row-level security · audit</small>"]
+        APP["Campaigns<br/><small>14 entities · 2 roles</small>"]
+        OB[("Outbox")]
+    end
+    DB[("PostgreSQL")]
+    UI --> API --> K --> DB
+    BAR --> API
+    K <--> APP
+    K --> OB --> EV["Notifications · webhooks<br/>automations"]
+    APP -. requires .-> D0["comms >=0.7, <0.8"]
+    classDef app fill:#a63089,color:#fff,stroke:#a63089
+    class APP app
+```
+
+Everything Campaigns adds is ordinary Ferrum metadata and Rust: its records get lists, forms,
+search, permissions, an audit trail, exports and the REST and MCP APIs for free, so AI agents work
+with them under the same rules as people.
+
+## Data model
+
+The main records and how they connect (14 entities in all; `packages/` has every field).
+
+```mermaid
+erDiagram
+    EmailCampaign {
+        string campaign_name PK
+        string status
+        string subject
+    }
+    MarketingJourney {
+        string journey_name PK
+        string status
+        string trigger_type
+    }
+    CampaignRecipient {
+        string email PK
+        string status
+    }
+    JourneyEnrollment {
+        string email PK
+        string status
+    }
+    MarketingContact {
+        string email PK
+        string consent_status
+    }
+    MarketingSegment {
+        string segment_name PK
+        string match_type
+    }
+    EmailCampaign ||--|{ CampaignAudience : "audience"
+    EmailCampaign ||--|{ CampaignVariant : "variants"
+    MarketingSegment ||--o{ MarketingJourney : "trigger_segment"
+    MarketingSegment ||--o{ MarketingJourney : "goal_segment"
+    EmailCampaign ||--o{ CampaignRecipient : "campaign"
+    MarketingJourney ||--o{ CampaignRecipient : "journey"
+    JourneyEnrollment ||--o{ CampaignRecipient : "enrollment"
+    MarketingContact ||--o{ CampaignRecipient : "contact"
+    MarketingJourney ||--o{ JourneyEnrollment : "journey"
+    MarketingContact ||--o{ JourneyEnrollment : "contact"
+    CampaignRecipient ||--o{ JourneyEnrollment : "last_recipient"
+```
+
+### Roles
+
+| Role | What it is for | Entities |
+|---|---|---|
+| **Marketing User** | Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them. | 13 |
+| **Marketing Manager** | Runs email marketing - sends and cancels campaigns, builds journeys and signup forms, manages consent, the suppression list, settings and the bounce webhook. | 15 |
+
+<details>
+<summary><b>Reports (5)</b></summary>
+
+- Campaign Performance
+- Ab Test Results
+- Link Clicks
+- Journey Funnel
+- Audience Growth
+
+</details>
 
 ## Install
 
-Workspace administrators install it from **Apps** in Ferrum; it ships in the official Ferrum
-server image and needs the Mail app (`comms`), which it installs with it. Self-hosters building
-their own image enable the `campaigns` feature of the server.
-Everything it adds is also available to AI agents over Ferrum's MCP server.
+Workspace administrators install it from **Apps** (`/store/`) in Ferrum; it ships in the
+official Ferrum server image. It needs **comms** `>=0.7, <0.8` installed first. Self-hosters building their own image enable the
+`campaigns` feature of the server. Everything it adds is also available to AI agents over
+Ferrum's MCP server, within each person's permissions.
 
 ## Develop
 
-Clone it next to the platform and the Mail app (and the CRM app, which the tests use) and point
-the dependencies at your checkouts (this file is git-ignored):
+Clone it next to the platform:
+
+```text
+work/
+├── ferrum/            https://github.com/CBFerrum/Ferrum
+└── ferrum-app-campaigns/
+```
+
+Point the platform dependencies at your checkout (this file is git-ignored):
 
 ```toml
 # .cargo/config.toml
 [patch."https://github.com/CBFerrum/Ferrum"]
+ferrum-calc = { path = "../ferrum/crates/calc" }
+ferrum-domain = { path = "../ferrum/crates/domain" }
 ferrum-kernel = { path = "../ferrum/crates/kernel" }
 ferrum-meta = { path = "../ferrum/crates/meta" }
-ferrum-domain = { path = "../ferrum/crates/domain" }
-ferrum-calc = { path = "../ferrum/crates/calc" }
-
-[patch."https://github.com/CBFerrum/ferrum-app-comms"]
-ferrum-app-comms = { path = "../ferrum-app-comms" }
-
-[patch."https://github.com/CBFerrum/ferrum-app-crm"]
-ferrum-app-crm = { path = "../ferrum-app-crm" }
 ```
 
-The tests need PostgreSQL with an ordinary (non-superuser) role — row-level security must apply:
+The tests need PostgreSQL with an ordinary (non-superuser) role, so row-level security
+applies:
 
 ```bash
 createuser ferrum --pwprompt && createdb -O ferrum ferrum_campaigns_test
-```
-
-```bash
 cargo test
 ```
 
-`FERRUM_CAMPAIGNS_TEST_DATABASE_URL` overrides the database URL. The app's metadata lives in `packages/` and is embedded
-at build time; `app.yaml` is its manifest (see Ferrum's `docs/plan/apps.md`).
+`FERRUM_CAMPAIGNS_TEST_DATABASE_URL` overrides the database URL.
+
+
+### Project layout
+
+```text
+app.yaml      the manifest: id, version, requirements, what it adds to Ferrum
+packages/     metadata: entities, roles, reports, workflows, print formats
+src/          the app's logic in Rust: hooks, actions, endpoints, upkeep jobs
+tests/        integration tests against a real PostgreSQL
+CHANGELOG.md  what changed in each version
+```
+
+
+It builds on [ferrum-app-comms](https://github.com/CBFerrum/ferrum-app-comms), [ferrum-app-crm](https://github.com/CBFerrum/ferrum-app-crm).
+
+## Changelog
+
+| Version | Highlights |
+|---|---|
+| **0.1.1** | Installs beside today's Mail app: it required Comms 0.1, so a workspace with Mail, Chat and Calendar as they are now (Comms 0.7) could not install … |
+| **0.1.0** | First release: email marketing on top of the Mail app. Marketing contacts with consent evidence (time, source, keyed IP hash) and custom … |
+
+Every version is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-AGPL-3.0-only, like the platform.
+[AGPL-3.0-only](LICENSE), like the platform. Part of [Ferrum](https://github.com/CBFerrum/Ferrum) ·
+[Report an issue](https://github.com/CBFerrum/ferrum-app-campaigns/issues)
