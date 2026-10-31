@@ -297,6 +297,8 @@ async fn scenario() {
     sqlx::raw_sql("drop schema if exists public cascade; create schema public;").execute(&db.pool).await.expect("reset");
     let mut packages = ferrum_domain::packages().expect("platform packages");
     packages.extend(ferrum_app_comms::packages().expect("mail packages"));
+    // CRM's crate carries its ERP connector too, which builds on ERP's packages.
+    packages.extend(ferrum_app_erp::packages().expect("ERP's packages"));
     packages.extend(ferrum_app_crm::packages().expect("crm packages"));
     packages.extend(ferrum_app_campaigns::packages().expect("app packages"));
     let catalog = Catalog::from_packages(packages).expect("catalog");
