@@ -100,7 +100,9 @@ until a manager deletes them.
 Rules compile to one SQL condition from fixed tables of columns and operators; keys, values,
 groups and days are bound parameters, so no input ever becomes SQL. A segment is evaluated whenever
 it is used. Action `preview` (read) → `{contact_count, mailable_count, counted_at, sample: [{id,
-email, full_name, consent_status, mailable}]}` (first 20 by address).
+email, full_name, consent_status, mailable}]}` (first 20 by address). Action `count` (read, hidden)
+`{match_type?, rules: [rule rows]}` → the same without `counted_at`, for rules being edited: it
+validates them like a save would and writes nothing.
 
 ### AudienceImport
 
@@ -168,6 +170,19 @@ a built-in message when empty), `thank_you_url`, `confirmed_url`; read-only `sub
 - Action `send_test` (write; draft or scheduled) `{emails: [..] | "a@x, b@y", contact?, variant?}` →
   `{sent, communications}`: up to 10 addresses, subject prefixed `[Test] `, untracked, sent as the
   caller.
+- Action `audience_check` (read, hidden: for the interface) → who the campaign would reach if it started
+  now, counted by the same conditions sending uses, plus members of the included email groups who are not
+  contacts yet (sending adds them): `{contacts, mailable, left_out: {pending, unsubscribed, bounced,
+  complained, suppressed}, excluded, new_contacts, rows: [{kind, id, name, exclude, contacts, mailable}],
+  split: {variants, test, rest} | null, rate: {per_hour, workspace, own}, ready: {public_url, account,
+  postal_address}, emails: [{variant, error, bytes, links, unsubscribe}], checked_at}`. Every contact is
+  mailed or left out for exactly one reason; people whose processing is restricted are skipped only when
+  their email is handed over, so `mailable` can be a little more than what is sent.
+- Action `timeline` (read, hidden) `{interval?: "hour" | "day" | "auto"}` → `{interval, timezone, at: [local
+  bucket starts], series: {sent, opens, clicks, unsubscribes, bounces, complaints: [counts]}, variants:
+  {A: {sent, opens, clicks}, …}}`: one event per recipient and kind (first open, first click), in the
+  workspace's time zone; hourly for up to 14 days, else daily (366 days at most). `auto` picks hourly up to
+  three days.
 
 ### CampaignRecipient (read-only)
 

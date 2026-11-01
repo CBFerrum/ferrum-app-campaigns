@@ -62,8 +62,12 @@
     - {name: finished_at, type: datetime, read_only: true, no_copy: true}
     - {name: last_error, type: text, read_only: true, no_copy: true}
   actions:
-    - {name: preview, label: Preview, permission: read}
+    - {name: preview, label: Preview, permission: read, read_only: true}
     - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1]}
+    # For the campaign screens (they call these, nobody clicks them): who it would reach if it started now, and what
+    # happened to what was sent, by hour or day.
+    - {name: audience_check, label: Check Audience, permission: read, read_only: true, hidden: true}
+    - {name: timeline, label: Timeline, permission: read, read_only: true, hidden: true}
   form:
     - {label: Campaign, fields: [campaign_name, status, email_account, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}

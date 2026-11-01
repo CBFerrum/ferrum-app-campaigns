@@ -356,16 +356,29 @@ impl DocHook for SegmentHook {
         parse(doc).map(|_| ()).map_err(Error::Validation)
     }
 
-    async fn action(&self, hc: &mut HookCtx<'_>, name: &str, doc: &Doc, _params: &Value) -> Result<Option<Value>> {
-        if name != "preview" {
-            return Ok(None);
+    async fn action(&self, hc: &mut HookCtx<'_>, name: &str, doc: &Doc, params: &Value) -> Result<Option<Value>> {
+        match name {
+            "preview" => {
+                let seg = parse(doc).map_err(Error::Validation)?;
+                let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
+                let counted_at = util::ts(util::now());
+                let v = values([("contact_count", json!(total)), ("mailable_count", json!(mailable)), ("counted_at", json!(counted_at))]);
+                hc.kernel.set_values_tx(hc.ctx, hc.tx, "MarketingSegment", util::doc_id(doc)?, v).await?;
+                Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "counted_at": counted_at, "sample": sample})))
+            }
+            // The same count for rules being edited: nothing is saved, so it can follow every change.
+            "count" => {
+                let rules = params.get("rules").unwrap_or(&Value::Null);
+                if !rules.is_array() {
+                    return Err(Error::field("rules", "send the rules as a list"));
+                }
+                let candidate = values([("match_type", params.get("match_type").cloned().unwrap_or_else(|| json!("All"))), ("rules", rules.clone())]);
+                let seg = parse(&candidate).map_err(Error::Validation)?;
+                let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
+                Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "sample": sample})))
+            }
+            _ => Ok(None),
         }
-        let seg = parse(doc).map_err(Error::Validation)?;
-        let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
-        let counted_at = util::ts(util::now());
-        let v = values([("contact_count", json!(total)), ("mailable_count", json!(mailable)), ("counted_at", json!(counted_at))]);
-        hc.kernel.set_values_tx(hc.ctx, hc.tx, "MarketingSegment", util::doc_id(doc)?, v).await?;
-        Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "counted_at": counted_at, "sample": sample})))
     }
 }
 

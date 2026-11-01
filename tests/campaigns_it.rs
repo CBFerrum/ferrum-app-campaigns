@@ -263,6 +263,18 @@ impl T {
     }
 }
 
+/// A draft A/B campaign (50% test) over a segment, for checking an audience before sending.
+async fn ab_probe(t: &T, ctx: &Ctx, segment: Uuid) -> Uuid {
+    uid(&t
+        .insert(
+            ctx,
+            "EmailCampaign",
+            json!({"campaign_name": "Not sent", "subject": "Base", "content": "<p>Hi</p>", "ab_test": true, "test_percent": 50,
+                   "variants": [{"subject": "A"}, {"subject": "B"}], "audience": [{"segment": segment.to_string()}]}),
+        )
+        .await)
+}
+
 fn tag(key: &[u8], message: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
     mac.update(message.as_bytes());
@@ -518,6 +530,33 @@ async fn scenario() {
     let emails: Vec<&str> = preview["sample"].as_array().unwrap().iter().map(|r| r["email"].as_str().unwrap()).collect();
     assert_eq!(emails, vec!["asha@x.test", "chen@x.test"]);
     assert_eq!(int(&t.get("MarketingSegment", pune).await["contact_count"]), 2);
+    // The screen counts rules as they are edited: the same numbers, and nothing is written.
+    let rules_of_pune = t.get("MarketingSegment", pune).await["rules"].clone();
+    let dry = t.action(uma, "MarketingSegment", pune, "count", json!({"match_type": "All", "rules": rules_of_pune})).await;
+    assert_eq!((int(&dry["contact_count"]), int(&dry["mailable_count"]), dry["sample"].as_array().unwrap().len()), (2, 2, 2), "{dry}");
+    let widened = t
+        .action(
+            uma,
+            "MarketingSegment",
+            pune,
+            "count",
+            json!({"match_type": "Any", "rules": [{"rule_type": "Attribute", "attribute": "city", "operator": "Equals", "value": "PUNE"}]}),
+        )
+        .await;
+    assert!(int(&widened["contact_count"]) >= 2, "{widened}");
+    assert_eq!(int(&t.get("MarketingSegment", pune).await["contact_count"]), 2, "counting unsaved rules writes nothing");
+    refused(
+        k.run_action(
+            uma,
+            "MarketingSegment",
+            pune,
+            "count",
+            json!({"rules": [{"rule_type": "Attribute", "attribute": "evil key!", "operator": "Equals", "value": "1"}]}),
+        )
+        .await,
+        "invalid",
+    );
+    refused(k.run_action(uma, "MarketingSegment", pune, "count", json!({})).await, "invalid");
     let count = |rules: Value, all: bool| {
         let t = &t;
         async move {
@@ -645,10 +684,25 @@ async fn scenario() {
     assert_eq!(tests.len(), 2, "test emails use a stand-in contact");
     assert!(tests.iter().all(|m| links(&m.html, "o").is_empty() && links(&m.html, "c").is_empty()), "test emails are not tracked");
     refused(k.run_action(uma, "EmailCampaign", c1, "send_test", json!({"emails": "not-an-address"})).await, "invalid");
+    // The pre-send check counts what sending will count, and says what would stop it.
+    let check = t.action(uma, "EmailCampaign", c1, "audience_check", json!({})).await;
+    let left_out: i64 = ["pending", "unsubscribed", "bounced", "complained", "suppressed"].iter().map(|k| int(&check["left_out"][*k])).sum();
+    assert_eq!(int(&check["mailable"]), 8, "{check}");
+    assert_eq!(int(&check["mailable"]) + left_out, int(&check["contacts"]), "everyone is mailed or left out for one reason: {check}");
+    assert!(left_out >= 1 && int(&check["excluded"]) >= 1, "Gus is blocked and Hal is excluded: {check}");
+    let lines: Vec<(&str, bool)> = check["rows"].as_array().unwrap().iter().map(|r| (r["kind"].as_str().unwrap(), r["exclude"].as_bool().unwrap())).collect();
+    assert_eq!(lines, vec![("segment", false), ("group", false), ("segment", true)]);
+    assert_eq!((int(&check["rate"]["per_hour"]), check["split"].is_null()), (4, true), "the campaign's own limit is the rate");
+    assert_eq!(check["ready"]["public_url"], json!(false), "links cannot reach this server yet");
+    assert_eq!(
+        (check["emails"][0]["error"].is_null(), check["emails"][0]["links"].as_array().unwrap().len(), check["emails"][0]["unsubscribe"].clone()),
+        (true, 2, json!("footer"))
+    );
     // Scheduling: managers only, and only once links can reach this server.
     refused(k.submit(uma, "EmailCampaign", c1, None).await, "forbidden");
     refused(k.submit(mgr, "EmailCampaign", c1, None).await, "invalid");
     t.update(&admin, "CommsSettings", comms_settings, json!({"public_url": "https://erp.acme.test/"})).await;
+    assert_eq!(t.action(uma, "EmailCampaign", c1, "audience_check", json!({})).await["ready"]["public_url"], json!(true));
     let scheduled = k.submit(mgr, "EmailCampaign", c1, None).await.expect("schedule");
     assert_eq!(status_of(&scheduled), "Scheduled");
     refused(k.update(mgr, "EmailCampaign", c1, obj(json!({"subject": "Changed"})), None).await, "invalid");
@@ -875,6 +929,17 @@ async fn scenario() {
         clicks["rows"].as_array().unwrap().iter().map(|r| (r["url"].as_str().unwrap().to_string(), int(&r["unique_clicks"]))).collect::<Vec<_>>(),
         vec![("https://shop.acme.test/sale?utm=1&x=2".to_string(), 1), ("https://acme.test/about".to_string(), 1)]
     );
+    // The timeline adds up to the counters, by hour or by day.
+    let sum = |v: &Value| v.as_array().unwrap().iter().map(int).sum::<i64>();
+    let kinds = ["sent", "opens", "clicks", "unsubscribes", "bounces", "complaints"];
+    let hourly = t.action(uma, "EmailCampaign", c1, "timeline", json!({})).await;
+    assert_eq!(hourly["interval"], json!("hour"));
+    assert_eq!(kinds.map(|k| sum(&hourly["series"][k])), [8, 2, 2, 2, 2, 1], "{hourly}");
+    assert_eq!(hourly["at"].as_array().unwrap().len(), hourly["series"]["sent"].as_array().unwrap().len());
+    assert!(hourly["variants"].as_object().unwrap().is_empty(), "no A/B test");
+    let daily = t.action(uma, "EmailCampaign", c1, "timeline", json!({"interval": "day"})).await;
+    assert_eq!((daily["interval"].clone(), kinds.map(|k| sum(&daily["series"][k]))), (json!("day"), [8, 2, 2, 2, 2, 1]));
+    refused(k.run_action(uma, "EmailCampaign", c1, "timeline", json!({"interval": "week"})).await, "invalid");
     refused(k.cancel(mgr, "EmailCampaign", c1, None).await, "invalid");
 
     // ───────────── campaign 2: every opt-out, bounce, complaint and block is honoured ─────────────
@@ -1019,6 +1084,15 @@ async fn scenario() {
         (json!("B"), 15, 3, json!(true))
     );
     assert_eq!((rows[0]["open_rate"].clone(), ab["meta"]["winner"].clone()), (json!("20.00"), json!("B")));
+    // The same outcome over time, variant by variant.
+    let tl = t.action(mgr, "EmailCampaign", c3, "timeline", json!({})).await;
+    let by = |v: &str, k: &str| tl["variants"][v][k].as_array().unwrap().iter().map(int).sum::<i64>();
+    assert_eq!([by("A", "sent"), by("A", "opens"), by("B", "sent"), by("B", "opens")], [5, 1, 15, 3], "{tl}");
+    // A pre-send check of an A/B test says how the audience splits.
+    let probe = ab_probe(&t, mgr, ab_seg).await;
+    let ab_check = t.action(mgr, "EmailCampaign", probe, "audience_check", json!({})).await;
+    assert_eq!((int(&ab_check["split"]["variants"]), int(&ab_check["split"]["test"]), int(&ab_check["split"]["rest"])), (2, 10, 10), "{ab_check}");
+    k.delete(mgr, "EmailCampaign", probe, None).await.expect("a draft can be deleted");
     // Cancelling a scheduled campaign stops it before anyone is mailed.
     let c4 = uid(&t
         .insert(
