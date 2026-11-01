@@ -5,7 +5,7 @@
   <img alt="Ferrum Campaigns" src="docs/assets/banner-light.svg" width="100%">
 </picture>
 
-[![CI](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml/badge.svg)](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-0.1.1-a63089?style=flat-square) ![Ferrum](https://img.shields.io/badge/Ferrum-%3E%3D0.3%2C%20%3C0.4-2f5bea?style=flat-square) ![License](https://img.shields.io/badge/license-AGPL--3.0-3b82f6?style=flat-square) ![Rust](https://img.shields.io/badge/Rust-native%20app-b7410e?style=flat-square&logo=rust&logoColor=white) ![MCP](https://img.shields.io/badge/AI%20agents-MCP-8b5cf6?style=flat-square)
+[![CI](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml/badge.svg)](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-0.2.0-a63089?style=flat-square) ![Ferrum](https://img.shields.io/badge/Ferrum-%3E%3D0.3.2%2C%20%3C0.4-2f5bea?style=flat-square) ![License](https://img.shields.io/badge/license-AGPL--3.0-3b82f6?style=flat-square) ![Rust](https://img.shields.io/badge/Rust-native%20app-b7410e?style=flat-square&logo=rust&logoColor=white) ![MCP](https://img.shields.io/badge/AI%20agents-MCP-8b5cf6?style=flat-square)
 
 **A native app for [Ferrum](https://github.com/CBFerrum/Ferrum), the open-source, AI-first business platform.**
 
@@ -25,14 +25,14 @@ forms, and journeys that send, wait and branch over time.
 
 | At a glance | |
 |---|---|
-| 📦 Version | `0.1.1` |
-| 🧱 Platform | Ferrum `>=0.3, <0.4` |
+| 📦 Version | `0.2.0` |
+| 🧱 Platform | Ferrum `>=0.3.2, <0.4` |
 | 🔗 Requires | comms `>=0.7, <0.8` |
-| 🖥️ Interface | Ferrum's records screens (`/data/campaigns/`) |
+| 🖥️ Interface | Its own screens at `/campaigns/` (campaigns, results, audiences), and the records screens for the rest |
 | 🗃️ Records | 14 entities in 1 package |
 | 👥 Roles | 2: Marketing User, Marketing Manager |
 | 📊 Reports | 5 |
-| 🧪 Tests | 19 Rust tests |
+| 🧪 Tests | 22 Rust tests, 96 for the screens |
 
 
 ## Highlights
@@ -115,7 +115,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     subgraph Browser
-        UI["Records screens<br/><small>/data/campaigns/</small>"]
+        UI["Campaigns screens<br/><small>/campaigns/</small>"]
         BAR["Ferrum bar<br/><small>launcher · search · bell</small>"]
     end
     subgraph Server["Ferrum server"]
@@ -227,6 +227,7 @@ ferrum-calc = { path = "../ferrum/crates/calc" }
 ferrum-domain = { path = "../ferrum/crates/domain" }
 ferrum-kernel = { path = "../ferrum/crates/kernel" }
 ferrum-meta = { path = "../ferrum/crates/meta" }
+ferrum-apps = { path = "../ferrum/crates/apps" }
 ```
 
 The tests need PostgreSQL with an ordinary (non-superuser) role, so row-level security
@@ -253,12 +254,26 @@ ferrum-app-erp = { path = "../ferrum-app-erp" }
 ```
 
 
+### The interface
+
+Its screens are in `ui/` (React, built with the packages of the sibling checkout `../ferrum/web`; nothing to
+install in `ui/`). The built files in `ui/dist/` are committed and embedded in the crate, so rebuild before you commit:
+
+```bash
+cd ui
+npm run test       # the logic of every screen, without a browser
+npm run typecheck
+npm run build      # writes ui/dist and a stamp of the sources it came from
+npm run check      # fails if dist/ is stale or over the size budget
+```
+
 ### Project layout
 
 ```text
 app.yaml      the manifest: id, version, requirements, what it adds to Ferrum
 packages/     metadata: entities, roles, reports, workflows, print formats
 src/          the app's logic in Rust: hooks, actions, endpoints, upkeep jobs
+ui/           its own screens (src/ is the code, dist/ the built release)
 tests/        integration tests against a real PostgreSQL
 CHANGELOG.md  what changed in each version
 ```
@@ -267,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.2.0** | Its own interface at `/campaigns/`: write, preview on a computer and a phone, test, check who will get it and why others are left out, schedule and send a campaign from one page; results as charts over time with the A/B outcome; segments with a live count; import contacts from a CSV file with column mapping … |
 | **0.1.1** | Installs beside today's Mail app: it required Comms 0.1, so a workspace with Mail, Chat and Calendar as they are now (Comms 0.7) could not install … |
 | **0.1.0** | First release: email marketing on top of the Mail app. Marketing contacts with consent evidence (time, source, keyed IP hash) and custom … |
 
