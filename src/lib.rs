@@ -34,6 +34,7 @@ const JOURNEY_BUDGET: Duration = Duration::from_secs(15);
 const SEND_BUDGET: Duration = Duration::from_secs(30);
 
 include!(concat!(env!("OUT_DIR"), "/packages.rs"));
+include!(concat!(env!("OUT_DIR"), "/ui.rs"));
 
 /// This app's manifest (`app.yaml`).
 pub const MANIFEST: &str = include_str!("../app.yaml");
@@ -130,5 +131,14 @@ mod tests {
         assert!(schema.entity("CampaignSettings").is_some_and(|e| e.secret_fields().count() == 2));
         assert!(schema.entity("EmailCampaign").is_some_and(|e| e.is_submittable()));
         assert!(super::MANIFEST.contains("packages: [campaigns]"));
+    }
+
+    #[test]
+    fn the_interface_is_a_release_the_platform_takes() {
+        let m = ferrum_apps::AppManifest::parse(super::MANIFEST).expect("app.yaml");
+        assert_eq!(m.routes(), vec![("campaigns".to_string(), vec![])]);
+        let files = super::UI.iter().map(|(p, b)| (p.to_string(), b.to_vec())).collect();
+        let ui = ferrum_apps::ui::prepare("campaigns", files).expect("ui/dist is an interface release");
+        assert!(super::UI.iter().any(|(p, _)| *p == "index.html") && !super::UI.iter().any(|(p, _)| p.starts_with('.')), "{}", ui.digest);
     }
 }
