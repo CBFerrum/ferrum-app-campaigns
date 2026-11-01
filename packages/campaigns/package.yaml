@@ -52,3 +52,4 @@ roles:
       - {entity: EmailTemplate, read: true, write: true, create: true}
       - {entity: EmailAccount, read: true}
       - {entity: Customer, read: true}
+export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log]
