@@ -212,6 +212,7 @@ export function Home() {
     <div className="cm-page">
       <header className="cm-head">
         <div>
+          <h1 className="sr-only">Campaigns</h1>
           <Nav />
           <p className="page-sub" aria-live="polite">
             {result.data ? (filtered ? `${noun(total, "campaign")} found` : noun(total, "campaign")) : " "}
