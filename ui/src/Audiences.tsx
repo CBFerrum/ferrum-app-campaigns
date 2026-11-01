@@ -166,6 +166,7 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
     <div className="cm-page">
       <header className="cm-head">
         <div>
+          <h1 className="sr-only">Audiences</h1>
           <Nav />
           <p className="page-sub">Who can be emailed, and the groups you pick from them.</p>
         </div>

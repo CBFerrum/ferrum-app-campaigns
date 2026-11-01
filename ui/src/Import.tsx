@@ -489,6 +489,7 @@ export function Import() {
     <div className="cm-page">
       <header className="cm-head">
         <div>
+          <h1 className="sr-only">Import contacts</h1>
           <Nav />
           <p className="page-sub">Bring people in from a file, with a record of why you may email them.</p>
         </div>
