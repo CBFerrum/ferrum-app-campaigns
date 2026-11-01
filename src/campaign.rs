@@ -576,6 +576,10 @@ pub async fn hand_over(
     links: &Links,
     contact_id: Uuid,
 ) -> Result<Handover> {
+    // A person whose data may not be processed gets nothing, whatever list they are on.
+    if !k.may_contact(tx, sys.tenant, email).await? {
+        return Ok(Handover::Skipped("processing of this person's data is restricted"));
+    }
     let composed: Composed = send::compose(d, contact, extra, recipient, links)?;
     sqlx::query("savepoint campaigns_recipient").execute(&mut **tx).await?;
     match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id)).await {

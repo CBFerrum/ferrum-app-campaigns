@@ -21,7 +21,8 @@ mod util;
 pub use public::machine_open;
 
 use ferrum_domain::reports::ReportSource;
-use ferrum_kernel::{Ctx, Error, HookRegistry, Kernel, Result};
+use ferrum_kernel::outbox::PRIORITY_BULK;
+use ferrum_kernel::{Ctx, Error, HookRegistry, Kernel, Result, Trace};
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -80,10 +81,12 @@ pub async fn maintenance(k: &Kernel) -> Result<()> {
             }
         };
         let sys = Ctx::system(tenant, schema);
+        // Sending to a list waits behind what people are waiting for (a reset link, an invitation).
+        let bulk = || Trace::at_priority(PRIORITY_BULK);
         let steps = [
             ("delivery", delivery::sync(k, &sys).await),
-            ("journeys", journey::run(k, &sys, JOURNEY_BUDGET).await),
-            ("campaigns", campaign::run(k, &sys, SEND_BUDGET).await),
+            ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
+            ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
             ("purge", purge(k, tenant).await),
         ];
         for (step, outcome) in steps {
