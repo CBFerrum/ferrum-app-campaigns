@@ -108,7 +108,7 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
         </p>
       )}
       <p className="cm-note faint">
-        Counted {new Date(check.checked_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, the way sending counts. Anyone who unsubscribes before their email is sent is skipped, and so is anyone who has asked us to restrict how their data is used, so the final number can be a little lower.
+        Counted {new Date(check.checked_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.
       </p>
     </Section>
   );
@@ -262,7 +262,7 @@ export function ReviewTab({
             ) : undefined
           }
         >
-          <strong>{doc.schedule_at && new Date(doc.schedule_at) > new Date() ? `Scheduled for ${moment(doc.schedule_at)}.` : "Scheduled: it starts within a minute."}</strong> The content and the audience are fixed now. Who is mailed is decided when it starts, so anyone who unsubscribes before then is left out.
+          <strong>{doc.schedule_at && new Date(doc.schedule_at) > new Date() ? `Scheduled for ${moment(doc.schedule_at)}.` : "Scheduled: it starts within a minute."}</strong> The content and the audience are fixed now. Who is mailed is decided when it starts: people who join the segments by then are added, and anyone who unsubscribes is left out.
         </Alert>
       )}
       {q.error && !check ? (
