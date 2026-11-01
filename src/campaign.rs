@@ -7,6 +7,7 @@
 //! per recipient — so an email is handed to the Mail app exactly when its claim commits, and
 //! concurrent maintenance runs can never claim (or mail) a recipient twice.
 
+use crate::check;
 use crate::contact::{self, MAILABLE};
 use crate::import;
 use crate::segment::{self, Rule, Segment};
@@ -53,8 +54,13 @@ pub fn draft(doc: &Doc, variant: Option<&str>) -> Draft {
     d
 }
 
-fn extra(doc: &Doc) -> Map<String, Value> {
+pub(crate) fn extra(doc: &Doc) -> Map<String, Value> {
     values([("campaign", json!({"name": s(doc, "campaign_name"), "number": s(doc, "number")}))])
+}
+
+/// The test share `start` computes in SQL: `pct`% of the audience rounded up, at least one per variant.
+pub(crate) fn test_size(n: i64, pct: i64, variants: i64) -> i64 {
+    ((n * pct + 99) / 100).max(n.min(variants))
 }
 
 /// The winning variant: the highest rate of unique opens (or clicks) per email sent; ties go to
@@ -248,6 +254,8 @@ impl DocHook for CampaignHook {
                 Ok(Some(json!({"subject": c.subject, "html": c.html, "text": c.text, "variant": variant})))
             }
             "send_test" => Ok(Some(send_test(hc, doc, params).await?)),
+            "audience_check" => Ok(Some(check::audience(hc, doc).await?)),
+            "timeline" => Ok(Some(check::timeline(hc, doc, params).await?)),
             _ => Ok(None),
         }
     }
@@ -382,7 +390,7 @@ async fn record_error(k: &Kernel, tenant: Uuid, campaign: Uuid, message: &str) -
 }
 
 /// Pushes `(p1) or (p2) …` (or `false`).
-fn push_any(qb: &mut QueryBuilder<Postgres>, parts: &[Segment], today: chrono::NaiveDate, tz: &str) {
+pub(crate) fn push_any(qb: &mut QueryBuilder<Postgres>, parts: &[Segment], today: chrono::NaiveDate, tz: &str) {
     if parts.is_empty() {
         qb.push("false");
         return;
@@ -396,7 +404,7 @@ fn push_any(qb: &mut QueryBuilder<Postgres>, parts: &[Segment], today: chrono::N
 }
 
 /// The campaign's audience as conditions: (included, excluded, groups to adopt).
-async fn audience(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Result<(Vec<Segment>, Vec<Segment>, Vec<Uuid>)> {
+pub(crate) async fn audience(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Result<(Vec<Segment>, Vec<Segment>, Vec<Uuid>)> {
     let (mut include, mut exclude, mut groups) = (Vec::new(), Vec::new(), Vec::new());
     for r in rows(doc, "audience") {
         let seg = match (id(&r, "segment"), id(&r, "email_group")) {
@@ -720,11 +728,6 @@ async fn refresh_stats(k: &Kernel, tenant: Uuid) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The test share `start` computes in SQL: `pct`% of the audience rounded up, at least one per variant.
-    fn test_size(n: i64, pct: i64, variants: i64) -> i64 {
-        ((n * pct + 99) / 100).max(n.min(variants))
-    }
 
     #[test]
     fn test_share_and_winner() {

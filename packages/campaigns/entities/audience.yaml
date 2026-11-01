@@ -99,6 +99,8 @@
     - {name: counted_at, type: datetime, read_only: true, no_copy: true}
   actions:
     - {name: preview, label: Preview, permission: read}
+    # Counts rules that are being edited without saving them (the segment screen calls it after every change).
+    - {name: count, label: Count Without Saving, permission: read, read_only: true, hidden: true}
   form:
     - {label: Segment, fields: [segment_name, match_type, description]}
     - {label: Rules, fields: [rules]}

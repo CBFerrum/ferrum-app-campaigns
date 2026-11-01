@@ -22,12 +22,17 @@ pub async fn lock_budget(tx: &mut Tx, tenant: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// Emails the tenant may still hand over this hour: the Mail app's hourly limit (Communication
-/// Settings) minus what campaigns, journeys and its newsletters sent in the last hour.
-pub async fn hourly_room(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
+/// The Mail app's hourly limit (Communication Settings) for newsletters, campaigns and journeys together.
+pub async fn hourly_limit(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
     let limit: Option<Option<i64>> =
         sqlx::query_scalar("select newsletter_hourly_limit from e_comms_settings where tenant_id = $1 limit 1").bind(tenant).fetch_optional(&mut **tx).await?;
-    let limit = limit.flatten().unwrap_or(500).max(1);
+    Ok(limit.flatten().unwrap_or(500).max(1))
+}
+
+/// Emails the tenant may still hand over this hour: the hourly limit minus what campaigns,
+/// journeys and the Mail app's newsletters sent in the last hour.
+pub async fn hourly_room(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
+    let limit = hourly_limit(tx, tenant).await?;
     let used: i64 = sqlx::query_scalar(
         "select (select count(*) from e_campaign_recipient where tenant_id = $1 and communication is not null and queued_at > now() - interval '1 hour') \
          + (select count(*) from comms_newsletter_delivery where tenant_id = $1 and created_at > now() - interval '1 hour')",
