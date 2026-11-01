@@ -165,8 +165,9 @@ a built-in message when empty), `thank_you_url`, `confirmed_url`; read-only `sub
 - **Cancel** (Marketing Manager) stops a Scheduled or Sending campaign: waiting recipients become
   `Cancelled` (emails already handed over still go). A Sent campaign cannot be cancelled or deleted.
   **Amend** a cancelled one to start over from a copy.
-- Action `preview` (read) `{contact?: id, variant?: "B"}` → `{subject, html, text, variant}`
-  (a stand-in "Jane Doe" without a contact; no tracking).
+- Action `preview` (read, read-only, hidden in the records form: the campaign page shows it)
+  `{contact?: id, variant?: "B"}` → `{subject, html, text, variant}` (a stand-in "Jane Doe" without a
+  contact; no tracking).
 - Action `send_test` (write; draft or scheduled) `{emails: [..] | "a@x, b@y", contact?, variant?}` →
   `{sent, communications}`: up to 10 addresses, subject prefixed `[Test] `, untracked, sent as the
   caller.

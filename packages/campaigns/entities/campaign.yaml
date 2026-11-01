@@ -62,8 +62,10 @@
     - {name: finished_at, type: datetime, read_only: true, no_copy: true}
     - {name: last_error, type: text, read_only: true, no_copy: true}
   actions:
-    - {name: preview, label: Preview, permission: read, read_only: true}
-    - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1]}
+    # The campaign page shows a preview itself; the records form would only throw its answer away.
+    - {name: preview, label: Preview, permission: read, read_only: true, hidden: true}
+    - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1],
+       params: [{name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}]}
     # For the campaign screens (they call these, nobody clicks them): who it would reach if it started now, and what
     # happened to what was sent, by hour or day.
     - {name: audience_check, label: Check Audience, permission: read, read_only: true, hidden: true}

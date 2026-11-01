@@ -557,6 +557,45 @@ async fn scenario() {
         "invalid",
     );
     refused(k.run_action(uma, "MarketingSegment", pune, "count", json!({})).await, "invalid");
+    // The interface saves rules whole: every field of the row present, the ones that do not apply null.
+    let shaped = uid(&t
+        .insert(uma, "MarketingSegment", seg("Shapes", true, json!([{"rule_type": "Attribute", "attribute": "city", "operator": "Equals", "value": "Pune"}])))
+        .await);
+    let rule0 = t.get("MarketingSegment", shaped).await["rules"][0]["id"].clone();
+    let whole = |rule_type: &str, over: Value| {
+        let mut row = obj(
+            json!({"rule_type": rule_type, "field": null, "attribute": null, "operator": null, "value": null, "email_group": null, "activity": null, "within_days": null, "campaign": null}),
+        );
+        row.extend(obj(over));
+        Value::Object(row)
+    };
+    let saved_rules = t
+        .update(
+            uma,
+            "MarketingSegment",
+            shaped,
+            json!({"match_type": "Any", "description": null, "rules": [
+                whole("Attribute", json!({"id": rule0, "attribute": "city", "operator": "Equals", "value": "PUNE"})),
+                whole("Engagement", json!({"operator": "Did Not", "activity": "Clicked", "within_days": 30})),
+                whole("Email Group", json!({"operator": "Is Member", "email_group": newsletter.to_string()})),
+                whole("Contact Field", json!({"field": "Created On", "operator": "Within Last Days", "value": "7"})),
+                whole("Contact Field", json!({"field": "Email", "operator": "Is Empty"}))]}),
+        )
+        .await;
+    assert_eq!(
+        (saved_rules["rules"].as_array().unwrap().len(), saved_rules["rules"][0]["id"].clone()),
+        (5, rule0.clone()),
+        "rows with ids are patched, new ones added"
+    );
+    let one_left = t
+        .update(
+            uma,
+            "MarketingSegment",
+            shaped,
+            json!({"rules": [whole("Attribute", json!({"id": rule0, "attribute": "city", "operator": "Equals", "value": "PUNE"}))]}),
+        )
+        .await;
+    assert_eq!(one_left["rules"].as_array().unwrap().len(), 1, "rows left out are removed");
     let count = |rules: Value, all: bool| {
         let t = &t;
         async move {
@@ -672,6 +711,41 @@ async fn scenario() {
         "invalid",
     );
     refused(k.insert(uma, "EmailCampaign", obj(json!({"campaign_name": "Both", "subject": "x", "content": "x", "audience": [{"segment": x_list.to_string(), "email_group": newsletter.to_string()}]}))).await, "invalid");
+    // The interface saves a draft as it sends it: whole tables with their ids, nulls for what is blank.
+    let scratch = uid(&t
+        .insert(uma, "EmailCampaign", json!({"campaign_name": "Shapes", "subject": "S", "content": "<p>c</p>", "audience": [{"segment": x_list.to_string()}]}))
+        .await);
+    let first_row = t.get("EmailCampaign", scratch).await["audience"][0]["id"].clone();
+    let saved = t
+        .update(
+            uma,
+            "EmailCampaign",
+            scratch,
+            json!({"preheader": null, "text_content": null, "email_account": null, "schedule_at": null, "hourly_limit": 5,
+                   "audience": [{"id": first_row, "segment": x_list.to_string(), "email_group": null, "exclude": false},
+                                {"segment": null, "email_group": newsletter.to_string(), "exclude": true}],
+                   "ab_test": true, "test_percent": 30, "winner_metric": "Opens", "winner_after_hours": 6,
+                   "variants": [{"subject": "One", "content": null}, {"subject": "Two", "content": "<p>two</p>"}]}),
+        )
+        .await;
+    assert_eq!(saved["audience"].as_array().unwrap().len(), 2);
+    assert_eq!(saved["audience"][0]["id"], first_row, "a row with its id stays the same row");
+    assert_eq!(
+        saved["variants"].as_array().unwrap().iter().map(|v| v["variant"].as_str().unwrap()).collect::<Vec<_>>(),
+        vec!["A", "B"],
+        "the server letters them"
+    );
+    let off = t
+        .update(
+            uma,
+            "EmailCampaign",
+            scratch,
+            json!({"ab_test": false, "variants": [], "audience": [{"id": first_row, "segment": x_list.to_string(), "email_group": null, "exclude": false}]}),
+        )
+        .await;
+    assert_eq!((off["audience"].as_array().unwrap().len(), off["variants"].as_array().unwrap().len()), (1, 0));
+    refused(k.update(uma, "EmailCampaign", scratch, obj(json!({"ab_test": true})), None).await, "invalid");
+    k.delete(uma, "EmailCampaign", scratch, None).await.expect("a draft can be deleted");
     // Preview and test emails while drafting.
     let asha = uid(&t.contact("asha@x.test").await);
     let pv = t.action(uma, "EmailCampaign", c1, "preview", json!({"contact": asha.to_string()})).await;
