@@ -4,7 +4,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, ApiError, errorMessage } from "@ferrum/client";
 import { Alert, Button, EmptyState, ErrorState, Field, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
@@ -45,7 +45,8 @@ export function NewCampaign() {
   }
 
   const fields = create.error instanceof ApiError ? Object.fromEntries(create.error.fields.filter((f) => !f.row).map((f) => [f.field, f.message])) : {};
-  const ready = name.trim() && (subject.trim() || template) && audience.some((r) => (r.segment || r.email_group) && !r.exclude);
+  const chosen = audience.some((r) => (r.segment || r.email_group) && !r.exclude);
+  const ready = name.trim() && (subject.trim() || template) && chosen;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (ready) create.mutate();
@@ -70,6 +71,12 @@ export function NewCampaign() {
         <fieldset className="cm-fieldset">
           <legend className="field-label">Who is it for?</legend>
           <AudienceRows rows={audience} onChange={setAudience} error={fields.audience} />
+          {/* The button below waits for this, so say what it waits for. */}
+          {!chosen && (
+            <p className="field-hint">
+              Choose at least one segment or email group to go on. Nobody to choose yet? <Link to="/s/new">Make a segment</Link>.
+            </p>
+          )}
         </fieldset>
         <Field label="Start from a Mail template" htmlFor="new-template" hint="Optional. It fills the subject (if empty) and the content. Without one you start from a simple layout.">
           <LinkInput to="EmailTemplate" id="new-template" value={template?.id ?? null} title={template?.title} onChange={(id, title) => setTemplate(id ? { id, title } : null)} />
