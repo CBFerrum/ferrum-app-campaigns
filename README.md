@@ -32,7 +32,7 @@ forms, and journeys that send, wait and branch over time.
 | 🗃️ Records | 14 entities in 1 package |
 | 👥 Roles | 2: Marketing User, Marketing Manager |
 | 📊 Reports | 5 |
-| 🧪 Tests | 22 Rust tests, 96 for the screens |
+| 🧪 Tests | 22 Rust tests, 112 for the screens |
 
 
 ## Highlights

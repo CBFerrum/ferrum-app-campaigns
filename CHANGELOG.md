@@ -20,16 +20,18 @@
   day: emails sent, opens and clicks, unsubscribes and bounces. An A/B test shows each version's rate as the send
   went on, and when the winner was chosen. Links show their share of the emails that arrived. A sending
   campaign refreshes every minute. Each chart can be read as a table.
-- Audiences: how many people can be emailed and how that moved in 30 days, and a segment builder whose count
-  and sample of people follow every change without saving (with who would not be emailed, and why), and where a
-  segment is used. Contacts can be imported from a CSV file: choose the columns, say what the people agreed to
-  (the basis is kept on each contact), check who is new and who is blocked, then import in batches that can be
-  stopped. An opt-out list unsubscribes the people on it, including those you already have.
+- Audiences: contacts by standing (subscribed, waiting to confirm, unsubscribed, bounced, blocked), how many
+  joined and left in 30 days, and a segment builder whose count and sample of people follow every change
+  without saving (with who would not be emailed, and why) and which says where a segment is used. Contacts can
+  be imported from a CSV file: choose the columns, say what the people agreed to (the basis is kept on each
+  contact), check who is new and who is blocked, then import in batches that can be stopped. An opt-out list
+  unsubscribes the people on it, including those you already have.
 - Campaigns and segments open on these pages from anywhere, and a campaign can be duplicated. The rest of the
   records stay in the records screens.
 - New for other screens and agents: the campaign actions `audience_check` (who would get it, and what is
   missing) and `timeline` (events by hour or day), and the segment action `count` (counts rules without saving
-  them). `preview` no longer locks the campaign or leaves an entry in its history.
+  them). `preview` no longer locks the campaign or leaves an entry in its history, and is not a button on the
+  records form any more (the campaign page shows it); Send Test Email there asks for the addresses.
 - Needs Ferrum 0.3.2.
 
 ## 0.1.1

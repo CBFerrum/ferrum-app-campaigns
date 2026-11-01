@@ -63,7 +63,7 @@ export function InboxLine({ sender, subject, preheader, device }: { sender?: { n
   return (
     <div className={`cm-inbox cm-inbox-${device}`} role="group" aria-label="How it looks in an inbox">
       <span className="cm-inbox-mark" aria-hidden="true">
-        {(sender?.name ?? "?").slice(0, 1).toUpperCase()}
+        {(sender?.name ?? "Your sender").slice(0, 1).toUpperCase()}
       </span>
       <div className="cm-inbox-text">
         <div className="cm-inbox-from">
