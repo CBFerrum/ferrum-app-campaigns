@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.2.1** | Rebuilt with Ferrum-Frontend 80ff179: labels name their fields, and linked titles show their titles. |
 | **0.2.0** | Its own interface at `/campaigns/`: write, preview on a computer and a phone, test, check who will get it and why others are left out, schedule and send a campaign from one page; results as charts over time with the A/B outcome; segments with a live count; import contacts from a CSV file with column mapping … |
 | **0.1.1** | Installs beside today's Mail app: it required Comms 0.1, so a workspace with Mail, Chat and Calendar as they are now (Comms 0.7) could not install … |
 | **0.1.0** | First release: email marketing on top of the Mail app. Marketing contacts with consent evidence (time, source, keyed IP hash) and custom … |
