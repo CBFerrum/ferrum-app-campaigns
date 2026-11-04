@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+Rebuilt with Ferrum-Frontend 80ff179: a field's label names its control for assistive technology, and a record whose title is a link shows that record's title, not its id.
+
 ## 0.2.0
 
 - Campaigns has an interface of its own at /campaigns/. Each campaign is one page, with its tab in the address:
