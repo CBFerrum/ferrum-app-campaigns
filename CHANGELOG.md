@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+Rebuilt with Ferrum-Frontend 00dea07: in a workflow state that names what may change, the other fields show read-only, and the fields the state needs show required.
+
 ## 0.3.0: campaigns that belong to CRM's
 
 With CRM installed, the **Campaigns and CRM** package (`campaigns_crm`) gives an email campaign the
