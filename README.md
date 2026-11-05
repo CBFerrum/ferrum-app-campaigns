@@ -27,7 +27,7 @@ forms, and journeys that send, wait and branch over time.
 |---|---|
 | 📦 Version | `0.2.0` |
 | 🧱 Platform | Ferrum `>=0.3.2, <0.4` |
-| 🔗 Requires | comms `>=0.7, <0.8` |
+| 🔗 Requires | comms `>=0.10, <0.11` |
 | 🖥️ Interface | Its own screens at `/campaigns/` (campaigns, results, audiences), and the records screens for the rest |
 | 🗃️ Records | 14 entities in 1 package |
 | 👥 Roles | 2: Marketing User, Marketing Manager |
@@ -129,7 +129,7 @@ flowchart LR
     BAR --> API
     K <--> APP
     K --> OB --> EV["Notifications · webhooks<br/>automations"]
-    APP -. requires .-> D0["comms >=0.7, <0.8"]
+    APP -. requires .-> D0["comms >=0.10, <0.11"]
     classDef app fill:#a63089,color:#fff,stroke:#a63089
     class APP app
 ```
@@ -204,7 +204,7 @@ erDiagram
 ## Install
 
 Workspace administrators install it from **Apps** (`/store/`) in Ferrum; it ships in the
-official Ferrum server image. It needs **comms** `>=0.7, <0.8` installed first. Self-hosters building their own image enable the
+official Ferrum server image. It needs **comms** `>=0.10, <0.11` installed first. Self-hosters building their own image enable the
 `campaigns` feature of the server. Everything it adds is also available to AI agents over
 Ferrum's MCP server, within each person's permissions.
 
@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.3.2** | Requires Comms 0.10, so it installs beside the platform's Comms again. |
 | **0.3.1** | Rebuilt with Ferrum-Frontend 00dea07: a workflow state's kept fields are read-only, its needed ones required. |
 | **0.3.0** | campaigns that belong to CRM's |
 | **0.2.2** | Rebuilt with Ferrum-Frontend daeadda: actions say what they did. |

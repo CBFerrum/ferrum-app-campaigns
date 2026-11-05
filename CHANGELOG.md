@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+Requires Comms 0.10, the release it is built and tested with: it asked for Comms 0.7, so with the platform's Comms 0.10 it could not be installed (found walking marketing to consent in a browser). Rebuilt with Ferrum-Frontend 0f1a544.
+
 ## 0.3.1
 
 Rebuilt with Ferrum-Frontend 00dea07: in a workflow state that names what may change, the other fields show read-only, and the fields the state needs show required.
