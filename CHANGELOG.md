@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0: campaigns that belong to CRM's
+
+With CRM installed, the **Campaigns and CRM** package (`campaigns_crm`) gives an email campaign the
+CRM campaign it is part of, and CRM's Campaign Attribution counts the clicks on it from the address of
+a won deal's lead or contact, before the deal was won, toward that campaign. Marketing users may read
+CRM's campaigns to choose one.
+
 ## 0.2.2
 
 Rebuilt with Ferrum-Frontend daeadda: after an action runs, a record page shows what the action said it did rather than only that it is done.

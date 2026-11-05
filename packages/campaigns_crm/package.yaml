@@ -1,0 +1,18 @@
+package: campaigns_crm
+version: 0.1.0
+label: Campaigns and CRM
+description: An email campaign belongs to one of CRM's campaigns, and the clicks on it from a lead's or a contact's address count toward that campaign in CRM's Campaign Attribution.
+depends: [campaigns, crm]
+field_prefix: crm_
+
+overlays:
+  - entity: EmailCampaign
+    ops:
+      - {op: add_field, column: true, after: campaign_name, field: {name: crm_campaign, type: link, to: Campaign, label: CRM Campaign, in_filter: true,
+          description: "The CRM campaign this email is part of: clicks on it from a lead's or a contact's address, before their deal is won, count toward it in CRM's Campaign Attribution"}}
+
+roles:
+  - name: Marketing User
+    description: Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them.
+    permissions:
+      - {entity: Campaign, read: true}
