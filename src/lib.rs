@@ -124,6 +124,9 @@ mod tests {
     fn packages_are_valid() {
         let mut all = ferrum_domain::packages().expect("platform packages");
         all.extend(ferrum_app_comms::packages().expect("mail packages"));
+        // The CRM link builds on CRM's packages (and CRM's ERP connector on ERP's).
+        all.extend(ferrum_app_erp::packages().expect("ERP's packages"));
+        all.extend(ferrum_app_crm::packages().expect("crm packages"));
         all.extend(super::packages().expect("app packages"));
         let catalog = ferrum_meta::Catalog::from_packages(all).unwrap_or_else(|e| panic!("{e}"));
         let schema = ferrum_meta::effective::build(&catalog, &["campaigns".to_string()], &[], 1).unwrap_or_else(|e| panic!("{e}"));
