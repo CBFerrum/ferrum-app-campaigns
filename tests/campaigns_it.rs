@@ -319,7 +319,7 @@ async fn scenario() {
     ferrum_app_comms::register(&mut hooks);
     ferrum_app_crm::register(&mut hooks);
     ferrum_app_campaigns::register(&mut hooks);
-    for source in ferrum_app_campaigns::reports() {
+    for source in ferrum_app_campaigns::reports().into_iter().chain(ferrum_app_crm::reports()) {
         ferrum_domain::reports::add_source(source);
     }
     let settings = KernelSettings { secret_key: Some(ferrum_kernel::secret::SecretKey::new([9u8; 32])), ..Default::default() };
@@ -332,7 +332,7 @@ async fn scenario() {
             admin_email: "admin@acme.test".into(),
             admin_password: PASSWORD.into(),
             admin_name: None,
-            packages: vec!["core".into(), "comms".into(), "crm".into(), "campaigns".into()],
+            packages: vec!["core".into(), "comms".into(), "crm".into(), "campaigns".into(), "campaigns_crm".into()],
             settings: Some(json!({"timezone": "America/New_York"})),
         })
         .await
@@ -777,6 +777,9 @@ async fn scenario() {
     refused(k.submit(mgr, "EmailCampaign", c1, None).await, "invalid");
     t.update(&admin, "CommsSettings", comms_settings, json!({"public_url": "https://erp.acme.test/"})).await;
     assert_eq!(t.action(uma, "EmailCampaign", c1, "audience_check", json!({})).await["ready"]["public_url"], json!(true));
+    // Part of CRM's spring campaign (the CRM link): its clicks are touches of that campaign.
+    let crm_spring = t.insert(&admin, "Campaign", json!({"campaign_name": "Spring 2026", "company": company.to_string(), "status": "Active"})).await;
+    k.update(&admin, "EmailCampaign", c1, obj(json!({"crm_campaign": crm_spring["id"]})), None).await.expect("a CRM campaign");
     let scheduled = k.submit(mgr, "EmailCampaign", c1, None).await.expect("schedule");
     assert_eq!(status_of(&scheduled), "Scheduled");
     refused(k.update(mgr, "EmailCampaign", c1, obj(json!({"subject": "Changed"})), None).await, "invalid");
@@ -875,6 +878,24 @@ async fn scenario() {
     let c = &by_email["chen@x.test"];
     assert_eq!((int(&c["open_count"]), int(&c["click_count"]), c["opened_at"].is_string()), (1, 1, true), "a click proves an open");
     assert_eq!(t.scalar::<i64>("select count(*) from campaigns_click where tenant_id = $1 and owner_id = $2", Some(c1)).await, 2);
+
+    // ───────────── CRM's attribution: the email's clicks are its CRM campaign's touches ─────────────
+    // Chen clicked the spring email; a deal won from a lead at that address is the spring
+    // campaign's in CRM, under every model. Asha clicked too, but has no deal.
+    let lead = uid(&t.insert(&admin, "Lead", json!({"first_name": "Chen", "last_name": "Li", "email": "chen@x.test", "company": company.to_string()})).await);
+    let made = t.action(&admin, "Lead", lead, "make_opportunity", json!({})).await;
+    let deal: Uuid = made["id"].as_str().unwrap().parse().unwrap();
+    let won = t.list("SalesStage", json!({"stage_name": "Won"})).await;
+    let deal = k.update(&admin, "Opportunity", deal, obj(json!({"amount": "500", "sales_stage": won[0]["id"]})), None).await.expect("won");
+    assert_eq!(deal["status"], json!("Won"));
+    for model in ["Linear", "First Touch", "Last Touch"] {
+        let p: HashMap<String, String> =
+            [("company", company.to_string()), ("model", model.to_string())].into_iter().map(|(a, b)| (a.to_string(), b)).collect();
+        let r = ferrum_domain::reports::run(&k, &admin, "campaign_attribution", &p).await.expect("attribution");
+        let spring = r["rows"].as_array().unwrap().iter().find(|x| x["campaign"] == json!("Spring 2026")).cloned();
+        assert_eq!(spring.as_ref().map(|s| (s["deals_touched"].clone(), s["revenue"].clone())), Some((json!(1), json!("500"))), "{model}: {r}");
+        assert_eq!(r["totals"]["won_deals"], json!(1));
+    }
 
     // ───────────── unsubscribe: the signed link updates consent, suppression and Mail groups ─────────────
     let unsub = links(&mail_of("ivy@news.test").html, "u")[0].clone();

@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.3.0** | campaigns that belong to CRM's |
 | **0.2.2** | Rebuilt with Ferrum-Frontend daeadda: actions say what they did. |
 | **0.2.1** | Rebuilt with Ferrum-Frontend 80ff179: labels name their fields, and linked titles show their titles. |
 | **0.2.0** | Its own interface at `/campaigns/`: write, preview on a computer and a phone, test, check who will get it and why others are left out, schedule and send a campaign from one page; results as charts over time with the A/B outcome; segments with a live count; import contacts from a CSV file with column mapping … |
