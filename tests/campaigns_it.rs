@@ -1218,6 +1218,8 @@ async fn scenario() {
         .await;
     let fid = uid(&form);
     assert_eq!(t.get("SubscriptionForm", fid).await["endpoint"], json!(format!("/api/site/acme/campaigns/subscribe/{fid}")));
+    let embed = t.get("SubscriptionForm", fid).await["embed_html"].as_str().unwrap_or_default().to_string();
+    assert!(embed.contains(&format!("action=\"{BASE}/subscribe/{fid}\"")) && embed.contains("name=\"interests\""), "the HTML a website pastes: {embed}");
     refused(k.insert(mgr, "SubscriptionForm", obj(json!({"form_name": "Bad", "allowed_attributes": "website"}))).await, "invalid");
     let post_json = |body: Value| {
         let t = &t;
