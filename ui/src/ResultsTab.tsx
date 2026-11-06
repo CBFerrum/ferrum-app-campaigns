@@ -10,7 +10,7 @@ import { Alert, Badge, Button, EmptyState, ErrorState, PageLoading } from "@ferr
 import { localBucket } from "./chart";
 import type { Campaign } from "./campaign";
 import { abResultsOf, linksOf, performanceOf, timelineOf } from "./data";
-import { count, noun, percent, rate } from "./format";
+import { clock, count, noun, percent, rate } from "./format";
 import { LineChart } from "./LineChart";
 import { abBars, abStanding, hasAny, host, linkShares, shape, tiles, variantRates } from "./results";
 import { Bar, Section } from "./ui";
@@ -19,7 +19,6 @@ import { Bar, Section } from "./ui";
 const VARIANT_COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-2)", "var(--chart-5)"];
 const MINUTE = 60_000;
 
-const time = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
 function Tiles({ items }: { items: ReturnType<typeof tiles> }) {
   return (
@@ -145,7 +144,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
       )}
       <div className="cm-results-bar">
         <span className="faint" role="status">
-          {sending ? "Sending: " : ""}updated {time(Math.max(perf.dataUpdatedAt, tl.dataUpdatedAt))}
+          {sending ? "Sending: " : ""}updated {clock(Math.max(perf.dataUpdatedAt, tl.dataUpdatedAt))}
           {sending && ", and again every minute"}
         </span>
         <Button size="sm" icon="refresh" loading={perf.isFetching} onClick={refresh}>

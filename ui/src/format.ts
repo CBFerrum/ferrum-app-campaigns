@@ -1,4 +1,7 @@
-// Numbers and times as people say them. Pure, so the wording is tested without a browser.
+// Numbers and times as people say them. Pure, so the wording is tested without a browser. Times
+// are on the workspace's clock (the kit's), named when the browser's is another.
+
+import { formatMoment, fromZonedInput, shownTimeZone, toZonedInput } from "@ferrum/client";
 
 /** 4812 → "4,812". */
 export const count = (n: number | null | undefined): string => (n ?? 0).toLocaleString();
@@ -25,13 +28,14 @@ export const people = (n: number): string => `${count(n)} ${n === 1 ? "person" :
 /** The first of `singular`/`plural` that fits `n`. */
 export const noun = (n: number, singular: string, plural = `${singular}s`): string => `${count(n)} ${n === 1 ? singular : plural}`;
 
-/** A moment in the viewer's own time: "Fri 7 Nov, 10:30". */
+/** A moment on the workspace's clock: "Fri 7 Nov, 10:30". */
 export function moment(iso: string | null | undefined, locale?: string): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleString(locale, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  if (!iso || Number.isNaN(Date.parse(iso))) return "";
+  return formatMoment(iso, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }, locale);
 }
+
+/** The time of day of a moment, on the workspace's clock: "10:30". */
+export const clock = (at: string | number): string => formatMoment(at, { hour: "numeric", minute: "2-digit" });
 
 /** How long a number of hours is, roughly: "under an hour", "about 3 hours", "about 2 days". */
 export function span(hours: number): string {
@@ -51,24 +55,13 @@ export function size(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const two = (n: number) => String(n).padStart(2, "0");
+/** A moment as a "datetime-local" box wants it, on the workspace's clock: "2026-11-07T10:30". */
+export const toLocalInput = (iso: string | null | undefined): string => toZonedInput(iso);
 
-/** A moment as a "datetime-local" box wants it: the viewer's own time, "2026-11-07T10:30". */
-export function toLocalInput(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
-}
+/** What a "datetime-local" box holds, as the moment it means on the workspace's clock. */
+export const fromLocalInput = (value: string): string | null => fromZonedInput(value);
 
-/** What a "datetime-local" box holds, as the moment it means in the viewer's time zone. */
-export function fromLocalInput(value: string): string | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-/** The viewer's time zone as people write it: "IST", "GMT+1". */
+/** The zone of the workspace's clock as people write it: "IST", "GMT+1". */
 export function zoneName(locale?: string, at = new Date()): string {
-  return new Intl.DateTimeFormat(locale, { timeZoneName: "short" }).formatToParts(at).find((p) => p.type === "timeZoneName")?.value ?? "";
+  return new Intl.DateTimeFormat(locale, { timeZone: shownTimeZone(), timeZoneName: "short" }).formatToParts(at).find((p) => p.type === "timeZoneName")?.value ?? "";
 }
