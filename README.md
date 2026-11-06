@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.3.5** | Times on the workspace's clock; rebuilt with Ferrum-Frontend 24c3951. |
 | **0.3.4** | Rebuilt with Ferrum-Frontend bb60115: empty numbers read as the server reads them; settings open as their record. |
 | **0.3.3** | The review's settings findings open the page that fixes them; a signup form gives HTML to paste; the campaign report is Email Campaign Performance, apart from CRM's. |
 | **0.3.2** | Requires Comms 0.10, so it installs beside the platform's Comms again. |
