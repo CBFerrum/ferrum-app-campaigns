@@ -10,7 +10,7 @@ import { api, docPath, errorMessage } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast } from "@ferrum/kit";
 import { type Campaign, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
-import { count, fromLocalInput, moment, noun, people, toLocalInput, zoneName } from "./format";
+import { clock, count, fromLocalInput, moment, noun, people, toLocalInput, zoneName } from "./format";
 import { type AudienceCheck, canSend, changedSince, type Finding, findings, leftOut, linksIn, type Level } from "./review";
 import { checkKey, useAudienceCheck } from "./useCheck";
 import type { Draft } from "./useDraft";
@@ -108,7 +108,7 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
         </p>
       )}
       <p className="cm-note faint">
-        Counted {new Date(check.checked_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.
+        Counted {clock(check.checked_at)}, the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.
       </p>
     </Section>
   );

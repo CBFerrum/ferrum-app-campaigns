@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Icon } from "@ferrum/kit";
+import { clock } from "./format";
 import { insertAt } from "./snippets";
 import type { Draft } from "./useDraft";
 
@@ -31,7 +32,7 @@ export function SaveLine({ draft, editable }: { draft: Draft; editable: boolean 
             : s === "conflict"
               ? "Not saved: someone else changed this"
               : draft.savedAt
-                ? `Saved ${new Date(draft.savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
+                ? `Saved ${clock(draft.savedAt)}`
                 : "All changes saved";
   const bad = s === "error" || s === "conflict";
   return (
