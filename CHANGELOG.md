@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4
+
+Rebuilt with Ferrum-Frontend bb60115: a record page reads an empty number or check as the server does, so an action whose condition needs one shows, and a workspace's settings open as their one record.
+
 ## 0.3.3
 
 - Before a campaign goes out, the review's Public URL and postal address findings open the settings page that fixes them (Mail's Communication Settings, Campaign Settings): they named the page and left people to find it.
