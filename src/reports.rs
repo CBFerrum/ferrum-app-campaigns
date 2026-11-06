@@ -91,7 +91,7 @@ const COUNTS: &str = "count(r.id) as recipients, count(r.id) filter (where r.sta
 impl ReportSource for CampaignReports {
     fn catalog(&self) -> Vec<Value> {
         vec![
-            json!({"name": "campaign_performance", "label": "Campaign Performance", "module": "marketing", "entity": "EmailCampaign",
+            json!({"name": "email_campaign_performance", "label": "Email Campaign Performance", "module": "marketing", "entity": "EmailCampaign",
                    "params": [date("from_date", "Started From"), date("to_date", "Started To"), link("campaign", "Campaign", "EmailCampaign")]}),
             json!({"name": "ab_test_results", "label": "A/B Test Results", "module": "marketing", "entity": "EmailCampaign",
                    "params": [link("campaign", "Campaign", "EmailCampaign")]}),
@@ -107,7 +107,7 @@ impl ReportSource for CampaignReports {
     async fn run(&self, k: &Kernel, ctx: &Ctx, name: &str, params: &HashMap<String, String>) -> Result<Value> {
         let p = Params { raw: params };
         match name {
-            "campaign_performance" => performance(k, ctx, &p).await,
+            "email_campaign_performance" => performance(k, ctx, &p).await,
             "ab_test_results" => ab_results(k, ctx, &p).await,
             "link_clicks" => link_clicks(k, ctx, &p).await,
             "journey_funnel" => funnel(k, ctx, &p).await,

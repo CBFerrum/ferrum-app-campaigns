@@ -10,7 +10,7 @@ modules:
     icon: megaphone
     order: 42
     items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
-            JourneyEnrollment, CampaignSettings, report:campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
+            JourneyEnrollment, CampaignSettings, report:email_campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
             report:audience_growth]
 
 # What a personal-data request exports and erases for a contact (their email). The suppression list

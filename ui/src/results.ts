@@ -1,5 +1,5 @@
 // Judging a send: the headline numbers, the series over time, the A/B outcome and the links, from
-// what the server answers (the campaign_performance, ab_test_results and link_clicks reports and
+// what the server answers (the email_campaign_performance, ab_test_results and link_clicks reports and
 // the campaign's timeline action). Pure, so the wording and the arithmetic are tested without a browser.
 
 import { cumulative, ratesOver, type Counts, type Interval } from "./chart";

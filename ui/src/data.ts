@@ -59,7 +59,7 @@ interface Report<R> {
   meta?: Record<string, unknown>;
 }
 
-export const performanceOf = (campaign: string) => api.get<Report<Perf & { campaign_id: string }>>("/api/reports/campaign_performance", { campaign });
+export const performanceOf = (campaign: string) => api.get<Report<Perf & { campaign_id: string }>>("/api/reports/email_campaign_performance", { campaign });
 export const abResultsOf = (campaign: string) => api.get<Report<AbRow>>("/api/reports/ab_test_results", { campaign });
 export const linksOf = (campaign: string) => api.get<Report<LinkRow>>("/api/reports/link_clicks", { campaign });
 

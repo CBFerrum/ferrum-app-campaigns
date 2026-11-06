@@ -193,7 +193,7 @@ erDiagram
 <details>
 <summary><b>Reports (5)</b></summary>
 
-- Campaign Performance
+- Email Campaign Performance
 - Ab Test Results
 - Link Clicks
 - Journey Funnel
@@ -282,7 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
-| **0.3.3** | The review's settings findings open the page that fixes them. |
+| **0.3.3** | The review's settings findings open the page that fixes them; the campaign report is Email Campaign Performance, apart from CRM's. |
 | **0.3.2** | Requires Comms 0.10, so it installs beside the platform's Comms again. |
 | **0.3.1** | Rebuilt with Ferrum-Frontend 00dea07: a workflow state's kept fields are read-only, its needed ones required. |
 | **0.3.0** | campaigns that belong to CRM's |
