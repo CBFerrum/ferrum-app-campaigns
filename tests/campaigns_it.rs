@@ -983,7 +983,7 @@ async fn scenario() {
     hook(stranger.clone(), sign(&stranger, now)).await.unwrap();
     assert_eq!(t.scalar::<String>("select reason from e_email_suppression where tenant_id = $1 and email = 'nobody@else.test'", None).await, "Hard Bounce");
     t.maint().await;
-    let perf = t.report(mgr, "campaign_performance", &[("campaign", c1.to_string())]).await;
+    let perf = t.report(mgr, "email_campaign_performance", &[("campaign", c1.to_string())]).await;
     let row = &perf["rows"][0];
     let numbers: Vec<i64> = [
         "sent",
@@ -1218,6 +1218,8 @@ async fn scenario() {
         .await;
     let fid = uid(&form);
     assert_eq!(t.get("SubscriptionForm", fid).await["endpoint"], json!(format!("/api/site/acme/campaigns/subscribe/{fid}")));
+    let embed = t.get("SubscriptionForm", fid).await["embed_html"].as_str().unwrap_or_default().to_string();
+    assert!(embed.contains(&format!("action=\"{BASE}/subscribe/{fid}\"")) && embed.contains("name=\"interests\""), "the HTML a website pastes: {embed}");
     refused(k.insert(mgr, "SubscriptionForm", obj(json!({"form_name": "Bad", "allowed_attributes": "website"}))).await, "invalid");
     let post_json = |body: Value| {
         let t = &t;

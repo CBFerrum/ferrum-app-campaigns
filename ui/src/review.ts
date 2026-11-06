@@ -68,6 +68,8 @@ export interface Finding {
   detail?: string;
   /** Where to fix it. */
   tab?: Tab;
+  /** Where to fix it outside the campaign: a settings page of this app or of Mail. */
+  href?: string;
 }
 
 /** How many emails go out in an hour, and so how long a send takes. */
@@ -135,6 +137,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       level: "block",
       title: "Tracking and unsubscribe links cannot be built yet",
       detail: "Set the Public URL in the Mail app's Communication Settings: links in the email must reach this server from the internet.",
+      href: "/open/CommsSettings",
     });
   }
   if (check.ready.account) out.push({ id: "account", level: "block", title: "The From account cannot send", detail: check.ready.account, tab: "setup" });
@@ -151,6 +154,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       level: "warn",
       title: "Your postal address is not set",
       detail: "Anti-spam laws such as CAN-SPAM ask for one in every marketing email. Add it in Campaign Settings.",
+      href: "/open/CampaignSettings",
     });
   }
   const main = check.emails[0];

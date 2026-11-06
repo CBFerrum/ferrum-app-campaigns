@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+
+- Before a campaign goes out, the review's Public URL and postal address findings open the settings page that fixes them (Mail's Communication Settings, Campaign Settings): they named the page and left people to find it.
+- A subscription form has **HTML for Your Website**: a form to paste into a page, posting the address, the first name and the allowed attributes to the form's full address, with the hidden field that catches bots. Its page gave only the endpoint's path.
+- The campaign report is **Email Campaign Performance** (`email_campaign_performance`): it shared its name with CRM's Campaign Performance, so with CRM installed `/api/reports/campaign_performance` ran CRM's, and a sent campaign's Results tab said "No results yet".
+
+Both found walking marketing to consent in a browser. Built with Ferrum-Frontend 0f1a544.
+
 ## 0.3.2
 
 Requires Comms 0.10, the release it is built and tested with: it asked for Comms 0.7, so with the platform's Comms 0.10 it could not be installed (found walking marketing to consent in a browser). Rebuilt with Ferrum-Frontend 0f1a544.
