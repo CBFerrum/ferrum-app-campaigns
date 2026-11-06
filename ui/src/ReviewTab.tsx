@@ -136,6 +136,11 @@ function Findings({ items, go }: { items: Finding[]; go: (t: Tab) => void }) {
                 {f.level === "ok" || f.level === "info" ? "Open" : "Fix"}
               </Button>
             )}
+            {f.href && (
+              <a className="btn btn-default btn-sm" href={f.href}>
+                Fix
+              </a>
+            )}
           </li>
         ))}
       </ul>
