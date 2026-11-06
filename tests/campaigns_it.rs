@@ -983,7 +983,7 @@ async fn scenario() {
     hook(stranger.clone(), sign(&stranger, now)).await.unwrap();
     assert_eq!(t.scalar::<String>("select reason from e_email_suppression where tenant_id = $1 and email = 'nobody@else.test'", None).await, "Hard Bounce");
     t.maint().await;
-    let perf = t.report(mgr, "campaign_performance", &[("campaign", c1.to_string())]).await;
+    let perf = t.report(mgr, "email_campaign_performance", &[("campaign", c1.to_string())]).await;
     let row = &perf["rows"][0];
     let numbers: Vec<i64> = [
         "sent",

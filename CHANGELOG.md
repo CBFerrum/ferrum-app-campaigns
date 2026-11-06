@@ -2,7 +2,10 @@
 
 ## 0.3.3
 
-Before a campaign goes out, the review's Public URL and postal address findings open the settings page that fixes them (Mail's Communication Settings, Campaign Settings): they named the page and left people to find it (found walking marketing to consent in a browser). Built with Ferrum-Frontend 0f1a544.
+- Before a campaign goes out, the review's Public URL and postal address findings open the settings page that fixes them (Mail's Communication Settings, Campaign Settings): they named the page and left people to find it.
+- The campaign report is **Email Campaign Performance** (`email_campaign_performance`): it shared its name with CRM's Campaign Performance, so with CRM installed `/api/reports/campaign_performance` ran CRM's, and a sent campaign's Results tab said "No results yet".
+
+Both found walking marketing to consent in a browser. Built with Ferrum-Frontend 0f1a544.
 
 ## 0.3.2
 
