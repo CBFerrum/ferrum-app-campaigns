@@ -5,7 +5,7 @@
   <img alt="Ferrum Campaigns" src="docs/assets/banner-light.svg" width="100%">
 </picture>
 
-[![CI](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml/badge.svg)](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-0.2.0-a63089?style=flat-square) ![Ferrum](https://img.shields.io/badge/Ferrum-%3E%3D0.3.2%2C%20%3C0.4-2f5bea?style=flat-square) ![License](https://img.shields.io/badge/license-AGPL--3.0-3b82f6?style=flat-square) ![Rust](https://img.shields.io/badge/Rust-native%20app-b7410e?style=flat-square&logo=rust&logoColor=white) ![MCP](https://img.shields.io/badge/AI%20agents-MCP-8b5cf6?style=flat-square)
+[![CI](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml/badge.svg)](https://github.com/CBFerrum/ferrum-app-campaigns/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-0.3.3-a63089?style=flat-square) ![Ferrum](https://img.shields.io/badge/Ferrum-%3E%3D0.3.2%2C%20%3C0.4-2f5bea?style=flat-square) ![License](https://img.shields.io/badge/license-AGPL--3.0-3b82f6?style=flat-square) ![Rust](https://img.shields.io/badge/Rust-native%20app-b7410e?style=flat-square&logo=rust&logoColor=white) ![MCP](https://img.shields.io/badge/AI%20agents-MCP-8b5cf6?style=flat-square)
 
 **A native app for [Ferrum](https://github.com/CBFerrum/Ferrum), the open-source, AI-first business platform.**
 
@@ -25,7 +25,7 @@ forms, and journeys that send, wait and branch over time.
 
 | At a glance | |
 |---|---|
-| 📦 Version | `0.2.0` |
+| 📦 Version | `0.3.3` |
 | 🧱 Platform | Ferrum `>=0.3.2, <0.4` |
 | 🔗 Requires | comms `>=0.10, <0.11` |
 | 🖥️ Interface | Its own screens at `/campaigns/` (campaigns, results, audiences), and the records screens for the rest |
@@ -193,7 +193,7 @@ erDiagram
 <details>
 <summary><b>Reports (5)</b></summary>
 
-- Campaign Performance
+- Email Campaign Performance
 - Ab Test Results
 - Link Clicks
 - Journey Funnel
@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.3.3** | The review's settings findings open the page that fixes them; a signup form gives HTML to paste; the campaign report is Email Campaign Performance, apart from CRM's. |
 | **0.3.2** | Requires Comms 0.10, so it installs beside the platform's Comms again. |
 | **0.3.1** | Rebuilt with Ferrum-Frontend 00dea07: a workflow state's kept fields are read-only, its needed ones required. |
 | **0.3.0** | campaigns that belong to CRM's |

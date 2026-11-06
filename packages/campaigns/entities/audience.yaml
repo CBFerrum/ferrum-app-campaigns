@@ -138,6 +138,7 @@
     - {name: form_name, type: data, required: true, unique: true, in_list: true}
     - {name: enabled, type: check, default: true, in_list: true}
     - {name: endpoint, type: data, read_only: true, no_copy: true, description: "POST here (JSON or a form): email, first_name, last_name and the allowed attributes"}
+    - {name: embed_html, type: text, read_only: true, no_copy: true, label: HTML for Your Website, description: "Paste it into a page of your website: it posts the address, the first name and the allowed attributes here, and its hidden field catches bots"}
     - {name: email_group, type: link, to: EmailGroup, in_list: true, description: "Confirmed subscribers join this Mail email group"}
     - {name: email_account, type: link, to: EmailAccount, description: "Sends the confirmation email; blank = the default outgoing account"}
     - {name: allowed_attributes, type: data, description: "Attribute keys the form may set, comma-separated (e.g. city, interests)"}

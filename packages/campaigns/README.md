@@ -301,7 +301,7 @@ the Mail app hands an email over counts as a hard bounce too.
 
 | Name | Entity | Parameters | Rows |
 |---|---|---|---|
-| `campaign_performance` | EmailCampaign | `from_date`, `to_date` (started; default the last 90 days) or `campaign` | per campaign: recipients, sent, delivered (sent − bounces), failed, skipped, unique and total opens, open rate, automatic opens, unique and total clicks, click rate (CTR), click-to-open, unsubscribes and rate, bounces (hard, soft) and rate, complaints and rate; `totals` |
+| `email_campaign_performance` | EmailCampaign | `from_date`, `to_date` (started; default the last 90 days) or `campaign` | per campaign: recipients, sent, delivered (sent − bounces), failed, skipped, unique and total opens, open rate, automatic opens, unique and total clicks, click rate (CTR), click-to-open, unsubscribes and rate, bounces (hard, soft) and rate, complaints and rate; `totals` |
 | `ab_test_results` | EmailCampaign | `campaign` | per variant: subject, recipients, delivered, unique opens and rate, unique clicks and rate, total clicks, winner; `meta`: metric, winner, test share and times |
 | `link_clicks` | EmailCampaign | `campaign` or `journey` | per link: URL, unique and total clicks |
 | `journey_funnel` | MarketingJourney | `journey` | per step: type, label, reached (and % of enrolled), emails sent, unique opens and clicks; `totals`: enrolled, active, completed, goal reached, exited, conversion |

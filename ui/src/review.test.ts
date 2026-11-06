@@ -57,6 +57,7 @@ describe("what would stop a send, and what is worth a look", () => {
     );
     expect(["public_url", "account", "render-B", "subject"].map((id) => level(f, id))).toEqual(["block", "block", "block", "block"]);
     expect(level(f, "postal")).toBe("warn");
+    expect(["public_url", "postal"].map((id) => f.find((x) => x.id === id)?.href)).toEqual(["/open/CommsSettings", "/open/CampaignSettings"]);
     expect(f.find((x) => x.id === "render-B")?.title).toBe("Version B cannot be built");
     expect(canSend(f)).toBe(false);
   });

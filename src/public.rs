@@ -688,13 +688,38 @@ impl DocHook for FormHook {
         if errors.is_empty() { Ok(()) } else { Err(Error::Validation(errors)) }
     }
 
-    async fn after_save(&self, hc: &mut HookCtx<'_>, doc: &Doc, old: Option<&Doc>) -> Result<()> {
-        if old.is_none() {
-            let endpoint = format!("{}/subscribe/{}", util::site_path(hc.tx, hc.ctx.tenant).await?, util::doc_id(doc)?);
-            hc.kernel.set_values_tx(&sys(hc.ctx), hc.tx, "SubscriptionForm", util::doc_id(doc)?, values([("endpoint", json!(endpoint))])).await?;
+    async fn after_save(&self, hc: &mut HookCtx<'_>, doc: &Doc, _old: Option<&Doc>) -> Result<()> {
+        let form = util::doc_id(doc)?;
+        let endpoint = format!("{}/subscribe/{form}", util::site_path(hc.tx, hc.ctx.tenant).await?);
+        let embed = match util::site_base(hc.tx, hc.ctx.tenant).await? {
+            Some(base) => embed_html(&format!("{base}/subscribe/{form}"), s(doc, "allowed_attributes").unwrap_or_default()),
+            None => "Set the Public URL in the Mail app's Communication Settings, then save this form again: a website posts to that address.".into(),
+        };
+        if s(doc, "endpoint") != Some(endpoint.as_str()) || s(doc, "embed_html") != Some(embed.as_str()) {
+            hc.kernel
+                .set_values_tx(&sys(hc.ctx), hc.tx, "SubscriptionForm", form, values([("endpoint", json!(endpoint)), ("embed_html", json!(embed))]))
+                .await?;
         }
         Ok(())
     }
+}
+
+/// The form a website pastes into a page: the address, the first name and the allowed
+/// attributes, and the hidden field only bots fill in.
+fn embed_html(action: &str, allowed: &str) -> String {
+    let mut html = format!("<form method=\"post\" action=\"{}\">\n", html_escape(action));
+    html.push_str("  <label>Email <input type=\"email\" name=\"email\" required></label>\n");
+    html.push_str("  <label>First name <input type=\"text\" name=\"first_name\"></label>\n");
+    for key in allowed.split(',').map(str::trim).filter(|k| !k.is_empty()) {
+        let label = key.replace('_', " ");
+        let label = format!("{}{}", label[..1].to_uppercase(), &label[1..]);
+        html.push_str(&format!("  <label>{label} <input type=\"text\" name=\"{key}\"></label>\n"));
+    }
+    html.push_str(
+        "  <input type=\"text\" name=\"website\" tabindex=\"-1\" autocomplete=\"off\" aria-hidden=\"true\" style=\"position:absolute;left:-10000px\">\n",
+    );
+    html.push_str("  <button type=\"submit\">Subscribe</button>\n</form>\n");
+    html
 }
 
 pub struct SettingsHook;
@@ -734,6 +759,21 @@ impl DocHook for RecipientGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_form_to_paste_posts_its_fields_and_catches_bots() {
+        let html = embed_html("https://acme.example/api/site/acme/campaigns/subscribe/f1?a=1&b=2", "city, postal_code");
+        assert!(html.starts_with("<form method=\"post\" action=\"https://acme.example/api/site/acme/campaigns/subscribe/f1?a=1&amp;b=2\">"), "{html}");
+        for field in [
+            "name=\"email\" required",
+            "name=\"first_name\"",
+            "<label>City <input type=\"text\" name=\"city\">",
+            "<label>Postal code <input type=\"text\" name=\"postal_code\">",
+        ] {
+            assert!(html.contains(field), "{field}: {html}");
+        }
+        assert!(html.contains("name=\"website\" tabindex=\"-1\""), "the honeypot: {html}");
+    }
 
     #[test]
     fn automatic_opens() {
