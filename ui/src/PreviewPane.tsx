@@ -5,7 +5,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, docPath, errorMessage } from "@ferrum/client";
+import { api, docPath, errorMessage, t } from "@ferrum/client";
 import { Alert, Icon, Spinner } from "@ferrum/kit";
 import { LinkInput } from "@ferrum/records";
 import type { Campaign } from "./campaign";
@@ -46,12 +46,12 @@ export function useSender(account: string | null | undefined) {
 
 export function DeviceSwitch({ value, onChange }: { value: Device; onChange: (d: Device) => void }) {
   return (
-    <div className="segmented" role="group" aria-label="Show it on">
+    <div className="segmented" role="group" aria-label={t("Show it on")}>
       <button type="button" aria-pressed={value === "desktop"} onClick={() => onChange("desktop")}>
-        Computer
+        {t("Computer")}
       </button>
       <button type="button" aria-pressed={value === "phone"} onClick={() => onChange("phone")}>
-        Phone
+        {t("Phone")}
       </button>
     </div>
   );
@@ -61,7 +61,7 @@ export function DeviceSwitch({ value, onChange }: { value: Device; onChange: (d:
 export function InboxLine({ sender, subject, preheader, device }: { sender?: { name: string; address: string } | null; subject: string; preheader: string; device: Device }) {
   const cut = clip(subject, SUBJECT_ROOM[device]);
   return (
-    <div className={`cm-inbox cm-inbox-${device}`} role="group" aria-label="How it looks in an inbox">
+    <div className={`cm-inbox cm-inbox-${device}`} role="group" aria-label={t("How it looks in an inbox")}>
       <span className="cm-inbox-mark" aria-hidden="true">
         {(sender?.name ?? "Your sender").slice(0, 1).toUpperCase()}
       </span>
@@ -70,10 +70,10 @@ export function InboxLine({ sender, subject, preheader, device }: { sender?: { n
           <strong>{sender?.name ?? "Your sender"}</strong>
           {sender && <span className="faint"> {sender.address}</span>}
         </div>
-        <div className="cm-inbox-subject">{cut || <span className="faint">No subject yet</span>}</div>
+        <div className="cm-inbox-subject">{cut || <span className="faint">{t("No subject yet")}</span>}</div>
         <div className="cm-inbox-preheader muted">{clip(preheader, PREHEADER_ROOM[device]) || " "}</div>
       </div>
-      {cut !== subject.trim() && <span className="cm-inbox-cut faint">Cut off</span>}
+      {cut !== subject.trim() && <span className="cm-inbox-cut faint">{t("Cut off")}</span>}
     </div>
   );
 }
@@ -93,7 +93,7 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
       <div className="cm-preview-bar">
         <DeviceSwitch value={device} onChange={setDevice} />
         {versions.length > 1 && (
-          <div className="segmented" role="group" aria-label="Version">
+          <div className="segmented" role="group" aria-label={t("Version")}>
             {versions.map((v) => (
               <button key={v} type="button" aria-pressed={variant === v} onClick={() => setChosen(v)}>
                 {v}
@@ -102,16 +102,16 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
           </div>
         )}
         <span className="spacer" />
-        {preview.isFetching && <Spinner small label="Updating the preview" />}
+        {preview.isFetching && <Spinner small label={t("Updating the preview")} />}
       </div>
       <div className="cm-preview-as">
-        <span className="faint">As</span>
+        <span className="faint">{t("As")}</span>
         <div className="cm-preview-contact">
           <LinkInput
             to="MarketingContact"
             id="preview-contact"
-            label="Preview as this contact"
-            placeholder="A sample contact (Jane Doe)"
+            label={t("Preview as this contact")}
+            placeholder={t("A sample contact (Jane Doe)")}
             value={contact?.id ?? null}
             title={contact?.title}
             onChange={(id, title) => setContact(id ? { id, title } : null)}
@@ -120,12 +120,12 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
       </div>
       {dirty && editable && (
         <p className="cm-preview-note faint" role="status">
-          <Icon name="refresh" size={12} /> Showing your last save. It updates in a moment.
+          <Icon name="refresh" size={12} /> {t("Showing your last save. It updates in a moment.")}
         </p>
       )}
       {preview.error && !p ? (
         <Alert tone="error">
-          <strong>The preview could not be built.</strong> {errorMessage(preview.error)}
+          <strong>{t("The preview could not be built.")}</strong> {errorMessage(preview.error)}
         </Alert>
       ) : (
         <>
@@ -135,11 +135,11 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
               <iframe title={`Preview of the email on a ${device === "phone" ? "phone" : "computer"}`} sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={previewDoc(p.html)} />
             ) : (
               <div className="cm-device-wait">
-                <Spinner label="Building the preview" />
+                <Spinner label={t("Building the preview")} />
               </div>
             )}
           </div>
-          <p className="cm-preview-note faint">Links open in a new tab. The unsubscribe link works only in a real email.</p>
+          <p className="cm-preview-note faint">{t("Links open in a new tab. The unsubscribe link works only in a real email.")}</p>
         </>
       )}
     </div>

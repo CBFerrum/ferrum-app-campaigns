@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { api, errorMessage, saveBlob, shell } from "@ferrum/client";
+import { api, errorMessage, saveBlob, shell, t as tr } from "@ferrum/client";
 import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { list } from "./data";
@@ -63,7 +63,7 @@ const KINDS: { id: Target["kind"]; label: string }[] = [
 
 function Rail({ step, reached }: { step: Step; reached: Step }) {
   return (
-    <ol className="cm-rail" aria-label="Steps">
+    <ol className="cm-rail" aria-label={tr("Steps")}>
       {STEPS.map((s, i) => (
         <li key={s} aria-current={i === step ? "step" : undefined} data-done={i < reached || undefined}>
           <span className="cm-rail-n">{i < reached ? <Icon name="check" size={12} /> : i + 1}</span>
@@ -136,16 +136,16 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
         }}
       >
         <Icon name="upload" size={22} />
-        <strong>Choose a CSV file</strong>
-        <span className="muted">or drop it here. The first row names the columns. Up to {count(MAX_ROWS)} rows.</span>
+        <strong>{tr("Choose a CSV file")}</strong>
+        <span className="muted">{tr("or drop it here. The first row names the columns. Up to")} {count(MAX_ROWS)} rows.</span>
         <input className="sr-only" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={(e) => void file(e.target.files?.[0])} />
       </label>
-      <Field label="Or paste them" htmlFor="cm-paste" hint="One address on each line, or rows copied from a spreadsheet with a header row.">
+      <Field label={tr("Or paste them")} htmlFor="cm-paste" hint={tr("One address on each line, or rows copied from a spreadsheet with a header row.")}>
         <textarea id="cm-paste" className="textarea mono" rows={5} value={pasted} onChange={(e) => setPasted(e.target.value)} />
       </Field>
       <div>
         <Button disabled={!pasted.trim()} onClick={() => read(/\n/.test(pasted.trim()) || /[,;\t]/.test(pasted) ? pasted : `email\n${pasted.trim()}`, "pasted rows")}>
-          Use what I pasted
+          {tr("Use what I pasted")}
         </Button>
       </div>
       {problem && <Alert tone="error">{problem}</Alert>}
@@ -162,7 +162,7 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
     <div className="stack" style={{ gap: 16 }}>
       <p className="muted">
         {table.headerless ? "The file has no row of column names. " : ""}
-        {noun(table.rows.length, "row")} found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.
+        {noun(table.rows.length, "row")} {tr("found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.")}
       </p>
       <ul className="cm-cols">
         {table.headers.map((h, i) => {
@@ -207,7 +207,7 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
       )}
       {problems.length === 0 && (
         <div>
-          <h3 className="cm-sample-title">The first rows, as contacts</h3>
+          <h3 className="cm-sample-title">{tr("The first rows, as contacts")}</h3>
           <ul className="cm-sample">
             {read.map((r) => (
               <li key={r.line}>
@@ -219,7 +219,7 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
                       {Object.keys(r.contact.attributes).length > 0 && <span className="faint">{Object.entries(r.contact.attributes).map(([k, v]) => `${k}: ${v}`).join(" · ")}</span>}
                     </>
                   ) : (
-                    <span className="muted">Line {r.line}: {r.problem}</span>
+                    <span className="muted">{tr("Line {line}: {problem}", { line: r.line, problem: r.problem ?? "" })}</span>
                   )}
                 </div>
               </li>
@@ -237,29 +237,29 @@ function ConsentStep({ consent, onChange }: { consent: Consent; onChange: (c: Co
   return (
     <div className="stack" style={{ gap: 16 }}>
       <fieldset className="cm-choices">
-        <legend className="field-label">These people…</legend>
+        <legend className="field-label">{tr("These people…")}</legend>
         <label className="cm-choice" data-on={agreed || undefined}>
           <input type="radio" name="cm-consent" checked={agreed} onChange={() => onChange({ mode: "agreed", basis: consent.mode === "agreed" ? consent.basis : "" })} />
           <span>
-            <strong>agreed to get marketing email from us</strong>
-            <span className="muted">They become subscribed. You say how you know, and it is kept on each of them.</span>
+            <strong>{tr("agreed to get marketing email from us")}</strong>
+            <span className="muted">{tr("They become subscribed. You say how you know, and it is kept on each of them.")}</span>
           </span>
         </label>
         <label className="cm-choice" data-on={!agreed || undefined}>
           <input type="radio" name="cm-consent" checked={!agreed} onChange={() => onChange({ mode: "optout" })} />
           <span>
-            <strong>asked not to be emailed (an opt-out list)</strong>
-            <span className="muted">They are added as unsubscribed and put on the suppression list. People you already have on it are unsubscribed too.</span>
+            <strong>{tr("asked not to be emailed (an opt-out list)")}</strong>
+            <span className="muted">{tr("They are added as unsubscribed and put on the suppression list. People you already have on it are unsubscribed too.")}</span>
           </span>
         </label>
       </fieldset>
       {agreed && (
-        <Field label="How do you know they agreed?" htmlFor="cm-basis" required hint={`For example: signed up at the spring fair, 3 May 2026. It is saved on each contact as the attribute ${BASIS_KEY}, next to who added them and when.`}>
+        <Field label={tr("How do you know they agreed?")} htmlFor="cm-basis" required hint={`For example: signed up at the spring fair, 3 May 2026. It is saved on each contact as the attribute ${BASIS_KEY}, next to who added them and when.`}>
           <textarea id="cm-basis" className="textarea" rows={3} value={consent.basis} maxLength={500} onChange={(e) => onChange({ mode: "agreed", basis: e.target.value })} />
         </Field>
       )}
       <Alert tone="info">
-        People who have not agreed yet cannot be imported as subscribers, and nobody can be made subscribed after they unsubscribed. Send them to a signup form: they confirm for themselves, and that is the record that counts.
+        {tr("People who have not agreed yet cannot be imported as subscribers, and nobody can be made subscribed after they unsubscribed. Send them to a signup form: they confirm for themselves, and that is the record that counts.")}
       </Alert>
     </div>
   );
@@ -275,12 +275,12 @@ const FATE: Record<Checked["fate"], { label: string; tone: "green" | "neutral" |
 
 /** Step 4: who is new, and who is not, against the contacts and the suppression list as they are now. */
 function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Checked[] | null; error: unknown; progress: { done: number; total: number }; consent: Consent; onRetry: () => void }) {
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="The addresses could not be checked" />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} title={tr("The addresses could not be checked")} />;
   if (!checked) {
     return (
       <div className="stack" style={{ gap: 10 }} role="status">
-        <p>Checking {count(progress.total)} addresses against your contacts and the suppression list…</p>
-        <Bar value={rate(progress.done, progress.total)} label="Checked so far" />
+        <p>{tr("Checking")} {count(progress.total)} {tr("addresses against your contacts and the suppression list…")}</p>
+        <Bar value={rate(progress.done, progress.total)} label={tr("Checked so far")} />
       </div>
     );
   }
@@ -291,25 +291,25 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
     <div className="stack" style={{ gap: 16 }}>
       <dl className="cm-tiles">
         <div className="cm-tile">
-          <dt>Will be added</dt>
+          <dt>{tr("Will be added")}</dt>
           <dd className="cm-tile-value">{count(adds)}</dd>
           <dd className="cm-tile-note faint">{consent.mode === "agreed" ? "As subscribed contacts." : "As unsubscribed, on the suppression list."}</dd>
         </div>
         <div className="cm-tile">
-          <dt>Already contacts</dt>
+          <dt>{tr("Already contacts")}</dt>
           <dd className="cm-tile-value">{count(t.known)}</dd>
           <dd className="cm-tile-note faint">{consent.mode === "optout" ? "Unsubscribed if they are not already." : "Left exactly as they are."}</dd>
         </div>
         <div className="cm-tile">
-          <dt>Blocked</dt>
+          <dt>{tr("Blocked")}</dt>
           <dd className="cm-tile-value">{count(t.suppressed)}</dd>
-          <dd className="cm-tile-note faint">On the suppression list, so not added.</dd>
+          <dd className="cm-tile-note faint">{tr("On the suppression list, so not added.")}</dd>
         </div>
         <div className="cm-tile">
-          <dt>Left out</dt>
+          <dt>{tr("Left out")}</dt>
           <dd className="cm-tile-value">{count(t.invalid + t.duplicate)}</dd>
           <dd className="cm-tile-note faint">
-            {count(t.invalid)} not valid, {count(t.duplicate)} repeated in the file.
+            {count(t.invalid)} {tr("not valid,")} {count(t.duplicate)} {tr("repeated in the file.")}
           </dd>
         </div>
       </dl>
@@ -320,16 +320,16 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">Line</th>
-                  <th scope="col">Address</th>
-                  <th scope="col">What happens</th>
+                  <th scope="col">{tr("Line")}</th>
+                  <th scope="col">{tr("Address")}</th>
+                  <th scope="col">{tr("What happens")}</th>
                 </tr>
               </thead>
               <tbody>
                 {attention.map((c) => (
                   <tr key={c.line}>
                     <td className="num">{c.line}</td>
-                    <td>{c.email || <span className="faint">(none)</span>}</td>
+                    <td>{c.email || <span className="faint">{tr("(none)")}</span>}</td>
                     <td>
                       <Badge tone={FATE[c.fate].tone}>{FATE[c.fate].label}</Badge> <span className="muted">{c.why}</span>
                     </td>
@@ -340,7 +340,7 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
           </div>
         </div>
       )}
-      {adds === 0 && !(consent.mode === "optout" && t.known > 0) && <Alert tone="warning">Nobody would be added. Go back to change the columns or the file.</Alert>}
+      {adds === 0 && !(consent.mode === "optout" && t.known > 0) && <Alert tone="warning">{tr("Nobody would be added. Go back to change the columns or the file.")}</Alert>}
     </div>
   );
 }
@@ -466,8 +466,8 @@ export function Import() {
   if (!meta.data) return <PageLoading />;
   if (!can(meta.data.permissions, "import") || !can(meta.data.permissions, "create")) {
     return (
-      <EmptyState title="You cannot import contacts" icon="upload">
-        Ask a Marketing Manager for the Marketing User role.
+      <EmptyState title={tr("You cannot import contacts")} icon="upload">
+        {tr("Ask a Marketing Manager for the Marketing User role.")}
       </EmptyState>
     );
   }
@@ -475,11 +475,11 @@ export function Import() {
   const next = (s: Step, ok: boolean) => (
     <div className="row cm-wizard-foot">
       {s > 0 && s < 4 && (
-        <Button onClick={() => go((s - 1) as Step)}>Back</Button>
+        <Button onClick={() => go((s - 1) as Step)}>{tr("Back")}</Button>
       )}
       {s < 3 && (
         <Button variant="primary" disabled={!ok} onClick={() => go((s + 1) as Step)}>
-          Continue
+          {tr("Continue")}
         </Button>
       )}
     </div>
@@ -489,9 +489,9 @@ export function Import() {
     <div className="cm-page">
       <header className="cm-head">
         <div>
-          <h1 className="sr-only">Import contacts</h1>
+          <h1 className="sr-only">{tr("Import contacts")}</h1>
           <Nav />
-          <p className="page-sub">Bring people in from a file, with a record of why you may email them.</p>
+          <p className="page-sub">{tr("Bring people in from a file, with a record of why you may email them.")}</p>
         </div>
       </header>
       <div className="cm-wizard">
@@ -499,13 +499,13 @@ export function Import() {
         <section className="card card-pad cm-wizard-body" aria-label={STEPS[step]}>
           {step === 0 && (
             <>
-              <h2 className="cm-wizard-title">Choose the file</h2>
+              <h2 className="cm-wizard-title">{tr("Choose the file")}</h2>
               {table ? (
                 <div className="stack" style={{ gap: 14 }}>
                   <p>
                     <strong>{name}</strong>: {noun(table.rows.length, "row")}, {noun(table.headers.length, "column")}.{" "}
                     <button type="button" className="link-btn" onClick={() => (setTable(null), setMapping([]), setChecked(null))}>
-                      Choose another
+                      {tr("Choose another")}
                     </button>
                   </p>
                   <Sample table={table} />
@@ -525,24 +525,24 @@ export function Import() {
           )}
           {step === 1 && table && (
             <>
-              <h2 className="cm-wizard-title">Which column is which?</h2>
+              <h2 className="cm-wizard-title">{tr("Which column is which?")}</h2>
               <Columns table={table} mapping={mapping} onChange={(m) => (setMapping(m), setChecked(null))} />
               {next(1, problems.length === 0)}
             </>
           )}
           {step === 2 && (
             <>
-              <h2 className="cm-wizard-title">What did they agree to?</h2>
+              <h2 className="cm-wizard-title">{tr("What did they agree to?")}</h2>
               <ConsentStep consent={consent} onChange={setConsent} />
               {next(2, basisOk)}
             </>
           )}
           {step === 3 && (
             <>
-              <h2 className="cm-wizard-title">Check before importing</h2>
+              <h2 className="cm-wizard-title">{tr("Check before importing")}</h2>
               <CheckStep checked={checked} error={checkError} progress={looked} consent={consent} onRetry={() => void check()} />
               <div className="row cm-wizard-foot">
-                <Button onClick={() => go(2)}>Back</Button>
+                <Button onClick={() => go(2)}>{tr("Back")}</Button>
                 <Button
                   variant="primary"
                   disabled={!checked || (tally(checked).new === 0 && !(consent.mode === "optout" && tally(checked).known > 0))}
@@ -557,7 +557,7 @@ export function Import() {
             <>
               <h2 className="cm-wizard-title">{outcome.finished ? (outcome.stopped ? "Stopped" : outcome.error ? "Stopped by a problem" : "Done") : "Importing…"}</h2>
               <div className="stack" style={{ gap: 14 }}>
-                <Bar value={rate(outcome.done, outcome.total)} label="Imported so far" />
+                <Bar value={rate(outcome.done, outcome.total)} label={tr("Imported so far")} />
                 <p role="status" aria-live="polite">
                   {count(outcome.done)} of {count(outcome.total)} handled: <strong>{count(outcome.added)}</strong> added
                   {outcome.unsubscribed > 0 && (
@@ -572,16 +572,16 @@ export function Import() {
                   )}
                   . {outcome.total > 0 && !outcome.finished ? `${percent(rate(outcome.done, outcome.total))}` : ""}
                 </p>
-                {outcome.error && <Alert tone="error">{outcome.error} What was added before the problem stays added; running the file again skips those people.</Alert>}
-                {outcome.stopped && <Alert tone="warning">You stopped it. What was added stays added; running the file again skips those people.</Alert>}
+                {outcome.error && <Alert tone="error">{tr("{error} What was added before the problem stays added; running the file again skips those people.", { error: outcome.error })}</Alert>}
+                {outcome.stopped && <Alert tone="warning">{tr("You stopped it. What was added stays added; running the file again skips those people.")}</Alert>}
                 {outcome.refused.length > 0 && (
                   <div className="table-wrap">
                     <table className="table">
                       <thead>
                         <tr>
-                          <th scope="col">Line</th>
-                          <th scope="col">Address</th>
-                          <th scope="col">Why</th>
+                          <th scope="col">{tr("Line")}</th>
+                          <th scope="col">{tr("Address")}</th>
+                          <th scope="col">{tr("Why")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -599,15 +599,15 @@ export function Import() {
                 <div className="row">
                   {!outcome.finished ? (
                     <Button variant="danger" onClick={() => (stop.current = true)}>
-                      Stop
+                      {tr("Stop")}
                     </Button>
                   ) : (
                     <>
                       <Link className="btn btn-primary btn-md" to="/e/MarketingContact?f.source=Import">
-                        See the contacts
+                        {tr("See the contacts")}
                       </Link>
                       <Button icon="download" onClick={notImported}>
-                        Download what was not imported
+                        {tr("Download what was not imported")}
                       </Button>
                       <Button
                         onClick={() => {
@@ -619,7 +619,7 @@ export function Import() {
                           go(0);
                         }}
                       >
-                        Import another file
+                        {tr("Import another file")}
                       </Button>
                     </>
                   )}

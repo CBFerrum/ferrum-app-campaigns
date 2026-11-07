@@ -14,6 +14,7 @@ import { clock, count, noun, percent, rate } from "./format";
 import { LineChart } from "./LineChart";
 import { abBars, abStanding, hasAny, host, linkShares, shape, tiles, variantRates } from "./results";
 import { Bar, Section } from "./ui";
+import { t as tr } from "@ferrum/client";
 
 /** Variants keep their colour: A is always the first, whatever the filter. */
 const VARIANT_COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-2)", "var(--chart-5)"];
@@ -49,14 +50,14 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
   const colour = (variant: string) => VARIANT_COLORS[Math.max(0, letters.indexOf(variant))] ?? VARIANT_COLORS[0];
 
   return (
-    <Section title="A/B test" id="cm-ab-results" aside={doc.winner_variant ? <Badge tone="green">Version {doc.winner_variant} won</Badge> : <Badge tone="blue">Deciding</Badge>}>
+    <Section title={tr("A/B test")} id="cm-ab-results" aside={doc.winner_variant ? <Badge tone="green">{tr("Version {winner_variant} won", { winner_variant: doc.winner_variant })}</Badge> : <Badge tone="blue">{tr("Deciding")}</Badge>}>
       <p className="muted">
-        {abStanding(doc)} The winner is the version with the most {metric.toLowerCase()} for the emails that arrived, {doc.test_percent ?? 20}% of the audience got the versions first.
+        {abStanding(doc)} {tr("The winner is the version with the most")} {metric.toLowerCase()} {tr("for the emails that arrived,")} {doc.test_percent ?? 20}{tr("% of the audience got the versions first.")}
       </p>
       {ab.error ? (
         <ErrorState error={ab.error} onRetry={() => void ab.refetch()} />
       ) : !ab.data ? (
-        <PageLoading label="Loading the test" />
+        <PageLoading label={tr("Loading the test")} />
       ) : (
         <ul className="cm-hbars" aria-label={`${metric} rate of each version`}>
           {bars.map((b) => (
@@ -67,7 +68,7 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
               <div className="cm-hbar-main">
                 <div className="cm-hbar-label">
                   <span className="cm-hbar-subject">{b.subject || `Version ${b.variant}`}</span>
-                  {b.winner && <Badge tone="green">Winner</Badge>}
+                  {b.winner && <Badge tone="green">{tr("Winner")}</Badge>}
                 </div>
                 <div className="cm-hbar-track" aria-hidden="true">
                   <span style={{ width: `${top > 0 ? ((b.rate ?? 0) / top) * 100 : 0}%`, background: colour(b.variant) }} />
@@ -117,10 +118,10 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
 
   const row = perf.data?.rows[0];
   if (perf.error) return <ErrorState error={perf.error} onRetry={() => void perf.refetch()} />;
-  if (!perf.data) return <PageLoading label="Loading the results" />;
+  if (!perf.data) return <PageLoading label={tr("Loading the results")} />;
   if (!row) {
     return (
-      <EmptyState title="No results yet" icon="chart">
+      <EmptyState title={tr("No results yet")} icon="chart">
         <p className="muted">{doc.status === "Draft" ? "Results appear once the campaign has been sent." : "They appear as soon as it starts sending, within a minute of its time."}</p>
       </EmptyState>
     );
@@ -139,7 +140,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
     <div className="cm-stack">
       {doc.last_error && (
         <Alert tone="error">
-          <strong>Sending ran into a problem.</strong> {doc.last_error}
+          <strong>{tr("Sending ran into a problem.")}</strong> {doc.last_error}
         </Alert>
       )}
       <div className="cm-results-bar">
@@ -148,24 +149,24 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
           {sending && ", and again every minute"}
         </span>
         <Button size="sm" icon="refresh" loading={perf.isFetching} onClick={refresh}>
-          Refresh
+          {tr("Refresh")}
         </Button>
-        {doc.status === "Cancelled" && <Badge tone="red">Stopped before everyone was sent to</Badge>}
+        {doc.status === "Cancelled" && <Badge tone="red">{tr("Stopped before everyone was sent to")}</Badge>}
       </div>
 
       <Tiles items={tiles(row)} />
 
       <Section
-        title="What happened, and when"
+        title={tr("What happened, and when")}
         id="cm-timeline"
         aside={
           <div className="row">
-            <div className="segmented" role="group" aria-label="Group by">
+            <div className="segmented" role="group" aria-label={tr("Group by")}>
               <button type="button" aria-pressed={data?.interval === "hour"} onClick={() => setInterval("hour")}>
-                Hour by hour
+                {tr("Hour by hour")}
               </button>
               <button type="button" aria-pressed={data?.interval === "day"} onClick={() => setInterval("day")}>
-                Day by day
+                {tr("Day by day")}
               </button>
             </div>
           </div>
@@ -174,7 +175,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
         {tl.error && !data ? (
           <ErrorState error={tl.error} onRetry={() => void tl.refetch()} />
         ) : !data ? (
-          <PageLoading label="Loading the timeline" />
+          <PageLoading label={tr("Loading the timeline")} />
         ) : (
           <div className="cm-charts">
             <LineChart
@@ -187,18 +188,18 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
               stale={stale}
             />
             <div className="row cm-chart-mode">
-              <span className="field-label">Opens, clicks and the rest as</span>
-              <div className="segmented" role="group" aria-label="Show">
+              <span className="field-label">{tr("Opens, clicks and the rest as")}</span>
+              <div className="segmented" role="group" aria-label={tr("Show")}>
                 <button type="button" aria-pressed={!running} onClick={() => setRunning(false)}>
-                  Each {per}
+                  {tr("Each {per}", { per })}
                 </button>
                 <button type="button" aria-pressed={running} onClick={() => setRunning(true)}>
-                  Running total
+                  {tr("Running total")}
                 </button>
               </div>
             </div>
             <LineChart
-              title="Opened and clicked"
+              title={tr("Opened and clicked")}
               at={data.at}
               interval={data.interval}
               series={[
@@ -210,7 +211,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
             />
             {rare ? (
               <LineChart
-                title="Unsubscribes, bounces and spam complaints"
+                title={tr("Unsubscribes, bounces and spam complaints")}
                 at={data.at}
                 interval={data.interval}
                 series={[
@@ -222,10 +223,10 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
                 stale={stale}
               />
             ) : (
-              <p className="muted cm-chart-calm">No unsubscribes, bounces or spam complaints so far.</p>
+              <p className="muted cm-chart-calm">{tr("No unsubscribes, bounces or spam complaints so far.")}</p>
             )}
             <p className="faint cm-note">
-              Times are in the workspace's time zone ({data.timezone}). An open is counted when the email's picture loads, once for each person. Opens by privacy proxies and scanners are not counted, so opens run lower than in tools that count them.
+              {tr("Times are in the workspace's time zone ({timezone}). An open is counted when the email's picture loads, once for each person. Opens by privacy proxies and scanners are not counted, so opens run lower than in tools that count them.", { timezone: data.timezone })}
             </p>
           </div>
         )}
@@ -233,28 +234,28 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
 
       {doc.ab_test && <AbCard doc={doc} interval={interval} />}
 
-      <Section title="Links" id="cm-links" aside={doc.track_clicks ? <span className="faint">Share of the {noun(row.delivered, "email")} that arrived</span> : undefined}>
+      <Section title={tr("Links")} id="cm-links" aside={doc.track_clicks ? <span className="faint">{tr("Share of the")} {noun(row.delivered, "email")} {tr("that arrived")}</span> : undefined}>
         {!doc.track_clicks ? (
-          <p className="muted">Clicks were not counted for this campaign.</p>
+          <p className="muted">{tr("Clicks were not counted for this campaign.")}</p>
         ) : links.error ? (
           <ErrorState error={links.error} onRetry={() => void links.refetch()} />
         ) : !links.data ? (
-          <PageLoading label="Loading links" />
+          <PageLoading label={tr("Loading links")} />
         ) : shares.length === 0 ? (
-          <p className="muted">The content has no links that can be counted.</p>
+          <p className="muted">{tr("The content has no links that can be counted.")}</p>
         ) : (
           <>
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
-                    <th scope="col">Link</th>
+                    <th scope="col">{tr("Link")}</th>
                     <th scope="col" className="num">
-                      People who clicked
+                      {tr("People who clicked")}
                     </th>
-                    <th scope="col">Share</th>
+                    <th scope="col">{tr("Share")}</th>
                     <th scope="col" className="num">
-                      Clicks in all
+                      {tr("Clicks in all")}
                     </th>
                   </tr>
                 </thead>
@@ -279,7 +280,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
             {shares.length > shownLinks.length && (
               <div className="cm-more">
                 <Button size="sm" onClick={() => setAll(true)}>
-                  Show all {shares.length} links
+                  {tr("Show all {length} links", { length: shares.length })}
                 </Button>
               </div>
             )}
@@ -287,9 +288,9 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
         )}
       </Section>
 
-      <Section title="Who it went to" id="cm-people">
+      <Section title={tr("Who it went to")} id="cm-people">
         <p className="muted">
-          {noun(row.recipients, "person", "people")} {row.recipients === 1 ? "was" : "were"} chosen when it started:{" "}
+          {noun(row.recipients, "person", "people")} {row.recipients === 1 ? "was" : "were"} {tr("chosen when it started:")}{" "}
           {[
             `${count(row.sent)} sent`,
             row.failed > 0 ? `${count(row.failed)} failed` : "",
@@ -301,25 +302,25 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
         </p>
         <div className="row">
           <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}`}>
-            See every recipient
+            {tr("See every recipient")}
           </Link>
           {row.failed > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.status=Failed`}>
-              Failed ({count(row.failed)})
+              {tr("Failed (")}{count(row.failed)})
             </Link>
           )}
           {row.skipped > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.status=Skipped`}>
-              Skipped ({count(row.skipped)})
+              {tr("Skipped (")}{count(row.skipped)})
             </Link>
           )}
           {row.bounces > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.bounce_type=Hard`}>
-              Hard bounces ({count(row.hard_bounces)})
+              {tr("Hard bounces (")}{count(row.hard_bounces)})
             </Link>
           )}
         </div>
-        {rate(row.sent, row.recipients) !== null && rate(row.sent, row.recipients)! < 100 && sending && <Bar value={rate(row.sent, row.recipients)} label="Sent so far" />}
+        {rate(row.sent, row.recipients) !== null && rate(row.sent, row.recipients)! < 100 && sending && <Bar value={rate(row.sent, row.recipients)} label={tr("Sent so far")} />}
       </Section>
     </div>
   );

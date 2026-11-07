@@ -6,7 +6,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { api, docPath, errorMessage } from "@ferrum/client";
+import { api, docPath, errorMessage, t as tr } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast } from "@ferrum/kit";
 import { type Campaign, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
@@ -35,24 +35,24 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
   const reasons = leftOut(check);
   return (
     <Section
-      title="Who will get it"
+      title={tr("Who will get it")}
       id="cm-reach"
       aside={
         <Button size="sm" icon="refresh" loading={fetching} onClick={onAgain}>
-          Count again
+          {tr("Count again")}
         </Button>
       }
     >
       <div className="cm-reach">
         <p className="cm-reach-figure" aria-live="polite">
-          <span className="cm-reach-number">{count(check.mailable)}</span> <span className="cm-reach-unit">{check.mailable === 1 ? "person" : "people"} will get this email</span>
+          <span className="cm-reach-number">{count(check.mailable)}</span> <span className="cm-reach-unit">{check.mailable === 1 ? "person" : "people"} {tr("will get this email")}</span>
         </p>
         <Split check={check} />
         {reasons.length > 0 ? (
-          <ul className="cm-reasons" aria-label="Left out">
+          <ul className="cm-reasons" aria-label={tr("Left out")}>
             <li>
               <i data-part="mail" aria-hidden="true" />
-              <span>Will be emailed</span>
+              <span>{tr("Will be emailed")}</span>
               <strong>{count(check.mailable)}</strong>
             </li>
             {reasons.map((r) => (
@@ -66,7 +66,7 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
             ))}
           </ul>
         ) : (
-          <p className="muted">Everyone in the audience can be emailed.</p>
+          <p className="muted">{tr("Everyone in the audience can be emailed.")}</p>
         )}
       </div>
       {check.rows.length > 0 && (
@@ -74,12 +74,12 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
           <table className="table">
             <thead>
               <tr>
-                <th scope="col">Part of the audience</th>
+                <th scope="col">{tr("Part of the audience")}</th>
                 <th scope="col" className="num">
-                  People
+                  {tr("People")}
                 </th>
                 <th scope="col" className="num">
-                  Can be emailed
+                  {tr("Can be emailed")}
                 </th>
               </tr>
             </thead>
@@ -99,16 +99,16 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
       )}
       {check.new_contacts > 0 && (
         <p className="cm-note muted">
-          {noun(check.new_contacts, "person", "people")} in your email groups {check.new_contacts === 1 ? "is" : "are"} not marketing contacts yet. Starting the campaign adds them as subscribed.
+          {noun(check.new_contacts, "person", "people")} {tr("in your email groups")} {check.new_contacts === 1 ? "is" : "are"} {tr("not marketing contacts yet. Starting the campaign adds them as subscribed.")}
         </p>
       )}
       {check.split && (
         <p className="cm-note muted">
-          A/B test: {people(check.split.test)} get the {check.split.variants} versions first, {people(check.split.rest)} get the winner later.
+          {tr("A/B test:")} {people(check.split.test)} {tr("get the {variants} versions first,", { variants: check.split.variants })} {people(check.split.rest)} {tr("get the winner later.")}
         </p>
       )}
       <p className="cm-note faint">
-        Counted {clock(check.checked_at)}, the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.
+        {tr("Counted")} {clock(check.checked_at)}{tr(", the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.")}
       </p>
     </Section>
   );
@@ -120,7 +120,7 @@ function Findings({ items, go }: { items: Finding[]; go: (t: Tab) => void }) {
   const sorted = [...items].sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level));
   const stops = items.filter((i) => i.level === "block").length;
   return (
-    <Section title="Before it goes out" id="cm-findings" aside={stops > 0 ? <Badge tone="red">{noun(stops, "thing")} to fix</Badge> : <Badge tone="green">Ready</Badge>}>
+    <Section title={tr("Before it goes out")} id="cm-findings" aside={stops > 0 ? <Badge tone="red">{noun(stops, "thing")} {tr("to fix")}</Badge> : <Badge tone="green">{tr("Ready")}</Badge>}>
       <ul className="cm-findings">
         {sorted.map((f) => (
           <li key={f.id} data-level={f.level}>
@@ -138,7 +138,7 @@ function Findings({ items, go }: { items: Finding[]; go: (t: Tab) => void }) {
             )}
             {f.href && (
               <a className="btn btn-default btn-sm" href={f.href}>
-                Fix
+                {tr("Fix")}
               </a>
             )}
           </li>
@@ -156,7 +156,7 @@ function Links({ check, doc }: { check: AudienceCheck; doc: Campaign }) {
   return (
     <details className="cm-links">
       <summary>
-        {tracked} of {noun(found.length, "link")} counted when clicked
+        {tracked} of {noun(found.length, "link")} {tr("counted when clicked")}
       </summary>
       <ul>
         {found.map((l) => (
@@ -197,8 +197,8 @@ export function ReviewTab({
 
   if (doc.status === "Sending" || doc.status === "Sent" || doc.status === "Cancelled") {
     return (
-      <Alert tone="info" action={<Button onClick={() => go("results")}>See the results</Button>}>
-        {doc.status === "Cancelled" ? "This campaign was cancelled." : "This campaign has been sent."} Who it reached is on the results tab.
+      <Alert tone="info" action={<Button onClick={() => go("results")}>{tr("See the results")}</Button>}>
+        {doc.status === "Cancelled" ? "This campaign was cancelled." : "This campaign has been sent."} {tr("Who it reached is on the results tab.")}
       </Alert>
     );
   }
@@ -230,11 +230,11 @@ export function ReviewTab({
               <strong>{saved.subject}</strong>
               <br />
               <span className="muted">
-                {at ? `Goes out from ${moment(at)}.` : "Starts within a minute."} It leaves at up to {noun(fresh.rate.per_hour, "email")} an hour.
+                {at ? `Goes out from ${moment(at)}.` : "Starts within a minute."} {tr("It leaves at up to")} {noun(fresh.rate.per_hour, "email")} {tr("an hour.")}
               </span>
             </p>
             <p className="muted">
-              Once it is scheduled the content and the audience are fixed. You can stop it while it is sending, but emails that have gone out cannot be taken back.
+              {tr("Once it is scheduled the content and the audience are fixed. You can stop it while it is sending, but emails that have gone out cannot be taken back.")}
             </p>
           </div>
         ),
@@ -262,52 +262,52 @@ export function ReviewTab({
           action={
             canCancel ? (
               <Button variant="danger" onClick={onCancel}>
-                Cancel the send
+                {tr("Cancel the send")}
               </Button>
             ) : undefined
           }
         >
-          <strong>{doc.schedule_at && new Date(doc.schedule_at) > new Date() ? `Scheduled for ${moment(doc.schedule_at)}.` : "Scheduled: it starts within a minute."}</strong> The content and the audience are fixed now. Who is mailed is decided when it starts: people who join the segments by then are added, and anyone who unsubscribes is left out.
+          <strong>{doc.schedule_at && new Date(doc.schedule_at) > new Date() ? `Scheduled for ${moment(doc.schedule_at)}.` : "Scheduled: it starts within a minute."}</strong> {tr("The content and the audience are fixed now. Who is mailed is decided when it starts: people who join the segments by then are added, and anyone who unsubscribes is left out.")}
         </Alert>
       )}
       {q.error && !check ? (
-        <ErrorState error={q.error} onRetry={() => void q.refetch()} title="The audience could not be counted" />
+        <ErrorState error={q.error} onRetry={() => void q.refetch()} title={tr("The audience could not be counted")} />
       ) : !check ? (
-        <PageLoading label="Counting who will get it" />
+        <PageLoading label={tr("Counting who will get it")} />
       ) : (
         <>
           <Reach check={check} fetching={q.isFetching} onAgain={() => void q.refetch()} />
           <Findings items={items} go={go} />
           <Links check={check} doc={doc} />
           {!scheduled && (
-            <Section title="Send" id="cm-send">
+            <Section title={tr("Send")} id="cm-send">
               {!editable ? (
-                <p className="muted">You cannot change this campaign.</p>
+                <p className="muted">{tr("You cannot change this campaign.")}</p>
               ) : !canSubmit ? (
                 <div className="stack" style={{ gap: 10 }}>
                   <p>
-                    <strong>A Marketing Manager sends campaigns.</strong> Your draft is ready to hand over: send them the link, and test it yourself first.
+                    <strong>{tr("A Marketing Manager sends campaigns.")}</strong> {tr("Your draft is ready to hand over: send them the link, and test it yourself first.")}
                   </p>
                   <div className="row">
-                    <Button icon="copy" onClick={() => void navigator.clipboard?.writeText(window.location.href).then(() => toast("Link copied"), () => toast("Copy the address from the bar", "info"))}>
-                      Copy the link
+                    <Button icon="copy" onClick={() => void navigator.clipboard?.writeText(window.location.href).then(() => toast(tr("Link copied")), () => toast(tr("Copy the address from the bar"), "info"))}>
+                      {tr("Copy the link")}
                     </Button>
                     <Button icon="mail" onClick={onTest}>
-                      Send a test
+                      {tr("Send a test")}
                     </Button>
                   </div>
                 </div>
               ) : (
                 <div className="stack" style={{ gap: 14 }}>
                   <fieldset className="cm-when">
-                    <legend className="field-label">When</legend>
+                    <legend className="field-label">{tr("When")}</legend>
                     <label className="check-field">
                       <input type="radio" name="cm-when" checked={!later} onChange={() => (setLater(false), draft.set("schedule_at", null))} />
-                      As soon as I confirm
+                      {tr("As soon as I confirm")}
                     </label>
                     <label className="check-field">
                       <input type="radio" name="cm-when" checked={later} onChange={() => setLater(true)} />
-                      At a set time
+                      {tr("At a set time")}
                     </label>
                     {later && (
                       <div className="cm-when-at">
@@ -322,16 +322,16 @@ export function ReviewTab({
                         <span className="faint">{zoneName()}</span>
                       </div>
                     )}
-                    {later && !future && <p className="field-hint">Pick a time to come. A time that has passed starts it right away.</p>}
+                    {later && !future && <p className="field-hint">{tr("Pick a time to come. A time that has passed starts it right away.")}</p>}
                   </fieldset>
                   {problem && <Alert tone="error">{problem}</Alert>}
-                  {!canSend(items) && <p className="field-error">Fix what is marked above first.</p>}
+                  {!canSend(items) && <p className="field-error">{tr("Fix what is marked above first.")}</p>}
                   <div className="row">
                     <Button variant="primary" loading={busy} disabled={!canSend(items) || (later && !doc.schedule_at)} onClick={() => void send()}>
                       {later && future ? `Schedule for ${people(check.mailable)}` : `Send to ${people(check.mailable)}`}
                     </Button>
                     <Button icon="mail" onClick={onTest}>
-                      Send a test first
+                      {tr("Send a test first")}
                     </Button>
                   </div>
                 </div>

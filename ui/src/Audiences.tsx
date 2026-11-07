@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, ApiError, relativeTime } from "@ferrum/client";
+import { api, ApiError, relativeTime, t as tr } from "@ferrum/client";
 import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { countOf, keys, list } from "./data";
@@ -55,7 +55,7 @@ function Standing() {
       ]
     : [];
   if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
-  if (!q.data) return <PageLoading label="Counting contacts" />;
+  if (!q.data) return <PageLoading label={tr("Counting contacts")} />;
   return (
     <dl className="cm-tiles">
       {items.map((t) => (
@@ -73,8 +73,8 @@ function Standing() {
 
 function Growth() {
   const q = useQuery({ queryKey: ["campaigns", "growth"], queryFn: () => api.get<{ rows: GrowthRow[] }>("/api/reports/audience_growth") });
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} title="The audience's growth could not be loaded" />;
-  if (!q.data) return <PageLoading label="Loading the last 30 days" />;
+  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} title={tr("The audience's growth could not be loaded")} />;
+  if (!q.data) return <PageLoading label={tr("Loading the last 30 days")} />;
   const rows = q.data.rows;
   const joined = rows.map((r) => r.subscribed);
   const left = rows.map((r) => r.unsubscribed + r.bounced + r.complained);
@@ -83,15 +83,15 @@ function Growth() {
   return (
     <section className="card cm-section" aria-labelledby="cm-growth">
       <header className="card-head">
-        <h2 id="cm-growth">The last 30 days</h2>
+        <h2 id="cm-growth">{tr("The last 30 days")}</h2>
         <div className="cm-aside faint">
-          {noun(sum(joined), "person", "people")} joined, {noun(sum(left), "person", "people")} left: {net >= 0 ? "+" : "−"}
+          {noun(sum(joined), "person", "people")} {tr("joined,")} {noun(sum(left), "person", "people")} left: {net >= 0 ? "+" : "−"}
           {count(Math.abs(net))}
         </div>
       </header>
       <div className="card-body">
         <LineChart
-          title="People joining and leaving each day"
+          title={tr("People joining and leaving each day")}
           at={rows.map((r) => r.day)}
           interval="day"
           series={[
@@ -122,24 +122,24 @@ function NewSegmentDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       open
       onClose={onClose}
-      title="New segment"
+      title={tr("New segment")}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{tr("Cancel")}</Button>
           <Button type="submit" form="cm-new-segment" variant="primary" loading={make.isPending} disabled={!name.trim()}>
-            Create and add rules
+            {tr("Create and add rules")}
           </Button>
         </>
       }
     >
       <form id="cm-new-segment" className="stack" onSubmit={submit}>
-        <Field label="Name" htmlFor="cm-seg-name" required error={taken} hint="For example: Pune customers who opened something this month.">
+        <Field label={tr("Name")} htmlFor="cm-seg-name" required error={taken} hint={tr("For example: Pune customers who opened something this month.")}>
           <input id="cm-seg-name" className="input" value={name} maxLength={140} data-autofocus onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="What it is for" htmlFor="cm-seg-desc" hint="Optional.">
+        <Field label={tr("What it is for")} htmlFor="cm-seg-desc" hint={tr("Optional.")}>
           <textarea id="cm-seg-desc" className="textarea" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <p className="faint">You choose who is in it on the next page, and see the count as you go.</p>
+        <p className="faint">{tr("You choose who is in it on the next page, and see the count as you go.")}</p>
       </form>
     </Dialog>
   );
@@ -166,20 +166,20 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
     <div className="cm-page">
       <header className="cm-head">
         <div>
-          <h1 className="sr-only">Audiences</h1>
+          <h1 className="sr-only">{tr("Audiences")}</h1>
           <Nav />
-          <p className="page-sub">Who can be emailed, and the groups you pick from them.</p>
+          <p className="page-sub">{tr("Who can be emailed, and the groups you pick from them.")}</p>
         </div>
         <div className="cm-tools">
           {canImport && (
             <Link className="btn btn-default btn-md" to="/import">
               <Icon name="upload" />
-              Import contacts
+              {tr("Import contacts")}
             </Link>
           )}
           {canCreate && (
             <Button variant="primary" icon="plus" onClick={() => setMaking(true)}>
-              New segment
+              {tr("New segment")}
             </Button>
           )}
         </div>
@@ -190,28 +190,28 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
 
       <section className="card cm-section" aria-labelledby="cm-segments">
         <header className="card-head">
-          <h2 id="cm-segments">Segments</h2>
+          <h2 id="cm-segments">{tr("Segments")}</h2>
           {(segments.data?.rows.length ?? 0) > 8 && (
             <div className="cm-aside">
-              <input className="input cm-search" type="search" placeholder="Find a segment…" aria-label="Find a segment" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              <input className="input cm-search" type="search" placeholder={tr("Find a segment…")} aria-label={tr("Find a segment")} value={filter} onChange={(e) => setFilter(e.target.value)} />
             </div>
           )}
         </header>
         {segments.error ? (
           <ErrorState error={segments.error} onRetry={() => void segments.refetch()} />
         ) : !segments.data ? (
-          <PageLoading label="Loading segments" />
+          <PageLoading label={tr("Loading segments")} />
         ) : segments.data.rows.length === 0 ? (
-          <EmptyState title="No segments yet" icon="list">
-            <p className="muted">A segment is a saved question about your contacts, such as “opened something in the last 30 days” or “lives in Pune”. It is worked out afresh whenever a campaign uses it.</p>
+          <EmptyState title={tr("No segments yet")} icon="list">
+            <p className="muted">{tr("A segment is a saved question about your contacts, such as “opened something in the last 30 days” or “lives in Pune”. It is worked out afresh whenever a campaign uses it.")}</p>
             {canCreate && (
               <Button variant="primary" icon="plus" onClick={() => setMaking(true)}>
-                New segment
+                {tr("New segment")}
               </Button>
             )}
           </EmptyState>
         ) : rows.length === 0 ? (
-          <EmptyState title="No segment matches" icon="search" />
+          <EmptyState title={tr("No segment matches")} icon="search" />
         ) : (
           <ul className="cm-segs">
             {rows.map((r) => (
@@ -222,11 +222,11 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
                 </div>
                 <dl className="cm-seg-stats">
                   <div>
-                    <dt>People</dt>
+                    <dt>{tr("People")}</dt>
                     <dd>{r.counted_at ? count(r.contact_count) : "–"}</dd>
                   </div>
                   <div>
-                    <dt>Can be emailed</dt>
+                    <dt>{tr("Can be emailed")}</dt>
                     <dd>{r.counted_at ? count(r.mailable_count) : "–"}</dd>
                   </div>
                 </dl>
