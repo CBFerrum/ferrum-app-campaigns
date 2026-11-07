@@ -3,7 +3,7 @@
 // so it is saved first; a version of an A/B test, or a real contact's details, can be chosen.
 
 import { type FormEvent, useState } from "react";
-import { errorMessage, t } from "@ferrum/client";
+import { errorMessage, t, isolate } from "@ferrum/client";
 import { Alert, Button, Dialog, Field, toast } from "@ferrum/kit";
 import { LinkInput, useMe } from "@ferrum/records";
 import { sendTest } from "./data";
@@ -33,7 +33,7 @@ export function SendTest({ draft, onClose }: { draft: Draft; onClose: () => void
       const saved = await draft.save();
       if (!saved) throw new Error("The campaign could not be saved yet. Fix what is marked first.");
       const r = await sendTest(saved.id, { emails: valid, variant, contact: contact?.id });
-      toast(`Test sent to ${noun(r.sent, "address", "addresses")}`);
+      toast(t("Test sent to {value}", { value: noun(r.sent, "address", "addresses") }));
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -50,13 +50,13 @@ export function SendTest({ draft, onClose }: { draft: Draft; onClose: () => void
         <>
           <Button onClick={onClose}>{t("Cancel")}</Button>
           <Button type="submit" form="cm-test-form" variant="primary" icon="mail" loading={busy} disabled={!valid.length || !!problem}>
-            {t("Send")} {valid.length > 1 ? `to ${valid.length} addresses` : "test"}
+            {t("Send")} {valid.length > 1 ? t("to {length} addresses", { length: valid.length }) : t("test")}
           </Button>
         </>
       }
     >
       <form id="cm-test-form" className="stack" onSubmit={submit}>
-        {error && <Alert tone="error">{error}</Alert>}
+        {error && <Alert tone="error">{isolate(error)}</Alert>}
         <Field label={t("Send it to")} htmlFor="cm-test-to" required error={problem ?? undefined} hint={t("Up to 10 addresses, separated by commas or lines.")}>
           <textarea id="cm-test-to" className="textarea" rows={2} value={to} data-autofocus onChange={(e) => setTo(e.target.value)} />
         </Field>
@@ -64,7 +64,7 @@ export function SendTest({ draft, onClose }: { draft: Draft; onClose: () => void
           <Field label={t("Which version")} htmlFor="cm-test-version">
             <select id="cm-test-version" className="select" value={variant ?? ""} onChange={(e) => setVariant(e.target.value)}>
               {versions.map((v) => (
-                <option key={v} value={v}>{`Version ${v}`}</option>
+                <option key={v} value={v}>{t("Version {v}", { v })}</option>
               ))}
             </select>
           </Field>

@@ -2,6 +2,7 @@
 // from its counters, and the changes a draft sends back. Pure, so it is tested without a browser.
 
 import { moment, rate } from "./format";
+import { t } from "@ferrum/client";
 
 export type Status = "Draft" | "Scheduled" | "Sending" | "Sent" | "Cancelled";
 export type Tone = "neutral" | "blue" | "green" | "amber" | "red";
@@ -74,12 +75,12 @@ export const LIST_FIELDS =
   "campaign_name,status,subject,number,docstatus,version,schedule_at,started_at,finished_at,created_at,updated_at,total_recipients,sent_count,bounce_count,unique_opens,unique_clicks,unsubscribe_count,ab_test";
 
 export const STATUS_FILTERS: { id: "" | Status; label: string }[] = [
-  { id: "", label: "All" },
-  { id: "Draft", label: "Drafts" },
-  { id: "Scheduled", label: "Scheduled" },
-  { id: "Sending", label: "Sending" },
-  { id: "Sent", label: "Sent" },
-  { id: "Cancelled", label: "Cancelled" },
+  { id: "", get label() { return t("All"); } },
+  { id: "Draft", get label() { return t("Drafts"); } },
+  { id: "Scheduled", get label() { return t("Scheduled"); } },
+  { id: "Sending", get label() { return t("Sending"); } },
+  { id: "Sent", get label() { return t("Sent"); } },
+  { id: "Cancelled", get label() { return t("Cancelled"); } },
 ];
 
 export const isStatus = (v: string | null | undefined): v is Status => ["Draft", "Scheduled", "Sending", "Sent", "Cancelled"].includes(v ?? "");

@@ -4,6 +4,7 @@
 // the person types. Pure, so it is tested without a browser.
 
 import { validKey } from "./snippets";
+import { t } from "@ferrum/client";
 
 export type RuleType = "Contact Field" | "Attribute" | "Email Group" | "Engagement";
 
@@ -24,10 +25,10 @@ export interface Rule {
 }
 
 export const RULE_TYPES: { id: RuleType; label: string }[] = [
-  { id: "Contact Field", label: "A detail of the contact" },
-  { id: "Attribute", label: "An attribute" },
-  { id: "Email Group", label: "An email group" },
-  { id: "Engagement", label: "What they did with our emails" },
+  { id: "Contact Field", get label() { return t("A detail of the contact"); } },
+  { id: "Attribute", get label() { return t("An attribute"); } },
+  { id: "Email Group", get label() { return t("An email group"); } },
+  { id: "Engagement", get label() { return t("What they did with our emails"); } },
 ];
 
 export const CONTACT_FIELDS = ["Email", "First Name", "Last Name", "Full Name", "Source", "Consent Status", "Linked Entity", "Created On"];
@@ -222,19 +223,19 @@ export type ContactTone = "green" | "amber" | "red" | "neutral";
 
 /** What to say about a contact in a segment's sample: will they be emailed, and if not, why. */
 export function standing(consent: string, mailable: boolean): { label: string; tone: ContactTone } {
-  if (mailable) return { label: "Will be emailed", tone: "green" };
+  if (mailable) return { label: t("Will be emailed"), tone: "green" };
   switch (consent) {
     case "Subscribed":
-      return { label: "On the suppression list", tone: "amber" };
+      return { label: t("On the suppression list"), tone: "amber" };
     case "Pending":
-      return { label: "Not confirmed yet", tone: "amber" };
+      return { label: t("Not confirmed yet"), tone: "amber" };
     case "Unsubscribed":
-      return { label: "Unsubscribed", tone: "neutral" };
+      return { label: t("Unsubscribed"), tone: "neutral" };
     case "Bounced":
-      return { label: "Address bounced", tone: "red" };
+      return { label: t("Address bounced"), tone: "red" };
     case "Complained":
-      return { label: "Marked an email as spam", tone: "red" };
+      return { label: t("Marked an email as spam"), tone: "red" };
     default:
-      return { label: consent || "Unknown", tone: "neutral" };
+      return { label: consent || t("Unknown"), tone: "neutral" };
   }
 }

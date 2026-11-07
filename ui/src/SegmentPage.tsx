@@ -6,7 +6,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api, ApiError, docPath, errorMessage, shell, t as tr } from "@ferrum/client";
+import { api, ApiError, docPath, errorMessage, shell, t as tr, isolate } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, EmptyState, ErrorState, Field, Icon, Menu, MenuItem, PageLoading, Spinner, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import { countSegment, keys, list, type Segment } from "./data";
@@ -45,39 +45,39 @@ function RuleRow({ rule, index, disabled, error, onChange, onRemove }: { rule: R
   return (
     <li className="cm-rule">
       <div className="cm-rule-fields">
-        <select className="select cm-rule-type" aria-label={`Rule ${n}: what to look at`} value={rule.rule_type} disabled={disabled} onChange={(e) => onChange({ rule_type: e.target.value as Rule["rule_type"] })}>
+        <select className="select cm-rule-type" aria-label={tr("Rule {n}: what to look at", { n })} value={rule.rule_type} disabled={disabled} onChange={(e) => onChange({ rule_type: e.target.value as Rule["rule_type"] })}>
           {RULE_TYPES.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.label}
+              {isolate(t.label)}
             </option>
           ))}
         </select>
         {rule.rule_type === "Contact Field" && (
-          <select className="select" aria-label={`Rule ${n}: which detail`} aria-invalid={bad("field")} value={rule.field ?? ""} disabled={disabled} onChange={(e) => onChange({ field: e.target.value })}>
+          <select className="select" aria-label={tr("Rule {n}: which detail", { n })} aria-invalid={bad("field")} value={rule.field ?? ""} disabled={disabled} onChange={(e) => onChange({ field: e.target.value })}>
             {CONTACT_FIELDS.map((f) => (
-              <option key={f}>{f}</option>
+              <option key={f}>{isolate(f)}</option>
             ))}
           </select>
         )}
         {rule.rule_type === "Attribute" && (
-          <input className="input" aria-label={`Rule ${n}: attribute name`} aria-invalid={bad("attribute")} placeholder={tr("Attribute, e.g. city")} value={rule.attribute ?? ""} maxLength={40} disabled={disabled} onChange={(e) => onChange({ attribute: e.target.value })} />
+          <input className="input" aria-label={tr("Rule {n}: attribute name", { n })} aria-invalid={bad("attribute")} placeholder={tr("Attribute, e.g. city")} value={rule.attribute ?? ""} maxLength={40} disabled={disabled} onChange={(e) => onChange({ attribute: e.target.value })} />
         )}
         {rule.rule_type === "Engagement" && (
-          <select className="select" aria-label={`Rule ${n}: did or did not`} value={rule.operator} disabled={disabled} onChange={(e) => onChange({ operator: e.target.value })}>
+          <select className="select" aria-label={tr("Rule {n}: did or did not", { n })} value={rule.operator} disabled={disabled} onChange={(e) => onChange({ operator: e.target.value })}>
             <option value="Did">{tr("Did")}</option>
             <option value="Did Not">{tr("Did not")}</option>
           </select>
         )}
         {rule.rule_type === "Engagement" ? (
-          <select className="select" aria-label={`Rule ${n}: what they did`} aria-invalid={bad("activity")} value={rule.activity ?? ""} disabled={disabled} onChange={(e) => onChange({ activity: e.target.value })}>
+          <select className="select" aria-label={tr("Rule {n}: what they did", { n })} aria-invalid={bad("activity")} value={rule.activity ?? ""} disabled={disabled} onChange={(e) => onChange({ activity: e.target.value })}>
             {ACTIVITIES.map((a) => (
               <option key={a} value={a}>
-                {a === "Was Sent" ? "Get an email" : a === "Opened" ? "Open an email" : "Click a link"}
+                {a === "Was Sent" ? tr("Get an email") : a === "Opened" ? tr("Open an email") : tr("Click a link")}
               </option>
             ))}
           </select>
         ) : (
-          <select className="select" aria-label={`Rule ${n}: how to compare`} aria-invalid={bad("operator")} value={rule.operator} disabled={disabled} onChange={(e) => onChange({ operator: e.target.value })}>
+          <select className="select" aria-label={tr("Rule {n}: how to compare", { n })} aria-invalid={bad("operator")} value={rule.operator} disabled={disabled} onChange={(e) => onChange({ operator: e.target.value })}>
             {operatorsFor(rule).map((o) => (
               <option key={o} value={o}>
                 {OPERATOR_WORDS[o] ?? o}
@@ -87,17 +87,17 @@ function RuleRow({ rule, index, disabled, error, onChange, onRemove }: { rule: R
         )}
         {rule.rule_type === "Email Group" && (
           <div className="cm-rule-pick">
-            <LinkInput to="EmailGroup" label={`Rule ${n}: email group`} placeholder={tr("Choose an email group…")} value={rule.email_group ?? null} title={rule._titles?.email_group} disabled={disabled} invalid={!!bad("email_group")} onChange={(id, title) => onChange({ email_group: id, _titles: title ? { email_group: title } : undefined })} />
+            <LinkInput to="EmailGroup" label={tr("Rule {n}: email group", { n })} placeholder={tr("Choose an email group…")} value={rule.email_group ?? null} title={rule._titles?.email_group} disabled={disabled} invalid={!!bad("email_group")} onChange={(id, title) => onChange({ email_group: id, _titles: title ? { email_group: title } : undefined })} />
           </div>
         )}
         {rule.rule_type === "Engagement" && (
           <>
             <div className="cm-rule-pick">
-              <LinkInput to="EmailCampaign" label={`Rule ${n}: which campaign`} placeholder={tr("Any campaign or journey")} value={rule.campaign ?? null} title={rule._titles?.campaign} disabled={disabled} onChange={(id, title) => onChange({ campaign: id, _titles: title ? { ...rule._titles, campaign: title } : undefined })} />
+              <LinkInput to="EmailCampaign" label={tr("Rule {n}: which campaign", { n })} placeholder={tr("Any campaign or journey")} value={rule.campaign ?? null} title={rule._titles?.campaign} disabled={disabled} onChange={(id, title) => onChange({ campaign: id, _titles: title ? { ...rule._titles, campaign: title } : undefined })} />
             </div>
             <span className="cm-rule-in">{tr("in the last")}</span>
-            <input className="input num cm-rule-days" type="number" min={1} max={3650} aria-label={`Rule ${n}: number of days`} aria-invalid={bad("within_days")} value={rule.within_days ?? ""} disabled={disabled} onChange={(e) => onChange({ within_days: e.target.value === "" ? null : Number(e.target.value) })} />
-            <span className="cm-rule-in">days</span>
+            <input className="input num cm-rule-days" type="number" min={1} max={3650} aria-label={tr("Rule {n}: number of days", { n })} aria-invalid={bad("within_days")} value={rule.within_days ?? ""} disabled={disabled} onChange={(e) => onChange({ within_days: e.target.value === "" ? null : Number(e.target.value) })} />
+            <span className="cm-rule-in">{tr("days")}</span>
           </>
         )}
         {kind !== "none" && rule.rule_type !== "Email Group" && rule.rule_type !== "Engagement" && (
@@ -106,23 +106,23 @@ function RuleRow({ rule, index, disabled, error, onChange, onRemove }: { rule: R
               className="input cm-rule-value"
               type={INPUT_TYPE[kind]}
               inputMode={kind === "number" || kind === "days" ? "decimal" : undefined}
-              aria-label={`Rule ${n}: ${kind === "days" ? "number of days" : "value"}`}
+              aria-label={tr("Rule {n}: {value}", { n, value: kind === "days" ? "number of days" : "value" })}
               aria-invalid={bad("value")}
-              placeholder={kind === "date" ? "YYYY-MM-DD" : kind === "days" ? "Days" : "Value"}
+              placeholder={kind === "date" ? tr("YYYY-MM-DD") : kind === "days" ? tr("Days") : tr("Value")}
               value={rule.value ?? ""}
               disabled={disabled}
               onChange={(e) => onChange({ value: e.target.value })}
             />
-            {kind === "days" && <span className="cm-rule-in">days</span>}
+            {kind === "days" && <span className="cm-rule-in">{tr("days")}</span>}
           </>
         )}
       </div>
       {!disabled && (
-        <button type="button" className="icon-btn" aria-label={`Remove rule ${n}`} onClick={onRemove}>
+        <button type="button" className="icon-btn" aria-label={tr("Remove rule {n}", { n })} onClick={onRemove}>
           <Icon name="trash" size={15} />
         </button>
       )}
-      {error && <p className="field-error cm-rule-error">{error.message}</p>}
+      {error && <p className="field-error cm-rule-error">{isolate(error.message)}</p>}
     </li>
   );
 }
@@ -152,18 +152,18 @@ function UsedBy({ id }: { id: string }) {
     <div className="stack" style={{ gap: 10 }}>
       {live > 0 && (
         <Alert tone="warning">
-          {noun(live, "scheduled or running thing is", "scheduled or running things are")} {tr("using this segment. A segment is worked out when it is used, so a change here changes who they reach.")}
+          {isolate(noun(live, "scheduled or running thing is", "scheduled or running things are"))} {tr("using this segment. A segment is worked out when it is used, so a change here changes who they reach.")}
         </Alert>
       )}
       <ul className="cm-used">
         {campaigns.map((c) => (
           <li key={c.id}>
-            <Link to={`/c/${c.id}`}>{c.campaign_name}</Link> <Badge>{c.status}</Badge>
+            <Link to={`/c/${c.id}`}>{isolate(c.campaign_name)}</Link> <Badge>{isolate(c.status)}</Badge>
           </li>
         ))}
         {journeys.map((j) => (
           <li key={j.id}>
-            <Link to={`/e/MarketingJourney/${j.id}`}>{j.journey_name}</Link> <Badge tone="purple">{tr("Journey,")} {j.status.toLowerCase()}</Badge>
+            <Link to={`/e/MarketingJourney/${j.id}`}>{isolate(j.journey_name)}</Link> <Badge tone="purple">{tr("Journey,")} {isolate(j.status.toLowerCase())}</Badge>
           </li>
         ))}
       </ul>
@@ -251,7 +251,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
     }
   };
   const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete “${saved.segment_name}”?`, message: "Campaigns and journeys that use it will not be able to send until they name another audience.", confirmLabel: "Delete", danger: true }))) return;
+    if (!(await confirmDialog({ title: tr("Delete “{segment_name}”?", { segment_name: saved.segment_name }), message: tr("Campaigns and journeys that use it will not be able to send until they name another audience."), confirmLabel: tr("Delete"), danger: true }))) return;
     try {
       await api.del(docPath("MarketingSegment", id), { ifMatch: saved.version });
       void qc.invalidateQueries({ queryKey: keys.segments });
@@ -275,8 +275,8 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
         </div>
         <div className="cm-camp-bar">
           <div className="cm-camp-title">
-            <h1 className="page-title">{saved.segment_name}</h1>
-            <p className="page-sub">{dirty ? "Changes not saved yet" : "Saved"}</p>
+            <h1 className="page-title">{isolate(saved.segment_name)}</h1>
+            <p className="page-sub">{dirty ? tr("Changes not saved yet") : tr("Saved")}</p>
           </div>
           <div className="page-actions">
             <Link className="btn btn-default btn-md" to={`/new?segment=${id}`}>
@@ -315,7 +315,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
             ) : undefined
           }
         >
-          {failure.message}
+          {isolate(failure.message)}
         </Alert>
       )}
 
@@ -365,7 +365,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
                     {(close) =>
                       RULE_TYPES.map((t) => (
                         <MenuItem key={t.id} onSelect={() => (close(), setRules([...current.rules, blankRule(t.id)]))}>
-                          {t.label}
+                          {isolate(t.label)}
                         </MenuItem>
                       ))
                     }
@@ -374,7 +374,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
               )}
               {words.length > 0 && (
                 <p className="cm-words faint">
-                  {current.match === "All" ? "People who match all of these:" : "People who match any of these:"} {words.join(current.match === "All" ? "; and " : "; or ")}.
+                  {current.match === "All" ? tr("People who match all of these:") : tr("People who match any of these:")} {isolate(words.join(current.match === "All" ? "; and " : "; or "))}.
                 </p>
               )}
             </div>
@@ -418,7 +418,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
           <div className="card-body">
             {!sendable ? (
               <p className="muted">
-                {tr("Rule")} {problems.findIndex(Boolean) + 1} {tr("is not finished:")} {problems.find(Boolean)?.message.replace(/^./, (c) => c.toLowerCase())}{tr(". Finish it to see who matches.")}
+                {tr("Rule")} {problems.findIndex(Boolean) + 1} {tr("is not finished:")} {isolate(problems.find(Boolean)?.message.replace(/^./, (c) => c.toLowerCase()) ?? "")}{tr(". Finish it to see who matches.")}
               </p>
             ) : counted.error && !c ? (
               <ErrorState error={counted.error} onRetry={() => void counted.refetch()} title={tr("They could not be counted")} />
@@ -427,24 +427,24 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
             ) : (
               <>
                 <p className="cm-match-figure" aria-live="polite">
-                  <span className="cm-reach-number">{count(c.contact_count)}</span> <span className="cm-reach-unit">{c.contact_count === 1 ? "person matches" : "people match"}</span>
+                  <span className="cm-reach-number">{isolate(count(c.contact_count))}</span> <span className="cm-reach-unit">{c.contact_count === 1 ? tr("person matches") : tr("people match")}</span>
                 </p>
-                <p className="muted">{count(c.mailable_count)} {tr("of them can be emailed.")}{c.mailable_count < c.contact_count ? ` ${people(c.contact_count - c.mailable_count)} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.` : ""}</p>
+                <p className="muted">{isolate(count(c.mailable_count))} {tr("of them can be emailed.")}{c.mailable_count < c.contact_count ? tr(" {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: people(c.contact_count - c.mailable_count) }) : ""}</p>
                 {c.sample.length === 0 ? (
                   <EmptyState title={tr("Nobody matches")} icon="user" />
                 ) : (
                   <>
-                    <h3 className="cm-sample-title">{c.contact_count > c.sample.length ? `The first ${c.sample.length}, by address` : "Everyone"}</h3>
+                    <h3 className="cm-sample-title">{c.contact_count > c.sample.length ? tr("The first {length}, by address", { length: c.sample.length }) : tr("Everyone")}</h3>
                     <ul className="cm-sample">
                       {c.sample.map((s) => {
                         const st = standing(s.consent_status, s.mailable);
                         return (
                           <li key={s.id}>
                             <div className="cm-sample-who">
-                              <Link to={`/e/MarketingContact/${s.id}`}>{s.email}</Link>
-                              {s.full_name && <span className="muted">{s.full_name}</span>}
+                              <Link to={`/e/MarketingContact/${s.id}`}>{isolate(s.email)}</Link>
+                              {s.full_name && <span className="muted">{isolate(s.full_name)}</span>}
                             </div>
-                            <Badge tone={st.tone === "green" ? "green" : st.tone === "red" ? "red" : st.tone === "amber" ? "amber" : "neutral"}>{st.label}</Badge>
+                            <Badge tone={st.tone === "green" ? "green" : st.tone === "red" ? "red" : st.tone === "amber" ? "amber" : "neutral"}>{isolate(st.label)}</Badge>
                           </li>
                         );
                       })}
@@ -454,7 +454,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
               </>
             )}
             {saved.counted_at && (
-              <p className="faint cm-note">{tr("Saved counts, from the last time it was counted on the segment itself:")} {count(saved.contact_count)} people.</p>
+              <p className="faint cm-note">{tr("Saved counts, from the last time it was counted on the segment itself:")} {tr("{value} people.", { value: count(saved.contact_count) })}</p>
             )}
           </div>
         </aside>

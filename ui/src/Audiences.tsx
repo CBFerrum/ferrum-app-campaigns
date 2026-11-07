@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { api, ApiError, relativeTime, t as tr } from "@ferrum/client";
+import { api, ApiError, relativeTime, t as tr, isolate } from "@ferrum/client";
 import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { countOf, keys, list } from "./data";
@@ -47,11 +47,11 @@ function Standing() {
   const q = useStanding();
   const items = q.data
     ? [
-        { id: "Subscribed", label: "Subscribed", value: q.data.subscribed, to: "/e/MarketingContact?f.consent_status=Subscribed", note: "Emailed, unless they are on the suppression list." },
-        { id: "Pending", label: "Not confirmed yet", value: q.data.pending, to: "/e/MarketingContact?f.consent_status=Pending", note: "Signed up, waiting to confirm their address." },
-        { id: "Unsubscribed", label: "Unsubscribed", value: q.data.unsubscribed, to: "/e/MarketingContact?f.consent_status=Unsubscribed", note: "Opted out. Only they can opt back in." },
-        { id: "away", label: "Bounced or complained", value: q.data.away, to: "/e/MarketingContact?f.consent_status=Bounced", note: "Never emailed again." },
-        { id: "suppressed", label: "On the suppression list", value: q.data.suppressed, to: "/e/EmailSuppression", note: "Addresses that are never emailed." },
+        { id: "Subscribed", label: tr("Subscribed"), value: q.data.subscribed, to: "/e/MarketingContact?f.consent_status=Subscribed", note: "Emailed, unless they are on the suppression list." },
+        { id: "Pending", label: tr("Not confirmed yet"), value: q.data.pending, to: "/e/MarketingContact?f.consent_status=Pending", note: "Signed up, waiting to confirm their address." },
+        { id: "Unsubscribed", label: tr("Unsubscribed"), value: q.data.unsubscribed, to: "/e/MarketingContact?f.consent_status=Unsubscribed", note: "Opted out. Only they can opt back in." },
+        { id: "away", label: tr("Bounced or complained"), value: q.data.away, to: "/e/MarketingContact?f.consent_status=Bounced", note: "Never emailed again." },
+        { id: "suppressed", label: tr("On the suppression list"), value: q.data.suppressed, to: "/e/EmailSuppression", note: "Addresses that are never emailed." },
       ]
     : [];
   if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -60,11 +60,11 @@ function Standing() {
     <dl className="cm-tiles">
       {items.map((t) => (
         <div key={t.id} className="cm-tile">
-          <dt>{t.label}</dt>
+          <dt>{isolate(t.label)}</dt>
           <dd className="cm-tile-value">
-            <Link to={t.to}>{count(t.value)}</Link>
+            <Link to={t.to}>{isolate(count(t.value))}</Link>
           </dd>
-          <dd className="cm-tile-note faint">{t.note}</dd>
+          <dd className="cm-tile-note faint">{isolate(t.note)}</dd>
         </div>
       ))}
     </dl>
@@ -85,8 +85,8 @@ function Growth() {
       <header className="card-head">
         <h2 id="cm-growth">{tr("The last 30 days")}</h2>
         <div className="cm-aside faint">
-          {noun(sum(joined), "person", "people")} {tr("joined,")} {noun(sum(left), "person", "people")} left: {net >= 0 ? "+" : "−"}
-          {count(Math.abs(net))}
+          {isolate(noun(sum(joined), "person", "people"))} {tr("joined,")} {tr("{value} left:", { value: noun(sum(left), "person", "people") })} {net >= 0 ? "+" : "−"}
+          {isolate(count(Math.abs(net)))}
         </div>
       </header>
       <div className="card-body">
@@ -95,8 +95,8 @@ function Growth() {
           at={rows.map((r) => r.day)}
           interval="day"
           series={[
-            { id: "joined", label: "Joined", color: "var(--chart-1)", values: joined },
-            { id: "left", label: "Unsubscribed, bounced or complained", color: "var(--chart-5)", values: left },
+            { id: "joined", label: tr("Joined"), color: "var(--chart-1)", values: joined },
+            { id: "left", label: tr("Unsubscribed, bounced or complained"), color: "var(--chart-5)", values: left },
           ]}
           empty="No one has joined or left in the last 30 days."
         />
@@ -146,7 +146,7 @@ function NewSegmentDialog({ onClose }: { onClose: () => void }) {
 }
 
 export function Audiences({ creating = false }: { creating?: boolean }) {
-  useShellTitle("Audiences");
+  useShellTitle(tr("Audiences"));
   const qc = useQueryClient();
   const navigate = useNavigate();
   const meta = useEntityMeta("MarketingSegment").data;
@@ -217,8 +217,8 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
             {rows.map((r) => (
               <li key={r.id}>
                 <div className="cm-seg-main">
-                  <Link to={`/s/${r.id}`}>{r.segment_name}</Link>
-                  {r.description && <span className="muted cm-seg-desc">{r.description}</span>}
+                  <Link to={`/s/${r.id}`}>{isolate(r.segment_name)}</Link>
+                  {r.description && <span className="muted cm-seg-desc">{isolate(r.description)}</span>}
                 </div>
                 <dl className="cm-seg-stats">
                   <div>
@@ -230,7 +230,7 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
                     <dd>{r.counted_at ? count(r.mailable_count) : "–"}</dd>
                   </div>
                 </dl>
-                <span className="faint cm-seg-when">{r.counted_at ? `Counted ${relativeTime(r.counted_at)}` : "Not counted yet"}</span>
+                <span className="faint cm-seg-when">{r.counted_at ? tr("Counted {value}", { value: relativeTime(r.counted_at) }) : tr("Not counted yet")}</span>
               </li>
             ))}
           </ul>

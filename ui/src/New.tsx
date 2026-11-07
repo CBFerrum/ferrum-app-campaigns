@@ -5,7 +5,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { api, ApiError, errorMessage, t } from "@ferrum/client";
+import { api, ApiError, errorMessage, t, isolate } from "@ferrum/client";
 import { Alert, Button, EmptyState, ErrorState, Field, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import type { AudienceRow, Campaign } from "./campaign";
@@ -13,7 +13,7 @@ import { AudienceRows } from "./Setup";
 import { STARTER } from "./snippets";
 
 export function NewCampaign() {
-  useShellTitle("New campaign");
+  useShellTitle(t("New campaign"));
   const navigate = useNavigate();
   const [sp] = useSearchParams();
   const meta = useEntityMeta("EmailCampaign");
@@ -61,7 +61,7 @@ export function NewCampaign() {
         </div>
       </header>
       <form className="card card-pad stack" onSubmit={submit}>
-        {create.error && !Object.keys(fields).length && <Alert tone="error">{errorMessage(create.error)}</Alert>}
+        {create.error && !Object.keys(fields).length && <Alert tone="error">{isolate(errorMessage(create.error))}</Alert>}
         <Field label={t("Name")} htmlFor="new-name" required error={fields.campaign_name} hint={t("For you and your team. Recipients never see it.")}>
           <input id="new-name" className="input" value={name} maxLength={140} autoFocus onChange={(e) => setName(e.target.value)} />
         </Field>
