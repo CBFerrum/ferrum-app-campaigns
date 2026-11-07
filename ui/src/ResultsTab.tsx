@@ -10,7 +10,7 @@ import { Alert, Badge, Button, EmptyState, ErrorState, PageLoading } from "@ferr
 import { localBucket } from "./chart";
 import type { Campaign } from "./campaign";
 import { abResultsOf, linksOf, performanceOf, timelineOf } from "./data";
-import { clock, count, noun, percent, rate } from "./format";
+import { clock, count, percent, rate } from "./format";
 import { LineChart } from "./LineChart";
 import { abBars, abStanding, hasAny, host, linkShares, shape, tiles, variantRates } from "./results";
 import { Bar, Section } from "./ui";
@@ -234,7 +234,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
 
       {doc.ab_test && <AbCard doc={doc} interval={interval} />}
 
-      <Section title={tr("Links")} id="cm-links" aside={doc.track_clicks ? <span className="faint">{tr("Share of the")} {isolate(noun(row.delivered, "email"))} {tr("that arrived")}</span> : undefined}>
+      <Section title={tr("Links")} id="cm-links" aside={doc.track_clicks ? <span className="faint">{tr("Share of the")} {isolate((row.delivered === 1 ? tr("1 email") : tr("{n} emails", { n: count(row.delivered) })))} {tr("that arrived")}</span> : undefined}>
         {!doc.track_clicks ? (
           <p className="muted">{tr("Clicks were not counted for this campaign.")}</p>
         ) : links.error ? (
@@ -290,7 +290,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
 
       <Section title={tr("Who it went to")} id="cm-people">
         <p className="muted">
-          {isolate(noun(row.recipients, "person", "people"))} {row.recipients === 1 ? tr("was") : tr("were")} {tr("chosen when it started:")}{isolate(" ")}
+          {isolate((row.recipients === 1 ? tr("1 person") : tr("{n} people", { n: count(row.recipients) })))} {row.recipients === 1 ? tr("was") : tr("were")} {tr("chosen when it started:")}{isolate(" ")}
           {isolate([
             `${count(row.sent)} sent`,
             row.failed > 0 ? `${count(row.failed)} failed` : "",

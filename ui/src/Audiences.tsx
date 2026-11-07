@@ -9,7 +9,7 @@ import { api, ApiError, relativeTime, t as tr, isolate } from "@ferrum/client";
 import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { countOf, keys, list } from "./data";
-import { count, noun } from "./format";
+import { count } from "./format";
 import { LineChart } from "./LineChart";
 import { Nav } from "./Nav";
 
@@ -85,7 +85,7 @@ function Growth() {
       <header className="card-head">
         <h2 id="cm-growth">{tr("The last 30 days")}</h2>
         <div className="cm-aside faint">
-          {isolate(noun(sum(joined), "person", "people"))} {tr("joined,")} {tr("{value} left:", { value: noun(sum(left), "person", "people") })} {net >= 0 ? "+" : "−"}
+          {isolate(((sum(joined)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(joined)) })))} {tr("joined,")} {tr("{value} left:", { value: ((sum(left)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(left)) })) })} {net >= 0 ? "+" : "−"}
           {isolate(count(Math.abs(net)))}
         </div>
       </header>

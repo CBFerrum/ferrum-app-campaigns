@@ -1,1 +1,0 @@
-import{l as a,aM as e,t as s}from"./index-I6CZrz4a.js";function i(){return a.jsxs("nav",{className:"cm-tabs","aria-label":s("Campaigns"),children:[a.jsx(e,{to:"/",end:!0,children:s("Campaigns")}),a.jsx(e,{to:"/audiences",children:s("Audiences")})]})}export{i as N};

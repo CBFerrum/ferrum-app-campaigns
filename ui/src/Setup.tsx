@@ -6,7 +6,7 @@ import { type ReactNode, useRef, useState } from "react";
 import { Alert, Button, Field, Icon, Menu, MenuItem } from "@ferrum/kit";
 import { LinkInput } from "@ferrum/records";
 import type { AudienceRow, Campaign, VariantRow } from "./campaign";
-import { count, noun } from "./format";
+import { count } from "./format";
 import { DeviceSwitch, InboxLine, type Device, usePreview, useSender } from "./PreviewPane";
 import { preheaderOf } from "./preview";
 import type { AudienceCheck, CheckRow } from "./review";
@@ -76,7 +76,7 @@ export function AudienceRows({
                 </label>
                 {counted && (
                   <span className="cm-arow-count faint" title={r.exclude ? tr("People in it, who are left out") : tr("People in it, and how many of them can be emailed")}>
-                    {r.exclude ? noun(counted.contacts, "person", "people") : tr("{value} of {value2}", { value: count(counted.mailable), value2: count(counted.contacts) })}
+                    {r.exclude ? (counted.contacts === 1 ? tr("1 person") : tr("{n} people", { n: count(counted.contacts) })) : tr("{value} of {value2}", { value: count(counted.mailable), value2: count(counted.contacts) })}
                   </span>
                 )}
                 {!disabled && (
@@ -114,7 +114,7 @@ function WithMerge({ label, children, onInsert }: { label: string; children: Rea
   return (
     <div className="cm-merge">
       {children}
-      <Menu ariaLabel={`Insert a person's detail into the ${label}`} label={tr("Insert")} icon="plus" buttonClass="btn btn-default btn-md">
+      <Menu ariaLabel={tr("Insert a person's detail into the {label}", { label })} label={tr("Insert")} icon="plus" buttonClass="btn btn-default btn-md">
         {(close) =>
           MERGE_TAGS.slice(0, 3).map((t) => (
             <MenuItem

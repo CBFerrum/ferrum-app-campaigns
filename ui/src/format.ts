@@ -1,7 +1,7 @@
 // Numbers and times as people say them. Pure, so the wording is tested without a browser. Times
 // are on the workspace's clock (the kit's), named when the browser's is another.
 
-import { formatMoment, fromZonedInput, shownTimeZone, toZonedInput } from "@ferrum/client";
+import { formatMoment, fromZonedInput, shownTimeZone, toZonedInput, t } from "@ferrum/client";
 
 /** 4812 → "4,812". */
 export const count = (n: number | null | undefined): string => (n ?? 0).toLocaleString();
@@ -42,17 +42,17 @@ export function span(hours: number): string {
   if (!(hours > 0.75)) return "under an hour";
   if (hours < 36) {
     const h = Math.round(hours);
-    return `about ${h} ${h === 1 ? "hour" : "hours"}`;
+    return (h === 1 ? t("about 1 hour") : t("about {h} hours", { h }));
   }
   const d = Math.round(hours / 24);
-  return `about ${d} ${d === 1 ? "day" : "days"}`;
+  return (d === 1 ? t("about 1 day") : t("about {d} days", { d }));
 }
 
 /** Bytes as KB or MB. */
 export function size(bytes: number): string {
-  if (bytes < 1024) return `${bytes} bytes`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes < 1024) return t("{bytes} bytes", { bytes });
+  if (bytes < 1024 * 1024) return t("{n} KB", { n: Math.round(bytes / 1024) });
+  return t("{value} MB", { value: (bytes / 1024 / 1024).toFixed(1) });
 }
 
 /** A moment as a "datetime-local" box wants it, on the workspace's clock: "2026-11-07T10:30". */

@@ -10,7 +10,7 @@ import { api, docPath, errorMessage, t as tr, isolate } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast } from "@ferrum/kit";
 import { type Campaign, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
-import { clock, count, fromLocalInput, moment, noun, people, toLocalInput, zoneName } from "./format";
+import { clock, count, fromLocalInput, moment, toLocalInput, zoneName } from "./format";
 import { type AudienceCheck, canSend, changedSince, type Finding, findings, leftOut, linksIn, type Level } from "./review";
 import { checkKey, useAudienceCheck } from "./useCheck";
 import type { Draft } from "./useDraft";
@@ -99,12 +99,12 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
       )}
       {check.new_contacts > 0 && (
         <p className="cm-note muted">
-          {isolate(noun(check.new_contacts, "person", "people"))} {tr("in your email groups")} {check.new_contacts === 1 ? tr("is") : tr("are")} {tr("not marketing contacts yet. Starting the campaign adds them as subscribed.")}
+          {isolate((check.new_contacts === 1 ? tr("1 person") : tr("{n} people", { n: count(check.new_contacts) })))} {tr("in your email groups")} {check.new_contacts === 1 ? tr("is") : tr("are")} {tr("not marketing contacts yet. Starting the campaign adds them as subscribed.")}
         </p>
       )}
       {check.split && (
         <p className="cm-note muted">
-          {tr("A/B test:")} {isolate(people(check.split.test))} {tr("get the {variants} versions first,", { variants: check.split.variants })} {isolate(people(check.split.rest))} {tr("get the winner later.")}
+          {tr("A/B test:")} {isolate((check.split.test === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.test) })))} {tr("get the {variants} versions first,", { variants: check.split.variants })} {isolate((check.split.rest === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.rest) })))} {tr("get the winner later.")}
         </p>
       )}
       <p className="cm-note faint">
@@ -120,7 +120,7 @@ function Findings({ items, go }: { items: Finding[]; go: (t: Tab) => void }) {
   const sorted = [...items].sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level));
   const stops = items.filter((i) => i.level === "block").length;
   return (
-    <Section title={tr("Before it goes out")} id="cm-findings" aside={stops > 0 ? <Badge tone="red">{isolate(noun(stops, "thing"))} {tr("to fix")}</Badge> : <Badge tone="green">{tr("Ready")}</Badge>}>
+    <Section title={tr("Before it goes out")} id="cm-findings" aside={stops > 0 ? <Badge tone="red">{isolate((stops === 1 ? tr("1 thing") : tr("{n} things", { n: count(stops) })))} {tr("to fix")}</Badge> : <Badge tone="green">{tr("Ready")}</Badge>}>
       <ul className="cm-findings">
         {sorted.map((f) => (
           <li key={f.id} data-level={f.level}>
@@ -156,7 +156,7 @@ function Links({ check, doc }: { check: AudienceCheck; doc: Campaign }) {
   return (
     <details className="cm-links">
       <summary>
-        {tr("{tracked} of {value}", { tracked, value: noun(found.length, "link") })} {tr("counted when clicked")}
+        {tr("{tracked} of {value}", { tracked, value: (found.length === 1 ? tr("1 link") : tr("{n} links", { n: count(found.length) })) })} {tr("counted when clicked")}
       </summary>
       <ul>
         {found.map((l) => (
@@ -222,7 +222,7 @@ export function ReviewTab({
       const moved = changedSince(check?.mailable ?? fresh.mailable, fresh.mailable);
       const at = saved.schedule_at && new Date(saved.schedule_at) > new Date() ? saved.schedule_at : null;
       const ok = await confirmDialog({
-        title: at ? tr("Schedule for {value}?", { value: people(fresh.mailable) }) : tr("Send to {value} now?", { value: people(fresh.mailable) }),
+        title: at ? tr("Schedule for {value}?", { value: (fresh.mailable === 1 ? tr("1 person") : tr("{n} people", { n: count(fresh.mailable) })) }) : tr("Send to {value} now?", { value: (fresh.mailable === 1 ? tr("1 person") : tr("{n} people", { n: count(fresh.mailable) })) }),
         message: (
           <div className="stack" style={{ gap: 8 }}>
             {moved && <p>{isolate(moved)}</p>}
@@ -230,7 +230,7 @@ export function ReviewTab({
               <strong>{isolate(saved.subject)}</strong>
               <br />
               <span className="muted">
-                {at ? tr("Goes out from {at}.", { at: moment(at) }) : tr("Starts within a minute.")} {tr("It leaves at up to")} {isolate(noun(fresh.rate.per_hour, "email"))} {tr("an hour.")}
+                {at ? tr("Goes out from {at}.", { at: moment(at) }) : tr("Starts within a minute.")} {tr("It leaves at up to")} {isolate((fresh.rate.per_hour === 1 ? tr("1 email") : tr("{n} emails", { n: count(fresh.rate.per_hour) })))} {tr("an hour.")}
               </span>
             </p>
             <p className="muted">
@@ -328,7 +328,7 @@ export function ReviewTab({
                   {!canSend(items) && <p className="field-error">{tr("Fix what is marked above first.")}</p>}
                   <div className="row">
                     <Button variant="primary" loading={busy} disabled={!canSend(items) || (later && !doc.schedule_at)} onClick={() => void send()}>
-                      {later && future ? tr("Schedule for {value}", { value: people(check.mailable) }) : tr("Send to {value}", { value: people(check.mailable) })}
+                      {later && future ? tr("Schedule for {value}", { value: (check.mailable === 1 ? tr("1 person") : tr("{n} people", { n: count(check.mailable) })) }) : tr("Send to {value}", { value: (check.mailable === 1 ? tr("1 person") : tr("{n} people", { n: count(check.mailable) })) })}
                     </Button>
                     <Button icon="mail" onClick={onTest}>
                       {tr("Send a test first")}

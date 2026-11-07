@@ -4,6 +4,7 @@
 // from finding out one row at a time. Pure, so it is tested without a browser.
 
 import { validKey } from "./snippets";
+import { t as tr } from "@ferrum/client";
 
 export const MAX_ROWS = 20_000;
 export const MAX_BYTES = 8 * 1024 * 1024;
@@ -84,7 +85,7 @@ export function readTable(text: string): Table {
   const first = all[0] ?? [];
   // A first row with an address in it is data, not column names.
   const headerless = first.some((c) => AT.test(c) && !/\s/.test(c.trim()));
-  const headers = headerless ? Array.from({ length: width }, (_, i) => `Column ${i + 1}`) : Array.from({ length: width }, (_, i) => (first[i] ?? "").trim() || `Column ${i + 1}`);
+  const headers = headerless ? Array.from({ length: width }, (_, i) => tr("Column {value}", { value: i + 1 })) : Array.from({ length: width }, (_, i) => (first[i] ?? "").trim() || tr("Column {value}", { value: i + 1 }));
   const rows: string[][] = [];
   const lines: number[] = [];
   all.forEach((r, i) => {
@@ -156,13 +157,13 @@ export function mappingProblems(mapping: Mapping, headers: string[]): string[] {
   mapping.forEach((t, i) => {
     if (t.kind === "skip") return;
     const id = t.kind === "attribute" ? `attribute ${t.key}` : t.kind;
-    const label = headers[i] ?? `Column ${i + 1}`;
+    const label = headers[i] ?? tr("Column {value}", { value: i + 1 });
     if (t.kind === "attribute") {
-      if (!validKey(t.key)) out.push(`“${label}”: the attribute name needs lowercase letters, digits and _, starting with a letter.`);
-      else if (t.key === BASIS_KEY) out.push(`“${label}”: ${BASIS_KEY} is kept for why you may email these people.`);
+      if (!validKey(t.key)) out.push(tr("“{label}”: the attribute name needs lowercase letters, digits and _, starting with a letter.", { label }));
+      else if (t.key === BASIS_KEY) out.push(tr("“{label}”: {BASIS_KEY} is kept for why you may email these people.", { label, BASIS_KEY }));
     }
     const before = seen.get(id);
-    if (before) out.push(`“${before}” and “${label}” both go to ${t.kind === "attribute" ? `the attribute ${t.key}` : t.kind.replace("_", " ")}.`);
+    if (before) out.push((t.kind === "attribute" ? tr("“{before}” and “{label}” both go to the attribute {key}.", { before: String(before), label: String(label), key: String(t.key) }) : tr("“{before}” and “{label}” both go to {target}.", { before: String(before), label: String(label), target: t.kind.replace("_", " ") })));
     else seen.set(id, label);
   });
   return out;
@@ -211,14 +212,14 @@ export function readContacts(table: Pick<Table, "rows" | "lines">, mapping: Mapp
     if (!validAddress(email)) return { line, contact: null, problem: "Not a valid email address" };
     const named = cell("first_name") || cell("last_name") ? { first_name: cell("first_name") || undefined, last_name: cell("last_name") || undefined } : splitName(cell("full_name"));
     for (const [what, v] of [["First name", named.first_name], ["Last name", named.last_name]] as const) {
-      if (v && v.length > NAME_MAX) return { line, contact: null, problem: `${what} is longer than ${NAME_MAX} characters` };
+      if (v && v.length > NAME_MAX) return { line, contact: null, problem: tr("{what} is longer than {NAME_MAX} characters", { what, NAME_MAX }) };
     }
     const attributes: Record<string, string> = {};
     for (const [c, t] of mapping.entries()) {
       if (t.kind !== "attribute") continue;
       const v = (cells[c] ?? "").trim();
       if (!v) continue;
-      if (v.length > VALUE_MAX) return { line, contact: null, problem: `A value is longer than ${VALUE_MAX} characters (${t.key})` };
+      if (v.length > VALUE_MAX) return { line, contact: null, problem: tr("A value is longer than {VALUE_MAX} characters ({key})", { VALUE_MAX, key: t.key }) };
       attributes[t.key] = v;
     }
     return { line, contact: { email, ...(named.first_name ? { first_name: named.first_name } : {}), ...(named.last_name ? { last_name: named.last_name } : {}), attributes } };
@@ -246,7 +247,7 @@ export function classify(read: Read[], known: Set<string>, suppressed: Set<strin
     if (!r.contact) return { line: r.line, email: rawEmail(r.line), fate: "invalid", why: r.problem };
     const { email } = r.contact;
     const before = first.get(email);
-    if (before !== undefined) return { line: r.line, email, fate: "duplicate", why: `Same address as line ${before}`, contact: r.contact };
+    if (before !== undefined) return { line: r.line, email, fate: "duplicate", why: tr("Same address as line {before}", { before }), contact: r.contact };
     first.set(email, r.line);
     if (known.has(email)) return { line: r.line, email, fate: "known", why: "Already a contact", contact: r.contact };
     if (suppressed.has(email)) return { line: r.line, email, fate: "suppressed", why: "On the suppression list: not added", contact: r.contact };

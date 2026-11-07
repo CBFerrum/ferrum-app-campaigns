@@ -3,7 +3,7 @@
 // counts); this only words it. Pure, so the wording is tested without a browser.
 
 import type { Campaign, Tab } from "./campaign";
-import { noun, people, size, span } from "./format";
+import { size, span, count } from "./format";
 import { t } from "@ferrum/client";
 
 export interface CheckRow {
@@ -119,7 +119,7 @@ export function linksIn(html: string, tracked: string[], trackClicks: boolean): 
 export const CLIP_BYTES = 102 * 1024;
 const LONG_SUBJECT = 70;
 
-const label = (variant: string | null) => (variant ? `Version ${variant}` : "The email");
+const label = (variant: string | null) => (variant ? t("Version {variant}", { variant }) : t("The email"));
 
 export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "content" | "track_clicks" | "ab_test" | "variants" | "winner_after_hours" | "winner_metric">): Finding[] {
   const out: Finding[] = [];
@@ -147,7 +147,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
   }
   if (!c.subject.trim()) out.push({ id: "subject", level: "block", title: t("There is no subject"), tab: "setup" });
   else if (c.subject.trim().length > LONG_SUBJECT) {
-    out.push({ id: "subject-long", level: "warn", title: t("A long subject"), detail: `Inboxes show about ${LONG_SUBJECT} characters on a computer and fewer on a phone.`, tab: "setup" });
+    out.push({ id: "subject-long", level: "warn", title: t("A long subject"), detail: t("Inboxes show about {LONG_SUBJECT} characters on a computer and fewer on a phone.", { LONG_SUBJECT }), tab: "setup" });
   }
   if (!check.ready.postal_address) {
     out.push({
@@ -169,7 +169,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
   const html = [c.content, ...(c.ab_test ? c.variants.map((v) => v.content ?? "") : [])].join("\n");
   const noAlt = imagesWithoutAlt(html);
   if (noAlt > 0) {
-    out.push({ id: "alt", level: "warn", title: t("{noAlt} without alternative text", { noAlt: noun(noAlt, "picture") }), detail: "Add alt=\"…\" so they make sense when pictures are blocked.", tab: "content" });
+    out.push({ id: "alt", level: "warn", title: t("{noAlt} without alternative text", { noAlt: (noAlt === 1 ? t("1 picture") : t("{n} pictures", { n: count(noAlt) })) }), detail: "Add alt=\"…\" so they make sense when pictures are blocked.", tab: "content" });
   }
   const big = check.emails.filter((e) => (e.bytes ?? 0) > CLIP_BYTES);
   if (big.length) {
@@ -180,7 +180,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push({
       id: "rate",
       level: "info",
-      title: t("Goes out at up to {value} an hour: {value2}", { value: noun(check.rate.per_hour, "email"), value2: sendTime(check.mailable, check.rate.per_hour) }),
+      title: t("Goes out at up to {value} an hour: {value2}", { value: (check.rate.per_hour === 1 ? t("1 email") : t("{n} emails", { n: count(check.rate.per_hour) })), value2: sendTime(check.mailable, check.rate.per_hour) }),
       detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? "This campaign's own limit applies." : "The limit is shared with newsletters and journeys.",
     });
   }
@@ -188,8 +188,8 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push({
       id: "split",
       level: "info",
-      title: t("{value} get the {variants} versions first", { value: people(check.split.test), variants: check.split.variants }),
-      detail: `The version with the most ${(c.winner_metric ?? "Opens") === "Clicks" ? "clicks" : "opens"} goes to the other ${people(check.split.rest)} after ${noun(c.winner_after_hours ?? 4, "hour")}.`,
+      title: t("{value} get the {variants} versions first", { value: (check.split.test === 1 ? t("1 person") : t("{n} people", { n: count(check.split.test) })), variants: check.split.variants }),
+      detail: ((c.winner_metric ?? "Opens") === "Clicks" ? t("The version with the most clicks goes to the other {people} after {hours}.", { people: (check.split.rest === 1 ? t("1 person") : t("{n} people", { n: count(check.split.rest) })), hours: ((c.winner_after_hours ?? 4) === 1 ? t("1 hour") : t("{n} hours", { n: count(c.winner_after_hours ?? 4) })) }) : t("The version with the most opens goes to the other {people} after {hours}.", { people: (check.split.rest === 1 ? t("1 person") : t("{n} people", { n: count(check.split.rest) })), hours: ((c.winner_after_hours ?? 4) === 1 ? t("1 hour") : t("{n} hours", { n: count(c.winner_after_hours ?? 4) })) })),
       tab: "setup",
     });
   }
@@ -202,5 +202,5 @@ export const canSend = (f: Finding[]): boolean => !f.some((x) => x.level === "bl
 export function changedSince(before: number, now: number): string | null {
   if (before === now) return null;
   const diff = Math.abs(now - before);
-  return `${now > before ? "Up" : "Down"} ${diff.toLocaleString()} since you last looked (${before.toLocaleString()} before).`;
+  return (now > before ? t("Up {diff} since you last looked ({before} before).", { diff: diff.toLocaleString(), before: before.toLocaleString() }) : t("Down {diff} since you last looked ({before} before).", { diff: diff.toLocaleString(), before: before.toLocaleString() }));
 }

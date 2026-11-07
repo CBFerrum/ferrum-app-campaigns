@@ -10,7 +10,7 @@ import { Badge, Button, confirmDialog, EmptyState, ErrorState, Icon, Menu, MenuI
 import { can, useEntityMeta } from "@ferrum/records";
 import { type Campaign, clickRate, hasResults, isStatus, LIST_FIELDS, listFilters, openRate, progress, STATUS_FILTERS, tone, whenLine } from "./campaign";
 import { duplicateCampaign, keys, list } from "./data";
-import { count, noun, percent } from "./format";
+import { count, percent } from "./format";
 import { Nav } from "./Nav";
 import { Bar } from "./ui";
 
@@ -52,7 +52,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
         </dl>
       )}
       {sending && <Bar value={pct} label={t("{campaign_name}: {pct} sent", { campaign_name: row.campaign_name, pct: percent(pct) })} />}
-      <Menu ariaLabel={`More for ${row.campaign_name}`} icon="chevronDown" buttonClass="icon-btn">
+      <Menu ariaLabel={t("More for {campaign_name}", { campaign_name: row.campaign_name })} icon="chevronDown" buttonClass="icon-btn">
         {(close) => (
           <>
             <MenuItem
@@ -215,7 +215,7 @@ export function Home() {
           <h1 className="sr-only">{t("Campaigns")}</h1>
           <Nav />
           <p className="page-sub" aria-live="polite">
-            {result.data ? (filtered ? t("{total} found", { total: noun(total, "campaign") }) : noun(total, "campaign")) : " "}
+            {result.data ? (filtered ? t("{total} found", { total: (total === 1 ? t("1 campaign") : t("{n} campaigns", { n: count(total) })) }) : (total === 1 ? t("1 campaign") : t("{n} campaigns", { n: count(total) }))) : " "}
           </p>
         </div>
         <div className="cm-tools">
