@@ -10,7 +10,7 @@ import { api, ApiError, docPath, errorMessage, shell, t as tr, isolate } from "@
 import { Alert, Badge, Button, confirmDialog, EmptyState, ErrorState, Field, Icon, Menu, MenuItem, PageLoading, Spinner, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import { countSegment, keys, list, type Segment } from "./data";
-import { count, noun, people } from "./format";
+import { count } from "./format";
 import {
   ACTIVITIES,
   blankRule,
@@ -152,7 +152,7 @@ function UsedBy({ id }: { id: string }) {
     <div className="stack" style={{ gap: 10 }}>
       {live > 0 && (
         <Alert tone="warning">
-          {isolate(noun(live, "scheduled or running thing is", "scheduled or running things are"))} {tr("using this segment. A segment is worked out when it is used, so a change here changes who they reach.")}
+          {isolate((live === 1 ? tr("1 scheduled or running thing is") : tr("{n} scheduled or running things are", { n: count(live) })))} {tr("using this segment. A segment is worked out when it is used, so a change here changes who they reach.")}
         </Alert>
       )}
       <ul className="cm-used">
@@ -429,7 +429,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
                 <p className="cm-match-figure" aria-live="polite">
                   <span className="cm-reach-number">{isolate(count(c.contact_count))}</span> <span className="cm-reach-unit">{c.contact_count === 1 ? tr("person matches") : tr("people match")}</span>
                 </p>
-                <p className="muted">{isolate(count(c.mailable_count))} {tr("of them can be emailed.")}{c.mailable_count < c.contact_count ? tr(" {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: people(c.contact_count - c.mailable_count) }) : ""}</p>
+                <p className="muted">{isolate(count(c.mailable_count))} {tr("of them can be emailed.")}{c.mailable_count < c.contact_count ? tr(" {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: ((c.contact_count - c.mailable_count) === 1 ? tr("1 person") : tr("{n} people", { n: count(c.contact_count - c.mailable_count) })) }) : ""}</p>
                 {c.sample.length === 0 ? (
                   <EmptyState title={tr("Nobody matches")} icon="user" />
                 ) : (

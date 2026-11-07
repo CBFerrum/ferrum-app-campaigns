@@ -7,7 +7,7 @@ import { errorMessage, t, isolate } from "@ferrum/client";
 import { Alert, Button, Dialog, Field, toast } from "@ferrum/kit";
 import { LinkInput, useMe } from "@ferrum/records";
 import { sendTest } from "./data";
-import { noun } from "./format";
+import { count } from "./format";
 import { splitAddresses } from "./importer";
 import type { Draft } from "./useDraft";
 
@@ -21,7 +21,7 @@ export function SendTest({ draft, onClose }: { draft: Draft; onClose: () => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { valid, invalid } = splitAddresses(to);
-  const problem = invalid.length ? `${invalid.join(", ")} ${invalid.length === 1 ? "is" : "are"} not ${invalid.length === 1 ? "an email address" : "email addresses"}.` : valid.length > 10 ? "Send a test to 10 addresses at most." : null;
+  const problem = invalid.length ? (invalid.length === 1 ? t("{addresses} is not an email address.", { addresses: invalid.join(", ") }) : t("{addresses} are not email addresses.", { addresses: invalid.join(", ") })) : valid.length > 10 ? "Send a test to 10 addresses at most." : null;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,7 +33,7 @@ export function SendTest({ draft, onClose }: { draft: Draft; onClose: () => void
       const saved = await draft.save();
       if (!saved) throw new Error("The campaign could not be saved yet. Fix what is marked first.");
       const r = await sendTest(saved.id, { emails: valid, variant, contact: contact?.id });
-      toast(t("Test sent to {value}", { value: noun(r.sent, "address", "addresses") }));
+      toast(t("Test sent to {value}", { value: (r.sent === 1 ? t("1 address") : t("{n} addresses", { n: count(r.sent) })) }));
       onClose();
     } catch (err) {
       setError(errorMessage(err));

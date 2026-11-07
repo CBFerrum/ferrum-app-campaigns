@@ -3,7 +3,7 @@
 // the campaign's timeline action). Pure, so the wording and the arithmetic are tested without a browser.
 
 import { cumulative, ratesOver, type Counts, type Interval } from "./chart";
-import { count, noun, percent, rate, span } from "./format";
+import { count, percent, rate, span } from "./format";
 import { t } from "@ferrum/client";
 
 export type Kind = "sent" | "opens" | "clicks" | "unsubscribes" | "bounces" | "complaints";
@@ -55,33 +55,33 @@ export function tiles(p: Perf): Tile[] {
       id: "sent",
       label: t("Sent"),
       value: count(p.sent),
-      sub: `of ${noun(p.recipients, "recipient")}`,
-      note: p.failed + p.skipped > 0 ? [p.failed ? `${count(p.failed)} failed` : "", p.skipped ? `${count(p.skipped)} skipped` : ""].filter(Boolean).join(", ") : undefined,
+      sub: t("of {value}", { value: String((p.recipients === 1 ? t("1 recipient") : t("{n} recipients", { n: count(p.recipients) }))) }),
+      note: p.failed + p.skipped > 0 ? [p.failed ? t("{value} failed", { value: count(p.failed) }) : "", p.skipped ? t("{value} skipped", { value: count(p.skipped) }) : ""].filter(Boolean).join(", ") : undefined,
     },
-    { id: "delivered", label: t("Delivered"), value: count(p.delivered), sub: `${share(p.delivered, p.sent)} of sent` },
+    { id: "delivered", label: t("Delivered"), value: count(p.delivered), sub: t("{value} of sent", { value: share(p.delivered, p.sent) }) },
     {
       id: "opened",
       label: t("Opened"),
       value: count(p.unique_opens),
-      sub: `${share(p.unique_opens, p.delivered)} of delivered`,
-      note: p.machine_opens > 0 ? `${count(p.machine_opens)} more were automatic (privacy proxies, scanners) and are not counted` : undefined,
+      sub: t("{value} of delivered", { value: share(p.unique_opens, p.delivered) }),
+      note: p.machine_opens > 0 ? t("{value} more were automatic (privacy proxies, scanners) and are not counted", { value: count(p.machine_opens) }) : undefined,
     },
     {
       id: "clicked",
       label: t("Clicked"),
       value: count(p.unique_clicks),
-      sub: `${share(p.unique_clicks, p.delivered)} of delivered`,
-      note: p.unique_opens > 0 ? `${share(p.unique_clicks, p.unique_opens)} of those who opened` : undefined,
+      sub: t("{value} of delivered", { value: share(p.unique_clicks, p.delivered) }),
+      note: p.unique_opens > 0 ? t("{value} of those who opened", { value: share(p.unique_clicks, p.unique_opens) }) : undefined,
     },
-    { id: "unsubscribed", label: t("Unsubscribed"), value: count(p.unsubscribes), sub: `${share(p.unsubscribes, p.delivered)} of delivered` },
+    { id: "unsubscribed", label: t("Unsubscribed"), value: count(p.unsubscribes), sub: t("{value} of delivered", { value: share(p.unsubscribes, p.delivered) }) },
     {
       id: "bounced",
       label: t("Bounced"),
       value: count(p.bounces),
-      sub: `${count(p.hard_bounces)} hard, ${count(p.soft_bounces)} soft`,
-      note: p.bounces > 0 ? `${share(p.bounces, p.sent)} of sent` : undefined,
+      sub: t("{value} hard, {value2} soft", { value: count(p.hard_bounces), value2: count(p.soft_bounces) }),
+      note: p.bounces > 0 ? t("{value} of sent", { value: share(p.bounces, p.sent) }) : undefined,
     },
-    { id: "complaints", label: t("Spam complaints"), value: count(p.complaints), sub: `${share(p.complaints, p.delivered)} of delivered` },
+    { id: "complaints", label: t("Spam complaints"), value: count(p.complaints), sub: t("{value} of delivered", { value: share(p.complaints, p.delivered) }) },
   ];
 }
 
@@ -130,10 +130,10 @@ export function abStanding(
   c: { winner_variant?: string | null; test_sent_at?: string | null; winner_after_hours?: number | null; winner_chosen_at?: string | null },
   now = Date.now(),
 ): string {
-  if (c.winner_variant) return `Version ${c.winner_variant} won and went to everyone else.`;
+  if (c.winner_variant) return t("Version {winner_variant} won and went to everyone else.", { winner_variant: c.winner_variant });
   if (!c.test_sent_at) return "Waiting for every test email to go out. Then the clock for the winner starts.";
   const left = (new Date(c.test_sent_at).getTime() + (c.winner_after_hours ?? 4) * 3_600_000 - now) / 3_600_000;
-  return left > 0 ? `The winner is chosen in ${span(left)}.` : "The winner is chosen at the next round, within a minute.";
+  return left > 0 ? t("The winner is chosen in {left}.", { left: span(left) }) : "The winner is chosen at the next round, within a minute.";
 }
 
 export interface LinkRow {

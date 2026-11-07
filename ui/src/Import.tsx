@@ -10,7 +10,7 @@ import { api, errorMessage, saveBlob, shell, t as tr, isolate } from "@ferrum/cl
 import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { list } from "./data";
-import { count, noun, people, percent, rate, size } from "./format";
+import { count, percent, rate, size } from "./format";
 import {
   BASIS_KEY,
   type Checked,
@@ -109,13 +109,13 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
   const read = (text: string, name: string) => {
     const t = readTable(text);
     if (!t.rows.length) return setProblem("There is nothing to import in it: no rows below the first line.");
-    if (t.rows.length > MAX_ROWS) return setProblem(`It has ${count(t.rows.length)} rows. Import at most ${count(MAX_ROWS)} at a time: split the file and import the parts one after the other.`);
+    if (t.rows.length > MAX_ROWS) return setProblem(tr("It has {value} rows. Import at most {MAX_ROWS} at a time: split the file and import the parts one after the other.", { value: count(t.rows.length), MAX_ROWS: count(MAX_ROWS) }));
     setProblem(null);
     onTable(t, name);
   };
   const file = async (f: File | undefined) => {
     if (!f) return;
-    if (f.size > MAX_BYTES) return setProblem(`That file is ${size(f.size)}. The most is ${size(MAX_BYTES)}.`);
+    if (f.size > MAX_BYTES) return setProblem(tr("That file is {value}. The most is {MAX_BYTES}.", { value: size(f.size), MAX_BYTES: size(MAX_BYTES) }));
     try {
       read(await f.text(), f.name);
     } catch {
@@ -162,7 +162,7 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
     <div className="stack" style={{ gap: 16 }}>
       <p className="muted">
         {table.headerless ? tr("The file has no row of column names. ") : ""}
-        {isolate(noun(table.rows.length, "row"))} {tr("found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.")}
+        {isolate((table.rows.length === 1 ? tr("1 row") : tr("{n} rows", { n: count(table.rows.length) })))} {tr("found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.")}
       </p>
       <ul className="cm-cols">
         {table.headers.map((h, i) => {
@@ -503,7 +503,7 @@ export function Import() {
               {table ? (
                 <div className="stack" style={{ gap: 14 }}>
                   <p>
-                    <strong>{isolate(name)}</strong>: {isolate(noun(table.rows.length, "row"))}, {isolate(noun(table.headers.length, "column"))}.{isolate(" ")}
+                    <strong>{isolate(name)}</strong>: {isolate((table.rows.length === 1 ? tr("1 row") : tr("{n} rows", { n: count(table.rows.length) })))}, {isolate((table.headers.length === 1 ? tr("1 column") : tr("{n} columns", { n: count(table.headers.length) })))}.{isolate(" ")}
                     <button type="button" className="link-btn" onClick={() => (setTable(null), setMapping([]), setChecked(null))}>
                       {tr("Choose another")}
                     </button>
@@ -548,7 +548,7 @@ export function Import() {
                   disabled={!checked || (tally(checked).new === 0 && !(consent.mode === "optout" && tally(checked).known > 0))}
                   onClick={() => void run()}
                 >
-                  {checked ? tr("Import {value}", { value: people(tally(checked).new + (consent.mode === "optout" ? tally(checked).known : 0)) }) : tr("Import")}
+                  {checked ? tr("Import {value}", { value: ((tally(checked).new + (consent.mode === "optout" ? tally(checked).known : 0)) === 1 ? tr("1 person") : tr("{n} people", { n: count(tally(checked).new + (consent.mode === "optout" ? tally(checked).known : 0)) })) }) : tr("Import")}
                 </Button>
               </div>
             </>

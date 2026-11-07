@@ -139,15 +139,15 @@ export function defaultTab(c: Pick<Campaign, "status" | "started_at">): Tab {
 export function whenLine(c: Pick<Campaign, "status" | "schedule_at" | "started_at" | "finished_at">, locale?: string): string {
   switch (c.status) {
     case "Scheduled":
-      return c.schedule_at ? `Scheduled for ${moment(c.schedule_at, locale)}` : "Scheduled: starts within a minute";
+      return c.schedule_at ? t("Scheduled for {value}", { value: moment(c.schedule_at, locale) }) : "Scheduled: starts within a minute";
     case "Sending":
-      return `Sending since ${moment(c.started_at, locale)}`;
+      return t("Sending since {value}", { value: moment(c.started_at, locale) });
     case "Sent":
-      return `Sent ${moment(c.finished_at ?? c.started_at, locale)}`;
+      return t("Sent {value}", { value: moment(c.finished_at ?? c.started_at, locale) });
     case "Cancelled":
-      return c.started_at ? `Stopped ${moment(c.finished_at ?? c.started_at, locale)}` : "Cancelled before it started";
+      return c.started_at ? t("Stopped {value}", { value: moment(c.finished_at ?? c.started_at, locale) }) : "Cancelled before it started";
     default:
-      return c.schedule_at ? `Draft, planned for ${moment(c.schedule_at, locale)}` : "Draft";
+      return c.schedule_at ? t("Draft, planned for {value}", { value: moment(c.schedule_at, locale) }) : "Draft";
   }
 }
 
@@ -207,7 +207,7 @@ export function patchOf(base: Campaign, edits: Partial<Campaign>): Record<string
 /** A new draft made from `c`: the same email to the same audience, with nothing of its sending. */
 export function duplicateBody(c: Campaign): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    campaign_name: `Copy of ${c.campaign_name}`.slice(0, 140),
+    campaign_name: t("Copy of {campaign_name}", { campaign_name: c.campaign_name }).slice(0, 140),
     subject: c.subject,
     preheader: c.preheader ?? null,
     email_account: c.email_account ?? null,

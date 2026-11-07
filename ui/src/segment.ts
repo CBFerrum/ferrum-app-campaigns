@@ -171,24 +171,32 @@ export function describe(r: Rule, names: { group?: string; campaign?: string } =
   switch (r.rule_type) {
     case "Contact Field": {
       const subject = r.field === "Created On" ? "Created" : r.field ?? "A detail";
-      if (r.field === "Created On") return r.operator === "Within Last Days" ? `Created in the last ${v || "…"} days` : `Created ${r.operator === "Before" ? "before" : "after"} ${v || "…"}`;
+      if (r.field === "Created On") return r.operator === "Within Last Days" ? t("Created in the last {value} days", { value: v || "…" }) : (r.operator === "Before" ? t("Created before {date}", { date: v || "…" }) : t("Created after {date}", { date: v || "…" }));
       return `${subject} ${OPERATOR_WORDS[r.operator] ?? r.operator}${valueKind(r) === "none" ? "" : ` ${quoted}`}`;
     }
     case "Attribute": {
       const key = (r.attribute ?? "").trim() || "…";
-      if (r.operator === "Within Last Days") return `${key} is within the last ${v || "…"} days`;
+      if (r.operator === "Within Last Days") return t("{key} is within the last {value} days", { key, value: v || "…" });
       const number = valueKind(r) === "number" || valueKind(r) === "date";
       return `${key} ${OPERATOR_WORDS[r.operator] ?? r.operator}${valueKind(r) === "none" ? "" : ` ${number ? v || "…" : quoted}`}`;
     }
     case "Email Group":
-      return `${r.operator === "Is Not Member" ? "Is not in" : "Is in"} the email group ${names.group ? `“${names.group}”` : "…"}`;
+      return (r.operator === "Is Not Member" ? t("Is not in the email group {group}", { group: names.group ? `“${names.group}”` : "…" }) : t("Is in the email group {group}", { group: names.group ? `“${names.group}”` : "…" }));
     default: {
       const did = r.operator === "Did";
-      const verb = { Opened: did ? "Opened" : "Did not open", Clicked: did ? "Clicked a link in" : "Did not click a link in", "Was Sent": did ? "Was sent" : "Was not sent" }[
-        r.activity ?? "Opened"
-      ];
-      const what = r.campaign ? `“${names.campaign ?? "a campaign"}”` : "any email";
-      return `${verb} ${what} in the last ${r.within_days ?? "…"} days`;
+      const days = r.within_days ?? "…";
+      const campaign = r.campaign ? `“${names.campaign ?? t("a campaign")}”` : null;
+      switch (r.activity ?? "Opened") {
+        case "Clicked":
+          if (campaign) return did ? t("Clicked a link in {campaign} in the last {days} days", { campaign, days }) : t("Did not click a link in {campaign} in the last {days} days", { campaign, days });
+          return did ? t("Clicked a link in any email in the last {days} days", { days }) : t("Did not click a link in any email in the last {days} days", { days });
+        case "Was Sent":
+          if (campaign) return did ? t("Was sent {campaign} in the last {days} days", { campaign, days }) : t("Was not sent {campaign} in the last {days} days", { campaign, days });
+          return did ? t("Was sent any email in the last {days} days", { days }) : t("Was not sent any email in the last {days} days", { days });
+        default:
+          if (campaign) return did ? t("Opened {campaign} in the last {days} days", { campaign, days }) : t("Did not open {campaign} in the last {days} days", { campaign, days });
+          return did ? t("Opened any email in the last {days} days", { days }) : t("Did not open any email in the last {days} days", { days });
+      }
     }
   }
 }
