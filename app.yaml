@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.3.12
+version: 0.3.13
 publisher: cbferrum
 summary: "Email marketing: segments, campaigns with A/B tests, automated journeys, open and click tracking, suppression lists and consent"
 description: README.md
@@ -39,3 +39,18 @@ contributes:
   shell.create:
     - {id: campaign, label: Campaign, path: campaigns/new, entity: EmailCampaign}
     - {id: segment, label: Segment, path: campaigns/s/new, entity: MarketingSegment}
+  # What the assistant should know in Campaigns's pages, and what it suggests asking there.
+  shell.assistant:
+    - id: campaigns
+      title: "Campaigns"
+      instructions: >-
+        An EmailCampaign is Draft, Scheduled, Sending, Sent or Cancelled, and goes to its audience (CampaignAudience:
+        segments and contacts). Each recipient's outcome is a CampaignRecipient: Pending, Held, Queued, Sent, Failed,
+        Skipped or Cancelled. A contact on the suppression list (EmailSuppression) or without consent is skipped,
+        never sent to. CampaignVariant rows are an A/B test's versions. A MarketingJourney (Draft, Active, Paused,
+        Stopped) sends its steps over time to the contacts enrolled in it (JourneyEnrollment).
+      suggestions:
+        - "How did last month's campaigns do?"
+        - "Which campaigns are scheduled this week?"
+        - "How many recipients failed or were skipped in the last campaign, and why?"
+        - "Which journeys are active, and how many people are in each?"
