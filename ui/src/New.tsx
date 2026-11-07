@@ -5,7 +5,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { api, ApiError, errorMessage } from "@ferrum/client";
+import { api, ApiError, errorMessage, t } from "@ferrum/client";
 import { Alert, Button, EmptyState, ErrorState, Field, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import type { AudienceRow, Campaign } from "./campaign";
@@ -38,8 +38,8 @@ export function NewCampaign() {
   if (!meta.data) return <PageLoading />;
   if (!can(meta.data.permissions, "create")) {
     return (
-      <EmptyState title="You cannot create campaigns" icon="mail">
-        Ask a Marketing Manager for the Marketing User role.
+      <EmptyState title={t("You cannot create campaigns")} icon="mail">
+        {t("Ask a Marketing Manager for the Marketing User role.")}
       </EmptyState>
     );
   }
@@ -56,37 +56,37 @@ export function NewCampaign() {
     <div className="cm-page cm-narrow">
       <header className="cm-head">
         <div>
-          <h1 className="page-title">New campaign</h1>
-          <p className="page-sub">Start with the basics. You write the email next, and a draft saves as you go.</p>
+          <h1 className="page-title">{t("New campaign")}</h1>
+          <p className="page-sub">{t("Start with the basics. You write the email next, and a draft saves as you go.")}</p>
         </div>
       </header>
       <form className="card card-pad stack" onSubmit={submit}>
         {create.error && !Object.keys(fields).length && <Alert tone="error">{errorMessage(create.error)}</Alert>}
-        <Field label="Name" htmlFor="new-name" required error={fields.campaign_name} hint="For you and your team. Recipients never see it.">
+        <Field label={t("Name")} htmlFor="new-name" required error={fields.campaign_name} hint={t("For you and your team. Recipients never see it.")}>
           <input id="new-name" className="input" value={name} maxLength={140} autoFocus onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Subject" htmlFor="new-subject" required={!template} error={fields.subject} hint="What people see in their inbox. You can use {{ contact.first_name }} here too.">
+        <Field label={t("Subject")} htmlFor="new-subject" required={!template} error={fields.subject} hint="What people see in their inbox. You can use {{ contact.first_name }} here too.">
           <input id="new-subject" className="input" value={subject} maxLength={998} onChange={(e) => setSubject(e.target.value)} />
         </Field>
         <fieldset className="cm-fieldset">
-          <legend className="field-label">Who is it for?</legend>
+          <legend className="field-label">{t("Who is it for?")}</legend>
           <AudienceRows rows={audience} onChange={setAudience} error={fields.audience} />
           {/* The button below waits for this, so say what it waits for. */}
           {!chosen && (
             <p className="field-hint">
-              Choose at least one segment or email group to go on. Nobody to choose yet? <Link to="/s/new">Make a segment</Link>.
+              {t("Choose at least one segment or email group to go on. Nobody to choose yet?")} <Link to="/s/new">{t("Make a segment")}</Link>.
             </p>
           )}
         </fieldset>
-        <Field label="Start from a Mail template" htmlFor="new-template" hint="Optional. It fills the subject (if empty) and the content. Without one you start from a simple layout.">
+        <Field label={t("Start from a Mail template")} htmlFor="new-template" hint={t("Optional. It fills the subject (if empty) and the content. Without one you start from a simple layout.")}>
           <LinkInput to="EmailTemplate" id="new-template" value={template?.id ?? null} title={template?.title} onChange={(id, title) => setTemplate(id ? { id, title } : null)} />
         </Field>
         <div className="row cm-actions">
           <Button type="button" onClick={() => navigate("/")}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button type="submit" variant="primary" loading={create.isPending} disabled={!ready}>
-            Create and write the email
+            {t("Create and write the email")}
           </Button>
         </div>
       </form>

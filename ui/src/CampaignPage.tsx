@@ -6,7 +6,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { api, docPath, errorMessage, humanize } from "@ferrum/client";
+import { api, docPath, errorMessage, humanize, t as tr } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, Dialog, ErrorState, Icon, Menu, MenuItem, PageLoading, TabPanel, Tabs, toast, useShellTitle } from "@ferrum/kit";
 import { can, CollabPanel, type EntityMeta, useEntityMeta } from "@ferrum/records";
 import { audienceForSave, type Campaign, defaultTab, isTab, type Tab, tone, whenLine } from "./campaign";
@@ -46,8 +46,8 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const tab: Tab = isTab(asked) ? asked : doc ? defaultTab(doc) : "setup";
   const counted = useAudienceCheck(id, audienceKey, tab === "setup" && !!saved && (saved.status === "Draft" || saved.status === "Scheduled") && audienceKey !== "[]");
 
-  if (draft.query.error && !doc) return <ErrorState error={draft.query.error} onRetry={() => void draft.query.refetch()} title="This campaign could not be opened" />;
-  if (!doc) return <PageLoading label="Opening the campaign" />;
+  if (draft.query.error && !doc) return <ErrorState error={draft.query.error} onRetry={() => void draft.query.refetch()} title={tr("This campaign could not be opened")} />;
+  if (!doc) return <PageLoading label={tr("Opening the campaign")} />;
 
   const editable = draft.editable;
   const canSubmit = can(meta.permissions, "submit");
@@ -89,7 +89,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const duplicate = async () => {
     try {
       const made = await duplicateCampaign(id);
-      toast("Copied. It is a draft: change what you need.");
+      toast(tr("Copied. It is a draft: change what you need."));
       navigate(`/c/${made.id}`);
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -98,7 +98,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const amend = async () => {
     try {
       const made = await api.post<Campaign>(docPath("EmailCampaign", id, "amend"));
-      toast("Amended: this is the new draft");
+      toast(tr("Amended: this is the new draft"));
       void qc.invalidateQueries({ queryKey: keys.list });
       navigate(`/c/${made.id}`);
     } catch (e) {
@@ -111,7 +111,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
     try {
       await api.del(docPath("EmailCampaign", id), { ifMatch: doc.version });
       void qc.invalidateQueries({ queryKey: keys.list });
-      toast("Deleted");
+      toast(tr("Deleted"));
       navigate("/");
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -124,9 +124,9 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
 
   const scheduledOrOn = doc.status === "Scheduled" || doc.status === "Sending";
   const tabs = [
-    { id: "setup", label: <>Setup{failed.setup > 0 && <span className="tab-errors">{failed.setup}</span>}</> },
-    { id: "content", label: <>Content{failed.content > 0 && <span className="tab-errors">{failed.content}</span>}</> },
-    { id: "review", label: <>Review{doc.status === "Draft" && canSubmit ? " and send" : ""}</> },
+    { id: "setup", label: <>{tr("Setup")}{failed.setup > 0 && <span className="tab-errors">{failed.setup}</span>}</> },
+    { id: "content", label: <>{tr("Content")}{failed.content > 0 && <span className="tab-errors">{failed.content}</span>}</> },
+    { id: "review", label: <>{tr("Review")}{doc.status === "Draft" && canSubmit ? " and send" : ""}</> },
     { id: "results", label: "Results" },
   ];
 
@@ -134,7 +134,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
     <div className="cm-page cm-camp">
       <header className="cm-camp-head">
         <div className="crumbs">
-          <Link to="/">Campaigns</Link>
+          <Link to="/">{tr("Campaigns")}</Link>
           <Icon name="chevronRight" size={12} />
         </div>
         <div className="cm-camp-bar">
@@ -142,7 +142,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             <div className="cm-camp-name">
               <h1 className="page-title">{doc.campaign_name || "Untitled campaign"}</h1>
               <Badge tone={tone(doc.status)}>{doc.status}</Badge>
-              {doc.ab_test && <Badge tone="purple">A/B test</Badge>}
+              {doc.ab_test && <Badge tone="purple">{tr("A/B test")}</Badge>}
             </div>
             <p className="page-sub">
               {[doc.number, whenLine(doc)].filter(Boolean).join(" · ")}
@@ -157,7 +157,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
           <div className="page-actions">
             {(doc.status === "Draft" || doc.status === "Scheduled") && (
               <Button icon="mail" onClick={() => setDialog("test")}>
-                Send a test
+                {tr("Send a test")}
               </Button>
             )}
             {scheduledOrOn && canCancel && (
@@ -167,14 +167,14 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             )}
             {doc.status === "Sent" && canCreate && (
               <Button variant="primary" icon="copy" onClick={() => void duplicate()}>
-                Duplicate
+                {tr("Duplicate")}
               </Button>
             )}
             {doc.status === "Cancelled" && canCreate && (
               <>
-                <Button onClick={() => void duplicate()}>Duplicate</Button>
+                <Button onClick={() => void duplicate()}>{tr("Duplicate")}</Button>
                 <Button variant="primary" onClick={() => void amend()}>
-                  Amend
+                  {tr("Amend")}
                 </Button>
               </>
             )}
@@ -186,12 +186,12 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             <Menu ariaLabel="More" icon="chevronDown" buttonClass="icon-btn">
               {(close) => (
                 <>
-                  <MenuItem onSelect={() => (close(), setDialog("talk"))}>Comments and history</MenuItem>
-                  <MenuItem onSelect={() => (close(), navigate(`/records/EmailCampaign/${id}`))}>Open as a record</MenuItem>
-                  {canCreate && doc.status !== "Sent" && doc.status !== "Cancelled" && <MenuItem onSelect={() => (close(), void duplicate())}>Duplicate</MenuItem>}
+                  <MenuItem onSelect={() => (close(), setDialog("talk"))}>{tr("Comments and history")}</MenuItem>
+                  <MenuItem onSelect={() => (close(), navigate(`/records/EmailCampaign/${id}`))}>{tr("Open as a record")}</MenuItem>
+                  {canCreate && doc.status !== "Sent" && doc.status !== "Cancelled" && <MenuItem onSelect={() => (close(), void duplicate())}>{tr("Duplicate")}</MenuItem>}
                   {can(meta.permissions, "delete") && (doc.status === "Draft" || doc.status === "Cancelled") && (
                     <MenuItem danger onSelect={() => (close(), void remove())}>
-                      Delete…
+                      {tr("Delete…")}
                     </MenuItem>
                   )}
                 </>
@@ -206,19 +206,19 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
           tone="warning"
           action={
             <div className="row">
-              <Button onClick={() => void draft.reload()}>Use theirs</Button>
+              <Button onClick={() => void draft.reload()}>{tr("Use theirs")}</Button>
               <Button variant="primary" onClick={draft.keepMine}>
-                Keep mine
+                {tr("Keep mine")}
               </Button>
             </div>
           }
         >
-          <strong>Someone else changed this campaign.</strong> You both changed {draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : "it"}. Keep what you wrote on top of theirs, or use theirs and lose your changes.
+          <strong>{tr("Someone else changed this campaign.")}</strong> {tr("You both changed")} {draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : "it"}{tr(". Keep what you wrote on top of theirs, or use theirs and lose your changes.")}
         </Alert>
       )}
-      {!editable && doc.docstatus === 0 && <Alert tone="info">You can look at this campaign but not change it.</Alert>}
+      {!editable && doc.docstatus === 0 && <Alert tone="info">{tr("You can look at this campaign but not change it.")}</Alert>}
       {doc.docstatus === 1 && (tab === "setup" || tab === "content") && (
-        <Alert tone="info" action={canCreate ? <Button onClick={() => void duplicate()}>Duplicate to change it</Button> : undefined}>
+        <Alert tone="info" action={canCreate ? <Button onClick={() => void duplicate()}>{tr("Duplicate to change it")}</Button> : undefined}>
           {doc.status === "Scheduled" ? "It is scheduled, so it can no longer be edited. Cancel the send to stop it, or duplicate it to change a copy." : "It has gone out, so it can no longer be edited."}
         </Alert>
       )}
@@ -233,7 +233,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
 
       {dialog === "test" && <SendTest draft={draft} onClose={() => setDialog(null)} />}
       {dialog === "talk" && (
-        <Dialog open wide onClose={() => setDialog(null)} title="Comments and history">
+        <Dialog open wide onClose={() => setDialog(null)} title={tr("Comments and history")}>
           <CollabPanel entity="EmailCampaign" id={id} canWrite={can(meta.permissions, "write")} />
         </Dialog>
       )}

@@ -5,6 +5,7 @@ import { Icon } from "@ferrum/kit";
 import { clock } from "./format";
 import { insertAt } from "./snippets";
 import type { Draft } from "./useDraft";
+import { t } from "@ferrum/client";
 
 /** A thin bar for a share of something (a send's progress, a link's clicks). `value` is 0 to 100. */
 export function Bar({ value, label, tone }: { value: number | null; label: string; tone?: "primary" | "muted" }) {
@@ -41,7 +42,7 @@ export function SaveLine({ draft, editable }: { draft: Draft; editable: boolean 
       {text}
       {s === "error" && (
         <button type="button" className="link-btn" onClick={() => void draft.save()}>
-          Try again
+          {t("Try again")}
         </button>
       )}
     </span>

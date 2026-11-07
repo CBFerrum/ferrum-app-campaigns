@@ -7,6 +7,7 @@
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { areaPath, bucketName, columnPath, type Interval, labelled, linePath, nearest, niceAxis, scaleLinear, tickLabel } from "./chart";
 import { compact, count } from "./format";
+import { t as tr } from "@ferrum/client";
 
 export interface ChartSeries {
   id: string;
@@ -97,7 +98,7 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
       <figcaption className="cm-chart-head">
         <h3>{title}</h3>
         {series.length > 1 && (
-          <ul className="cm-legend" aria-label="Lines">
+          <ul className="cm-legend" aria-label={tr("Lines")}>
             {series.map((s) => (
               <li key={s.id}>
                 <i className={`cm-key ${kind === "columns" ? "cm-key-box" : "cm-key-line"}`} style={{ background: s.color }} aria-hidden="true" />
@@ -121,7 +122,7 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
               <caption className="sr-only">{title}</caption>
               <thead>
                 <tr>
-                  <th scope="col">When</th>
+                  <th scope="col">{tr("When")}</th>
                   {series.map((s) => (
                     <th key={s.id} scope="col" className="num">
                       {s.label}

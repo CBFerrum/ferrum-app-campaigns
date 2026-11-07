@@ -13,6 +13,7 @@ import type { AudienceCheck, CheckRow } from "./review";
 import { MERGE_TAGS } from "./snippets";
 import type { Draft, RowError } from "./useDraft";
 import { insertInto, Section } from "./ui";
+import { t as tr } from "@ferrum/client";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
 
@@ -54,8 +55,8 @@ export function AudienceRows({
                   disabled={disabled}
                   onChange={(e) => update(i, { kind: e.target.value as "segment" | "group", segment: null, email_group: null, _titles: undefined })}
                 >
-                  <option value="segment">Segment</option>
-                  <option value="group">Email group</option>
+                  <option value="segment">{tr("Segment")}</option>
+                  <option value="group">{tr("Email group")}</option>
                 </select>
                 <div className="cm-arow-pick">
                   <LinkInput
@@ -71,7 +72,7 @@ export function AudienceRows({
                 </div>
                 <label className="check-field cm-arow-leave">
                   <input type="checkbox" checked={!!r.exclude} disabled={disabled} onChange={(e) => update(i, { exclude: e.target.checked })} />
-                  Leave out
+                  {tr("Leave out")}
                 </label>
                 {counted && (
                   <span className="cm-arow-count faint" title={r.exclude ? "People in it, who are left out" : "People in it, and how many of them can be emailed"}>
@@ -96,10 +97,10 @@ export function AudienceRows({
       {!disabled && (
         <div className="row">
           <Button size="sm" icon="plus" onClick={() => onChange([...rows, { kind: "segment", segment: null, email_group: null, exclude: false }])}>
-            Add a segment
+            {tr("Add a segment")}
           </Button>
           <Button size="sm" icon="plus" onClick={() => onChange([...rows, { kind: "group", segment: null, email_group: null, exclude: false }])}>
-            Add an email group
+            {tr("Add an email group")}
           </Button>
         </div>
       )}
@@ -113,7 +114,7 @@ function WithMerge({ label, children, onInsert }: { label: string; children: Rea
   return (
     <div className="cm-merge">
       {children}
-      <Menu ariaLabel={`Insert a person's detail into the ${label}`} label="Insert" icon="plus" buttonClass="btn btn-default btn-md">
+      <Menu ariaLabel={`Insert a person's detail into the ${label}`} label={tr("Insert")} icon="plus" buttonClass="btn btn-default btn-md">
         {(close) =>
           MERGE_TAGS.slice(0, 3).map((t) => (
             <MenuItem
@@ -152,23 +153,23 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
 
   return (
     <div className="cm-stack">
-      <Section title="The email" id="cm-basics">
+      <Section title={tr("The email")} id="cm-basics">
         <div className="form-grid" style={{ ["--cols" as string]: 2 }}>
-          <Field label="Name" htmlFor="cm-name" required error={errors.campaign_name} hint="For you and your team. Recipients never see it.">
+          <Field label={tr("Name")} htmlFor="cm-name" required error={errors.campaign_name} hint={tr("For you and your team. Recipients never see it.")}>
             <input id="cm-name" className="input" value={doc.campaign_name ?? ""} maxLength={140} disabled={!editable} onChange={(e) => set("campaign_name", e.target.value)} />
           </Field>
-          <Field label="From" htmlFor="cm-from" error={errors.email_account} hint="The account that sends it. Blank: the workspace's default account.">
-            <LinkInput to="EmailAccount" id="cm-from" value={doc.email_account ?? null} title={doc._titles?.email_account} disabled={!editable} placeholder="Default sending account" onChange={(id) => set("email_account", id)} />
+          <Field label={tr("From")} htmlFor="cm-from" error={errors.email_account} hint={tr("The account that sends it. Blank: the workspace's default account.")}>
+            <LinkInput to="EmailAccount" id="cm-from" value={doc.email_account ?? null} title={doc._titles?.email_account} disabled={!editable} placeholder={tr("Default sending account")} onChange={(id) => set("email_account", id)} />
           </Field>
           <Field
-            label="Subject"
+            label={tr("Subject")}
             htmlFor="cm-subject"
             required
             error={errors.subject}
             className="span-all"
             hint={
               <>
-                {subject.trim().length} characters. Inboxes show about 70 on a computer and fewer on a phone. {"{{ contact.first_name }}"} and the other details of each person work here too.
+                {tr("{length} characters. Inboxes show about 70 on a computer and fewer on a phone.", { length: subject.trim().length })} {"{{ contact.first_name }}"} {tr("and the other details of each person work here too.")}
               </>
             }
           >
@@ -176,15 +177,15 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
               <input id="cm-subject" ref={subjectRef} className="input" value={subject} maxLength={998} disabled={!editable} onChange={(e) => set("subject", e.target.value)} />
             </WithMerge>
           </Field>
-          <Field label="Preview text" htmlFor="cm-preheader" error={errors.preheader} className="span-all" hint="The first words after the subject in most inboxes. Optional.">
-            <WithMerge label="preview text" onInsert={(code) => insertInto(preheaderRef.current, doc.preheader ?? "", code, (v) => set("preheader", v))}>
+          <Field label={tr("Preview text")} htmlFor="cm-preheader" error={errors.preheader} className="span-all" hint={tr("The first words after the subject in most inboxes. Optional.")}>
+            <WithMerge label={tr("preview text")} onInsert={(code) => insertInto(preheaderRef.current, doc.preheader ?? "", code, (v) => set("preheader", v))}>
               <input id="cm-preheader" ref={preheaderRef} className="input" value={doc.preheader ?? ""} maxLength={250} disabled={!editable} onChange={(e) => set("preheader", e.target.value)} />
             </WithMerge>
           </Field>
         </div>
         <div className="cm-inbox-wrap">
           <div className="row">
-            <span className="field-label">In an inbox</span>
+            <span className="field-label">{tr("In an inbox")}</span>
             <span className="spacer" />
             <DeviceSwitch value={device} onChange={setDevice} />
           </div>
@@ -199,30 +200,30 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
       </Section>
 
       <Section
-        title="Who gets it"
+        title={tr("Who gets it")}
         id="cm-audience"
-        aside={check ? <strong className="cm-reach-inline">{count(check.mailable)} can be emailed</strong> : undefined}
+        aside={check ? <strong className="cm-reach-inline">{count(check.mailable)} {tr("can be emailed")}</strong> : undefined}
       >
         <AudienceRows rows={doc.audience ?? []} disabled={!editable} onChange={(rows) => set("audience", rows)} error={errors.audience} counts={check?.rows} rowErrors={rowErrors} />
         <p className="faint cm-note">
-          People who unsubscribed, bounced, complained or are on the suppression list are never emailed, whatever the audience says. The Review tab counts exactly who is left out.
+          {tr("People who unsubscribed, bounced, complained or are on the suppression list are never emailed, whatever the audience says. The Review tab counts exactly who is left out.")}
         </p>
       </Section>
 
-      <Section title="Sending" id="cm-sending">
+      <Section title={tr("Sending")} id="cm-sending">
         <div className="form-grid" style={{ ["--cols" as string]: 2 }}>
           <div className="stack" style={{ gap: 8 }}>
             <label className="check-field">
               <input type="checkbox" checked={!!doc.track_opens} disabled={!editable} onChange={(e) => set("track_opens", e.target.checked)} />
-              Count opens
+              {tr("Count opens")}
             </label>
             <label className="check-field">
               <input type="checkbox" checked={!!doc.track_clicks} disabled={!editable} onChange={(e) => set("track_clicks", e.target.checked)} />
-              Count clicks on links
+              {tr("Count clicks on links")}
             </label>
-            <p className="field-hint">Opens are counted when the email's picture loads; automatic opens by privacy proxies and scanners are kept apart.</p>
+            <p className="field-hint">{tr("Opens are counted when the email's picture loads; automatic opens by privacy proxies and scanners are kept apart.")}</p>
           </div>
-          <Field label="Emails per hour" htmlFor="cm-rate" error={errors.hourly_limit} hint="This campaign's own pace. 0: only the workspace's limit, shared with newsletters and journeys.">
+          <Field label={tr("Emails per hour")} htmlFor="cm-rate" error={errors.hourly_limit} hint={tr("This campaign's own pace. 0: only the workspace's limit, shared with newsletters and journeys.")}>
             <input
               id="cm-rate"
               className="input num"
@@ -239,17 +240,17 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
       </Section>
 
       <Section
-        title="A/B test"
+        title={tr("A/B test")}
         id="cm-ab"
         aside={
           <label className="check-field">
             <input type="checkbox" checked={!!doc.ab_test} disabled={!editable} onChange={(e) => turnTest(e.target.checked)} />
-            Test versions
+            {tr("Test versions")}
           </label>
         }
       >
         {!doc.ab_test ? (
-          <p className="muted">Try two to five subjects (or whole emails) on a share of the audience. The one that does best goes to everyone else.</p>
+          <p className="muted">{tr("Try two to five subjects (or whole emails) on a share of the audience. The one that does best goes to everyone else.")}</p>
         ) : (
           <div className="stack" style={{ gap: 14 }}>
             <ul className="cm-variants">
@@ -287,24 +288,24 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
             {editable && doc.variants.length < 5 && (
               <div>
                 <Button size="sm" icon="plus" onClick={() => setVariants([...doc.variants, { subject: doc.subject }])}>
-                  Add a version
+                  {tr("Add a version")}
                 </Button>
               </div>
             )}
             <div className="form-grid" style={{ ["--cols" as string]: 3 }}>
-              <Field label="Share that gets the test" htmlFor="cm-share" error={errors.test_percent} hint="Split evenly between the versions.">
+              <Field label={tr("Share that gets the test")} htmlFor="cm-share" error={errors.test_percent} hint={tr("Split evenly between the versions.")}>
                 <div className="cm-unit">
                   <input id="cm-share" className="input num" type="number" min={1} max={90} value={doc.test_percent ?? 20} disabled={!editable} onChange={(e) => set("test_percent", Math.min(90, Math.max(1, Math.floor(Number(e.target.value) || 1))))} />
                   <span className="faint">%</span>
                 </div>
               </Field>
-              <Field label="The winner has the most" htmlFor="cm-metric" error={errors.winner_metric}>
+              <Field label={tr("The winner has the most")} htmlFor="cm-metric" error={errors.winner_metric}>
                 <select id="cm-metric" className="select" value={doc.winner_metric ?? "Opens"} disabled={!editable} onChange={(e) => set("winner_metric", e.target.value as Campaign["winner_metric"])}>
-                  <option value="Opens">Opens</option>
-                  <option value="Clicks">Clicks</option>
+                  <option value="Opens">{tr("Opens")}</option>
+                  <option value="Clicks">{tr("Clicks")}</option>
                 </select>
               </Field>
-              <Field label="Decided after" htmlFor="cm-hours" error={errors.winner_after_hours} hint="Counted from when the last test email went out.">
+              <Field label={tr("Decided after")} htmlFor="cm-hours" error={errors.winner_after_hours} hint={tr("Counted from when the last test email went out.")}>
                 <div className="cm-unit">
                   <input id="cm-hours" className="input num" type="number" min={1} max={720} value={doc.winner_after_hours ?? 4} disabled={!editable} onChange={(e) => set("winner_after_hours", Math.min(720, Math.max(1, Math.floor(Number(e.target.value) || 1))))} />
                   <span className="faint">hours</span>
@@ -312,9 +313,9 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
               </Field>
             </div>
             {((doc.winner_metric ?? "Opens") === "Opens" && !doc.track_opens) || (doc.winner_metric === "Clicks" && !doc.track_clicks) ? (
-              <Alert tone="warning">Choosing the winner by {(doc.winner_metric ?? "Opens").toLowerCase()} needs that to be counted: turn it on under Sending.</Alert>
+              <Alert tone="warning">{tr("Choosing the winner by")} {(doc.winner_metric ?? "Opens").toLowerCase()} {tr("needs that to be counted: turn it on under Sending.")}</Alert>
             ) : null}
-            <p className="faint cm-note">To give a version its own content, write it on the Content tab.</p>
+            <p className="faint cm-note">{tr("To give a version its own content, write it on the Content tab.")}</p>
           </div>
         )}
       </Section>

@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.3.10
+version: 0.3.11
 publisher: cbferrum
 summary: "Email marketing: segments, campaigns with A/B tests, automated journeys, open and click tracking, suppression lists and consent"
 description: README.md

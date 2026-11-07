@@ -5,7 +5,7 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { api, docPath, download, errorMessage, relativeTime } from "@ferrum/client";
+import { api, docPath, download, errorMessage, relativeTime, t } from "@ferrum/client";
 import { Badge, Button, confirmDialog, EmptyState, ErrorState, Icon, Menu, MenuItem, PageLoading, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { type Campaign, clickRate, hasResults, isStatus, LIST_FIELDS, listFilters, openRate, progress, STATUS_FILTERS, tone, whenLine } from "./campaign";
@@ -37,7 +37,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
         <div className="cm-item-title">
           <Link to={`/c/${row.id}`}>{row.campaign_name}</Link>
           <Badge tone={tone(row.status)}>{row.status}</Badge>
-          {row.ab_test && <Badge tone="purple">A/B test</Badge>}
+          {row.ab_test && <Badge tone="purple">{t("A/B test")}</Badge>}
         </div>
         <div className="cm-item-subject muted">{row.subject}</div>
         <div className="cm-item-when faint">
@@ -46,9 +46,9 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
       </div>
       {hasResults(row) && (
         <dl className="cm-item-stats">
-          <Stat label="Sent" value={sending && row.total_recipients ? `${count(row.sent_count)} of ${count(row.total_recipients)}` : count(row.sent_count)} />
-          <Stat label="Opened" value={percent(openRate(row))} />
-          <Stat label="Clicked" value={percent(clickRate(row))} />
+          <Stat label={t("Sent")} value={sending && row.total_recipients ? `${count(row.sent_count)} of ${count(row.total_recipients)}` : count(row.sent_count)} />
+          <Stat label={t("Opened")} value={percent(openRate(row))} />
+          <Stat label={t("Clicked")} value={percent(clickRate(row))} />
         </dl>
       )}
       {sending && <Bar value={pct} label={`${row.campaign_name}: ${percent(pct)} sent`} />}
@@ -61,7 +61,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
                 navigate(`/c/${row.id}`);
               }}
             >
-              Open
+              {t("Open")}
             </MenuItem>
             {canCreate && (
               <MenuItem
@@ -70,7 +70,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
                   onDuplicate(row);
                 }}
               >
-                Duplicate
+                {t("Duplicate")}
               </MenuItem>
             )}
             {canDelete && row.docstatus === 0 && (
@@ -81,7 +81,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
                   onDelete(row);
                 }}
               >
-                Delete draft…
+                {t("Delete draft…")}
               </MenuItem>
             )}
           </>
@@ -145,7 +145,7 @@ export function Home() {
   const duplicate = async (row: Row) => {
     try {
       const made = await duplicateCampaign(row.id);
-      toast("Copied. It is a draft: change what you need.");
+      toast(t("Copied. It is a draft: change what you need."));
       navigate(`/c/${made.id}`);
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -156,7 +156,7 @@ export function Home() {
     if (!ok) return;
     try {
       await api.del(docPath("EmailCampaign", row.id), { ifMatch: row.version });
-      toast("Draft deleted");
+      toast(t("Draft deleted"));
       void qc.invalidateQueries({ queryKey: keys.list });
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -167,33 +167,33 @@ export function Home() {
   const body = result.error ? (
     <ErrorState error={result.error} onRetry={() => void result.refetch()} />
   ) : !result.data ? (
-    <PageLoading label="Loading campaigns" />
+    <PageLoading label={t("Loading campaigns")} />
   ) : rows.length === 0 ? (
     filtered ? (
-      <EmptyState title="No campaign matches" icon="search">
+      <EmptyState title={t("No campaign matches")} icon="search">
         <Button
           onClick={() => {
             setTyped("");
             setSp({}, { replace: true });
           }}
         >
-          Show every campaign
+          {t("Show every campaign")}
         </Button>
       </EmptyState>
     ) : (
-      <EmptyState title="No campaigns yet" icon="mail">
-        <p className="muted">Write an email, check who it will reach, and send it. Everything you need is on one page.</p>
+      <EmptyState title={t("No campaigns yet")} icon="mail">
+        <p className="muted">{t("Write an email, check who it will reach, and send it. Everything you need is on one page.")}</p>
         {canCreate && (
           <Link className="btn btn-primary btn-md" to="/new">
             <Icon name="plus" />
-            New campaign
+            {t("New campaign")}
           </Link>
         )}
       </EmptyState>
     )
   ) : (
     <>
-      <ul className="cm-items" aria-label="Campaigns">
+      <ul className="cm-items" aria-label={t("Campaigns")}>
         {rows.map((r) => (
           <Item key={r.id} row={r} canCreate={canCreate} canDelete={canDelete} onDuplicate={(x) => void duplicate(x)} onDelete={(x) => void remove(x)} />
         ))}
@@ -201,7 +201,7 @@ export function Home() {
       {result.hasNextPage && (
         <div className="cm-more">
           <Button onClick={() => void result.fetchNextPage()} loading={result.isFetchingNextPage}>
-            Show more
+            {t("Show more")}
           </Button>
         </div>
       )}
@@ -212,7 +212,7 @@ export function Home() {
     <div className="cm-page">
       <header className="cm-head">
         <div>
-          <h1 className="sr-only">Campaigns</h1>
+          <h1 className="sr-only">{t("Campaigns")}</h1>
           <Nav />
           <p className="page-sub" aria-live="polite">
             {result.data ? (filtered ? `${noun(total, "campaign")} found` : noun(total, "campaign")) : " "}
@@ -221,30 +221,30 @@ export function Home() {
         <div className="cm-tools">
           <Link className="btn btn-default btn-md" to="/records/EmailCampaign">
             <Icon name="list" />
-            Table
+            {t("Table")}
           </Link>
           {meta && can(meta.permissions, "export") && rows.length > 0 && (
             <Button icon="download" onClick={() => void exportCsv()}>
-              Export
+              {t("Export")}
             </Button>
           )}
           {canCreate && (
             <Link className="btn btn-primary btn-md" to="/new">
               <Icon name="plus" />
-              New campaign
+              {t("New campaign")}
             </Link>
           )}
         </div>
       </header>
       <div className="cm-filters">
-        <div className="segmented" role="group" aria-label="Show campaigns that are">
+        <div className="segmented" role="group" aria-label={t("Show campaigns that are")}>
           {STATUS_FILTERS.map((s) => (
             <button key={s.id || "all"} type="button" aria-pressed={status === s.id} onClick={() => setStatus(s.id)}>
               {s.label}
             </button>
           ))}
         </div>
-        <input className="input cm-search" type="search" placeholder="Find a campaign…" aria-label="Find a campaign" value={typed} onChange={(e) => setTyped(e.target.value)} />
+        <input className="input cm-search" type="search" placeholder={t("Find a campaign…")} aria-label={t("Find a campaign")} value={typed} onChange={(e) => setTyped(e.target.value)} />
       </div>
       {body}
     </div>
