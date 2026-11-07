@@ -13,7 +13,7 @@ import type { AudienceCheck, CheckRow } from "./review";
 import { MERGE_TAGS } from "./snippets";
 import type { Draft, RowError } from "./useDraft";
 import { insertInto, Section } from "./ui";
-import { t as tr } from "@ferrum/client";
+import { t as tr, isolate } from "@ferrum/client";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
 
@@ -50,7 +50,7 @@ export function AudienceRows({
               <li key={r.id ?? `new-${i}`} className="cm-arow">
                 <select
                   className="select cm-arow-kind"
-                  aria-label={`Audience ${i + 1}: what to add`}
+                  aria-label={tr("Audience {value}: what to add", { value: i + 1 })}
                   value={kind}
                   disabled={disabled}
                   onChange={(e) => update(i, { kind: e.target.value as "segment" | "group", segment: null, email_group: null, _titles: undefined })}
@@ -62,8 +62,8 @@ export function AudienceRows({
                   <LinkInput
                     key={kind}
                     to={kind === "group" ? "EmailGroup" : "MarketingSegment"}
-                    label={kind === "group" ? "Email group" : "Segment"}
-                    placeholder={kind === "group" ? "Choose an email group…" : "Choose a segment…"}
+                    label={kind === "group" ? tr("Email group") : tr("Segment")}
+                    placeholder={kind === "group" ? tr("Choose an email group…") : tr("Choose a segment…")}
                     value={(kind === "group" ? r.email_group : r.segment) ?? null}
                     title={r._titles?.[kind === "group" ? "email_group" : "segment"]}
                     disabled={disabled}
@@ -75,18 +75,18 @@ export function AudienceRows({
                   {tr("Leave out")}
                 </label>
                 {counted && (
-                  <span className="cm-arow-count faint" title={r.exclude ? "People in it, who are left out" : "People in it, and how many of them can be emailed"}>
-                    {r.exclude ? noun(counted.contacts, "person", "people") : `${count(counted.mailable)} of ${count(counted.contacts)}`}
+                  <span className="cm-arow-count faint" title={r.exclude ? tr("People in it, who are left out") : tr("People in it, and how many of them can be emailed")}>
+                    {r.exclude ? noun(counted.contacts, "person", "people") : tr("{value} of {value2}", { value: count(counted.mailable), value2: count(counted.contacts) })}
                   </span>
                 )}
                 {!disabled && (
-                  <button type="button" className="icon-btn" aria-label={`Remove audience ${i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                  <button type="button" className="icon-btn" aria-label={tr("Remove audience {value}", { value: i + 1 })} onClick={() => onChange(rows.filter((_, j) => j !== i))}>
                     <Icon name="trash" size={15} />
                   </button>
                 )}
                 {problems.map((p) => (
                   <p key={p.message} className="field-error cm-arow-error">
-                    {p.message}
+                    {isolate(p.message)}
                   </p>
                 ))}
               </li>
@@ -104,7 +104,7 @@ export function AudienceRows({
           </Button>
         </div>
       )}
-      {error && <p className="field-error">{error}</p>}
+      {error && <p className="field-error">{isolate(error)}</p>}
     </div>
   );
 }
@@ -124,7 +124,7 @@ function WithMerge({ label, children, onInsert }: { label: string; children: Rea
                 onInsert(t.code);
               }}
             >
-              {t.label}
+              {isolate(t.label)}
             </MenuItem>
           ))
         }
@@ -169,7 +169,7 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
             className="span-all"
             hint={
               <>
-                {tr("{length} characters. Inboxes show about 70 on a computer and fewer on a phone.", { length: subject.trim().length })} {"{{ contact.first_name }}"} {tr("and the other details of each person work here too.")}
+                {tr("{length} characters. Inboxes show about 70 on a computer and fewer on a phone.", { length: subject.trim().length })} {isolate("{{ contact.first_name }}")} {tr("and the other details of each person work here too.")}
               </>
             }
           >
@@ -202,7 +202,7 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
       <Section
         title={tr("Who gets it")}
         id="cm-audience"
-        aside={check ? <strong className="cm-reach-inline">{count(check.mailable)} {tr("can be emailed")}</strong> : undefined}
+        aside={check ? <strong className="cm-reach-inline">{isolate(count(check.mailable))} {tr("can be emailed")}</strong> : undefined}
       >
         <AudienceRows rows={doc.audience ?? []} disabled={!editable} onChange={(rows) => set("audience", rows)} error={errors.audience} counts={check?.rows} rowErrors={rowErrors} />
         <p className="faint cm-note">
@@ -259,32 +259,32 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
                 return (
                   <li key={v.id ?? `v-${i}`}>
                     <span className="cm-letter" aria-hidden="true">
-                      {LETTERS[i]}
+                      {isolate(LETTERS[i])}
                     </span>
                     <input
                       className="input"
-                      aria-label={`Subject of version ${LETTERS[i]}`}
-                      placeholder={`Subject of version ${LETTERS[i]}`}
+                      aria-label={tr("Subject of version {value}", { value: LETTERS[i] })}
+                      placeholder={tr("Subject of version {value}", { value: LETTERS[i] })}
                       value={v.subject ?? ""}
                       maxLength={998}
                       disabled={!editable}
                       onChange={(e) => setVariants(doc.variants.map((x, j) => (j === i ? { ...x, subject: e.target.value } : x)))}
                     />
                     {editable && doc.variants.length > 2 && (
-                      <button type="button" className="icon-btn" aria-label={`Remove version ${LETTERS[i]}`} onClick={() => setVariants(doc.variants.filter((_, j) => j !== i))}>
+                      <button type="button" className="icon-btn" aria-label={tr("Remove version {value}", { value: LETTERS[i] })} onClick={() => setVariants(doc.variants.filter((_, j) => j !== i))}>
                         <Icon name="trash" size={15} />
                       </button>
                     )}
                     {problems.map((p) => (
                       <p key={p.message} className="field-error">
-                        {p.message}
+                        {isolate(p.message)}
                       </p>
                     ))}
                   </li>
                 );
               })}
             </ul>
-            {errors.variants && <p className="field-error">{errors.variants}</p>}
+            {errors.variants && <p className="field-error">{isolate(errors.variants)}</p>}
             {editable && doc.variants.length < 5 && (
               <div>
                 <Button size="sm" icon="plus" onClick={() => setVariants([...doc.variants, { subject: doc.subject }])}>
@@ -308,12 +308,12 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
               <Field label={tr("Decided after")} htmlFor="cm-hours" error={errors.winner_after_hours} hint={tr("Counted from when the last test email went out.")}>
                 <div className="cm-unit">
                   <input id="cm-hours" className="input num" type="number" min={1} max={720} value={doc.winner_after_hours ?? 4} disabled={!editable} onChange={(e) => set("winner_after_hours", Math.min(720, Math.max(1, Math.floor(Number(e.target.value) || 1))))} />
-                  <span className="faint">hours</span>
+                  <span className="faint">{tr("hours")}</span>
                 </div>
               </Field>
             </div>
             {((doc.winner_metric ?? "Opens") === "Opens" && !doc.track_opens) || (doc.winner_metric === "Clicks" && !doc.track_clicks) ? (
-              <Alert tone="warning">{tr("Choosing the winner by")} {(doc.winner_metric ?? "Opens").toLowerCase()} {tr("needs that to be counted: turn it on under Sending.")}</Alert>
+              <Alert tone="warning">{tr("Choosing the winner by")} {isolate((doc.winner_metric ?? "Opens").toLowerCase())} {tr("needs that to be counted: turn it on under Sending.")}</Alert>
             ) : null}
             <p className="faint cm-note">{tr("To give a version its own content, write it on the Content tab.")}</p>
           </div>

@@ -4,6 +4,7 @@
 
 import type { Campaign, Tab } from "./campaign";
 import { noun, people, size, span } from "./format";
+import { t } from "@ferrum/client";
 
 export interface CheckRow {
   kind: "segment" | "group";
@@ -49,12 +50,12 @@ export interface LeftOut {
 export function leftOut(check: AudienceCheck): LeftOut[] {
   const l = check.left_out;
   const all: LeftOut[] = [
-    { key: "unsubscribed", label: "Unsubscribed", count: l.unsubscribed, note: "They opted out. Only they can opt back in." },
-    { key: "complained", label: "Marked an earlier email as spam", count: l.complained, note: "Mailing them again would hurt your sending reputation." },
-    { key: "bounced", label: "Their address bounced", count: l.bounced, note: "Emails to them were rejected." },
-    { key: "suppressed", label: "On the suppression list", count: l.suppressed, note: "Blocked by hand, or after repeated bounces." },
-    { key: "pending", label: "Not confirmed yet", count: l.pending, note: "They signed up but have not confirmed their address." },
-    { key: "excluded", label: "Left out by your exclusion rules", count: check.excluded, note: "A segment or group you chose to leave out." },
+    { key: "unsubscribed", label: t("Unsubscribed"), count: l.unsubscribed, note: "They opted out. Only they can opt back in." },
+    { key: "complained", label: t("Marked an earlier email as spam"), count: l.complained, note: "Mailing them again would hurt your sending reputation." },
+    { key: "bounced", label: t("Their address bounced"), count: l.bounced, note: "Emails to them were rejected." },
+    { key: "suppressed", label: t("On the suppression list"), count: l.suppressed, note: "Blocked by hand, or after repeated bounces." },
+    { key: "pending", label: t("Not confirmed yet"), count: l.pending, note: "They signed up but have not confirmed their address." },
+    { key: "excluded", label: t("Left out by your exclusion rules"), count: check.excluded, note: "A segment or group you chose to leave out." },
   ];
   return all.filter((x) => x.count > 0);
 }
@@ -126,7 +127,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push({
       id: "nobody",
       level: "block",
-      title: "Nobody would receive this",
+      title: t("Nobody would receive this"),
       detail: check.contacts > 0 ? "Everyone in the audience is left out (see why below)." : "The audience is empty. Add a segment or an email group.",
       tab: "setup",
     });
@@ -135,24 +136,24 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push({
       id: "public_url",
       level: "block",
-      title: "Tracking and unsubscribe links cannot be built yet",
+      title: t("Tracking and unsubscribe links cannot be built yet"),
       detail: "Set the Public URL in the Mail app's Communication Settings: links in the email must reach this server from the internet.",
       href: "/open/CommsSettings",
     });
   }
-  if (check.ready.account) out.push({ id: "account", level: "block", title: "The From account cannot send", detail: check.ready.account, tab: "setup" });
+  if (check.ready.account) out.push({ id: "account", level: "block", title: t("The From account cannot send"), detail: check.ready.account, tab: "setup" });
   for (const e of check.emails) {
-    if (e.error) out.push({ id: `render-${e.variant ?? "main"}`, level: "block", title: `${label(e.variant)} cannot be built`, detail: e.error, tab: "content" });
+    if (e.error) out.push({ id: `render-${e.variant ?? "main"}`, level: "block", title: t("{value} cannot be built", { value: label(e.variant) }), detail: e.error, tab: "content" });
   }
-  if (!c.subject.trim()) out.push({ id: "subject", level: "block", title: "There is no subject", tab: "setup" });
+  if (!c.subject.trim()) out.push({ id: "subject", level: "block", title: t("There is no subject"), tab: "setup" });
   else if (c.subject.trim().length > LONG_SUBJECT) {
-    out.push({ id: "subject-long", level: "warn", title: "A long subject", detail: `Inboxes show about ${LONG_SUBJECT} characters on a computer and fewer on a phone.`, tab: "setup" });
+    out.push({ id: "subject-long", level: "warn", title: t("A long subject"), detail: `Inboxes show about ${LONG_SUBJECT} characters on a computer and fewer on a phone.`, tab: "setup" });
   }
   if (!check.ready.postal_address) {
     out.push({
       id: "postal",
       level: "warn",
-      title: "Your postal address is not set",
+      title: t("Your postal address is not set"),
       detail: "Anti-spam laws such as CAN-SPAM ask for one in every marketing email. Add it in Campaign Settings.",
       href: "/open/CampaignSettings",
     });
@@ -161,25 +162,25 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
   if (main && !main.error) {
     out.push(
       main.unsubscribe === "own"
-        ? { id: "unsub", level: "ok", title: "Your content has its own unsubscribe link" }
-        : { id: "unsub", level: "ok", title: "An unsubscribe link is added at the bottom", detail: "Your content has none of its own, so the sender adds a footer with the link and your postal address." },
+        ? { id: "unsub", level: "ok", title: t("Your content has its own unsubscribe link") }
+        : { id: "unsub", level: "ok", title: t("An unsubscribe link is added at the bottom"), detail: "Your content has none of its own, so the sender adds a footer with the link and your postal address." },
     );
   }
   const html = [c.content, ...(c.ab_test ? c.variants.map((v) => v.content ?? "") : [])].join("\n");
   const noAlt = imagesWithoutAlt(html);
   if (noAlt > 0) {
-    out.push({ id: "alt", level: "warn", title: `${noun(noAlt, "picture")} without alternative text`, detail: "Add alt=\"…\" so they make sense when pictures are blocked.", tab: "content" });
+    out.push({ id: "alt", level: "warn", title: t("{noAlt} without alternative text", { noAlt: noun(noAlt, "picture") }), detail: "Add alt=\"…\" so they make sense when pictures are blocked.", tab: "content" });
   }
   const big = check.emails.filter((e) => (e.bytes ?? 0) > CLIP_BYTES);
   if (big.length) {
-    out.push({ id: "size", level: "warn", title: `The email is ${size(Math.max(...big.map((e) => e.bytes ?? 0)))}`, detail: "Gmail cuts emails off at about 100 KB and hides the rest.", tab: "content" });
+    out.push({ id: "size", level: "warn", title: t("The email is {value}", { value: size(Math.max(...big.map((e) => e.bytes ?? 0))) }), detail: "Gmail cuts emails off at about 100 KB and hides the rest.", tab: "content" });
   }
-  if (!c.track_clicks) out.push({ id: "clicks", level: "info", title: "Clicks are not tracked", detail: "Turn click tracking on in Setup to see which links people use.", tab: "setup" });
+  if (!c.track_clicks) out.push({ id: "clicks", level: "info", title: t("Clicks are not tracked"), detail: "Turn click tracking on in Setup to see which links people use.", tab: "setup" });
   if (check.mailable > 0) {
     out.push({
       id: "rate",
       level: "info",
-      title: `Goes out at up to ${noun(check.rate.per_hour, "email")} an hour: ${sendTime(check.mailable, check.rate.per_hour)}`,
+      title: t("Goes out at up to {value} an hour: {value2}", { value: noun(check.rate.per_hour, "email"), value2: sendTime(check.mailable, check.rate.per_hour) }),
       detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? "This campaign's own limit applies." : "The limit is shared with newsletters and journeys.",
     });
   }
@@ -187,7 +188,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push({
       id: "split",
       level: "info",
-      title: `${people(check.split.test)} get the ${check.split.variants} versions first`,
+      title: t("{value} get the {variants} versions first", { value: people(check.split.test), variants: check.split.variants }),
       detail: `The version with the most ${(c.winner_metric ?? "Opens") === "Clicks" ? "clicks" : "opens"} goes to the other ${people(check.split.rest)} after ${noun(c.winner_after_hours ?? 4, "hour")}.`,
       tab: "setup",
     });

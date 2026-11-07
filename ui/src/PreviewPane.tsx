@@ -5,7 +5,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, docPath, errorMessage, t } from "@ferrum/client";
+import { api, docPath, errorMessage, t, isolate } from "@ferrum/client";
 import { Alert, Icon, Spinner } from "@ferrum/kit";
 import { LinkInput } from "@ferrum/records";
 import type { Campaign } from "./campaign";
@@ -63,12 +63,12 @@ export function InboxLine({ sender, subject, preheader, device }: { sender?: { n
   return (
     <div className={`cm-inbox cm-inbox-${device}`} role="group" aria-label={t("How it looks in an inbox")}>
       <span className="cm-inbox-mark" aria-hidden="true">
-        {(sender?.name ?? "Your sender").slice(0, 1).toUpperCase()}
+        {isolate((sender?.name ?? "Your sender").slice(0, 1).toUpperCase())}
       </span>
       <div className="cm-inbox-text">
         <div className="cm-inbox-from">
-          <strong>{sender?.name ?? "Your sender"}</strong>
-          {sender && <span className="faint"> {sender.address}</span>}
+          <strong>{sender?.name ?? t("Your sender")}</strong>
+          {sender && <span className="faint"> {isolate(sender.address)}</span>}
         </div>
         <div className="cm-inbox-subject">{cut || <span className="faint">{t("No subject yet")}</span>}</div>
         <div className="cm-inbox-preheader muted">{clip(preheader, PREHEADER_ROOM[device]) || " "}</div>
@@ -96,7 +96,7 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
           <div className="segmented" role="group" aria-label={t("Version")}>
             {versions.map((v) => (
               <button key={v} type="button" aria-pressed={variant === v} onClick={() => setChosen(v)}>
-                {v}
+                {isolate(v)}
               </button>
             ))}
           </div>
@@ -125,14 +125,14 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
       )}
       {preview.error && !p ? (
         <Alert tone="error">
-          <strong>{t("The preview could not be built.")}</strong> {errorMessage(preview.error)}
+          <strong>{t("The preview could not be built.")}</strong> {isolate(errorMessage(preview.error))}
         </Alert>
       ) : (
         <>
           <InboxLine sender={sender.data} subject={p?.subject ?? ""} preheader={p ? preheaderOf(p.html) : ""} device={device} />
           <div className={`cm-device cm-device-${device}`} data-stale={preview.isPlaceholderData || undefined}>
             {p ? (
-              <iframe title={`Preview of the email on a ${device === "phone" ? "phone" : "computer"}`} sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={previewDoc(p.html)} />
+              <iframe title={t("Preview of the email on a {value}", { value: device === "phone" ? "phone" : "computer" })} sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={previewDoc(p.html)} />
             ) : (
               <div className="cm-device-wait">
                 <Spinner label={t("Building the preview")} />

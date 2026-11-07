@@ -7,7 +7,7 @@
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { areaPath, bucketName, columnPath, type Interval, labelled, linePath, nearest, niceAxis, scaleLinear, tickLabel } from "./chart";
 import { compact, count } from "./format";
-import { t as tr } from "@ferrum/client";
+import { t as tr, isolate } from "@ferrum/client";
 
 export interface ChartSeries {
   id: string;
@@ -96,36 +96,36 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
   return (
     <figure className="cm-chart" data-stale={stale || undefined}>
       <figcaption className="cm-chart-head">
-        <h3>{title}</h3>
+        <h3>{isolate(title)}</h3>
         {series.length > 1 && (
           <ul className="cm-legend" aria-label={tr("Lines")}>
             {series.map((s) => (
               <li key={s.id}>
                 <i className={`cm-key ${kind === "columns" ? "cm-key-box" : "cm-key-line"}`} style={{ background: s.color }} aria-hidden="true" />
-                {s.label}
+                {isolate(s.label)}
               </li>
             ))}
           </ul>
         )}
         {any && (
           <button type="button" className="link-btn cm-chart-toggle" aria-pressed={table} onClick={() => setTable(!table)}>
-            {table ? "Show the chart" : "Show as a table"}
+            {table ? tr("Show the chart") : tr("Show as a table")}
           </button>
         )}
       </figcaption>
       <div className="cm-chart-plot" ref={box}>
         {!any ? (
-          <p className="cm-chart-empty muted">{empty}</p>
+          <p className="cm-chart-empty muted">{isolate(empty)}</p>
         ) : table ? (
           <div className="cm-chart-table">
             <table className="table">
-              <caption className="sr-only">{title}</caption>
+              <caption className="sr-only">{isolate(title)}</caption>
               <thead>
                 <tr>
                   <th scope="col">{tr("When")}</th>
                   {series.map((s) => (
                     <th key={s.id} scope="col" className="num">
-                      {s.label}
+                      {isolate(s.label)}
                     </th>
                   ))}
                 </tr>
@@ -133,10 +133,10 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
               <tbody>
                 {at.map((a, i) => (
                   <tr key={a}>
-                    <th scope="row">{bucketName(a, interval)}</th>
+                    <th scope="row">{isolate(bucketName(a, interval))}</th>
                     {series.map((s) => (
                       <td key={s.id} className="num">
-                        {format(s.values[i] ?? 0)}
+                        {isolate(format(s.values[i] ?? 0))}
                       </td>
                     ))}
                   </tr>
@@ -153,7 +153,7 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
                 height={height}
                 role="img"
                 tabIndex={0}
-                aria-label={`${title}. Use the left and right arrow keys to read it point by point.`}
+                aria-label={tr("{title}. Use the left and right arrow keys to read it point by point.", { title })}
                 onPointerMove={point}
                 onPointerDown={point}
                 onPointerLeave={(e) => e.pointerType === "mouse" && setShown(null)}
@@ -165,20 +165,20 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
                   <g key={t}>
                     <line className="cm-grid" x1={m.left} x2={m.left + plotW} y1={y(t)} y2={y(t)} />
                     <text className="cm-axis" x={m.left - 8} y={y(t)} dy="0.32em" textAnchor="end">
-                      {tick(t)}
+                      {isolate(tick(t))}
                     </text>
                   </g>
                 ))}
                 {labels.map((i) => (
                   <text key={i} className="cm-axis" x={xs[i]} y={height - 8} textAnchor={i === 0 ? "start" : "middle"}>
-                    {tickLabel(at[i], interval, i === 0)}
+                    {isolate(tickLabel(at[i], interval, i === 0))}
                   </text>
                 ))}
                 {marker && marker.index >= 0 && marker.index < n && (
                   <g>
                     <line className="cm-marker" x1={xs[marker.index]} x2={xs[marker.index]} y1={m.top} y2={base} />
                     <text className="cm-axis cm-marker-label" x={xs[marker.index] + 4} y={m.top + 10}>
-                      {marker.label}
+                      {isolate(marker.label)}
                     </text>
                   </g>
                 )}
@@ -199,7 +199,7 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
                     ))}
                 {labelled_ends.map((e) => (
                   <text key={e.s.id} className="cm-axis cm-end" x={xs[n - 1] + 10} y={e.y} dy="0.32em">
-                    {e.text}
+                    {isolate(e.text)}
                   </text>
                 ))}
                 {shown !== null && (
@@ -212,12 +212,12 @@ export function LineChart({ title, at, interval, series, kind = "line", format =
               </svg>
               {shown !== null && (
                 <div className="cm-tip" aria-hidden="true" style={{ left: xs[shown], top: m.top, transform: xs[shown] > width * 0.6 ? "translateX(calc(-100% - 12px))" : "translateX(12px)" }}>
-                  <div className="cm-tip-when">{bucketName(at[shown], interval)}</div>
+                  <div className="cm-tip-when">{isolate(bucketName(at[shown], interval))}</div>
                   {series.map((s) => (
                     <div key={s.id} className="cm-tip-row">
                       <i className={`cm-key ${kind === "columns" ? "cm-key-box" : "cm-key-line"}`} style={{ background: s.color }} />
-                      <strong>{format(s.values[shown] ?? 0)}</strong>
-                      <span className="muted">{s.label}</span>
+                      <strong>{isolate(format(s.values[shown] ?? 0))}</strong>
+                      <span className="muted">{isolate(s.label)}</span>
                     </div>
                   ))}
                 </div>

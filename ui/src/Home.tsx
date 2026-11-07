@@ -5,7 +5,7 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { api, docPath, download, errorMessage, relativeTime, t } from "@ferrum/client";
+import { api, docPath, download, errorMessage, relativeTime, t, isolate } from "@ferrum/client";
 import { Badge, Button, confirmDialog, EmptyState, ErrorState, Icon, Menu, MenuItem, PageLoading, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { type Campaign, clickRate, hasResults, isStatus, LIST_FIELDS, listFilters, openRate, progress, STATUS_FILTERS, tone, whenLine } from "./campaign";
@@ -21,8 +21,8 @@ const PAGE = 30;
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dt>{isolate(label)}</dt>
+      <dd>{isolate(value)}</dd>
     </div>
   );
 }
@@ -35,13 +35,13 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
     <li className="cm-item">
       <div className="cm-item-main">
         <div className="cm-item-title">
-          <Link to={`/c/${row.id}`}>{row.campaign_name}</Link>
-          <Badge tone={tone(row.status)}>{row.status}</Badge>
+          <Link to={`/c/${row.id}`}>{isolate(row.campaign_name)}</Link>
+          <Badge tone={tone(row.status)}>{isolate(row.status)}</Badge>
           {row.ab_test && <Badge tone="purple">{t("A/B test")}</Badge>}
         </div>
-        <div className="cm-item-subject muted">{row.subject}</div>
+        <div className="cm-item-subject muted">{isolate(row.subject)}</div>
         <div className="cm-item-when faint">
-          {[row.status === "Draft" && row.updated_at ? `Edited ${relativeTime(row.updated_at)}` : whenLine(row), row.number].filter(Boolean).join(" · ")}
+          {isolate([row.status === "Draft" && row.updated_at ? `Edited ${relativeTime(row.updated_at)}` : whenLine(row), row.number].filter(Boolean).join(" · "))}
         </div>
       </div>
       {hasResults(row) && (
@@ -51,7 +51,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
           <Stat label={t("Clicked")} value={percent(clickRate(row))} />
         </dl>
       )}
-      {sending && <Bar value={pct} label={`${row.campaign_name}: ${percent(pct)} sent`} />}
+      {sending && <Bar value={pct} label={t("{campaign_name}: {pct} sent", { campaign_name: row.campaign_name, pct: percent(pct) })} />}
       <Menu ariaLabel={`More for ${row.campaign_name}`} icon="chevronDown" buttonClass="icon-btn">
         {(close) => (
           <>
@@ -92,7 +92,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
 }
 
 export function Home() {
-  useShellTitle("Campaigns");
+  useShellTitle(t("Campaigns"));
   const qc = useQueryClient();
   const navigate = useNavigate();
   const meta = useEntityMeta("EmailCampaign").data;
@@ -152,7 +152,7 @@ export function Home() {
     }
   };
   const remove = async (row: Row) => {
-    const ok = await confirmDialog({ title: `Delete “${row.campaign_name}”?`, message: "The draft is deleted for good. Nothing was sent.", confirmLabel: "Delete draft", danger: true });
+    const ok = await confirmDialog({ title: t("Delete “{campaign_name}”?", { campaign_name: row.campaign_name }), message: t("The draft is deleted for good. Nothing was sent."), confirmLabel: t("Delete draft"), danger: true });
     if (!ok) return;
     try {
       await api.del(docPath("EmailCampaign", row.id), { ifMatch: row.version });
@@ -215,7 +215,7 @@ export function Home() {
           <h1 className="sr-only">{t("Campaigns")}</h1>
           <Nav />
           <p className="page-sub" aria-live="polite">
-            {result.data ? (filtered ? `${noun(total, "campaign")} found` : noun(total, "campaign")) : " "}
+            {result.data ? (filtered ? t("{total} found", { total: noun(total, "campaign") }) : noun(total, "campaign")) : " "}
           </p>
         </div>
         <div className="cm-tools">
@@ -240,7 +240,7 @@ export function Home() {
         <div className="segmented" role="group" aria-label={t("Show campaigns that are")}>
           {STATUS_FILTERS.map((s) => (
             <button key={s.id || "all"} type="button" aria-pressed={status === s.id} onClick={() => setStatus(s.id)}>
-              {s.label}
+              {isolate(s.label)}
             </button>
           ))}
         </div>

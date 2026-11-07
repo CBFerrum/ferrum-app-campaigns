@@ -4,6 +4,7 @@
 
 import { cumulative, ratesOver, type Counts, type Interval } from "./chart";
 import { count, noun, percent, rate, span } from "./format";
+import { t } from "@ferrum/client";
 
 export type Kind = "sent" | "opens" | "clicks" | "unsubscribes" | "bounces" | "complaints";
 
@@ -52,35 +53,35 @@ export function tiles(p: Perf): Tile[] {
   return [
     {
       id: "sent",
-      label: "Sent",
+      label: t("Sent"),
       value: count(p.sent),
       sub: `of ${noun(p.recipients, "recipient")}`,
       note: p.failed + p.skipped > 0 ? [p.failed ? `${count(p.failed)} failed` : "", p.skipped ? `${count(p.skipped)} skipped` : ""].filter(Boolean).join(", ") : undefined,
     },
-    { id: "delivered", label: "Delivered", value: count(p.delivered), sub: `${share(p.delivered, p.sent)} of sent` },
+    { id: "delivered", label: t("Delivered"), value: count(p.delivered), sub: `${share(p.delivered, p.sent)} of sent` },
     {
       id: "opened",
-      label: "Opened",
+      label: t("Opened"),
       value: count(p.unique_opens),
       sub: `${share(p.unique_opens, p.delivered)} of delivered`,
       note: p.machine_opens > 0 ? `${count(p.machine_opens)} more were automatic (privacy proxies, scanners) and are not counted` : undefined,
     },
     {
       id: "clicked",
-      label: "Clicked",
+      label: t("Clicked"),
       value: count(p.unique_clicks),
       sub: `${share(p.unique_clicks, p.delivered)} of delivered`,
       note: p.unique_opens > 0 ? `${share(p.unique_clicks, p.unique_opens)} of those who opened` : undefined,
     },
-    { id: "unsubscribed", label: "Unsubscribed", value: count(p.unsubscribes), sub: `${share(p.unsubscribes, p.delivered)} of delivered` },
+    { id: "unsubscribed", label: t("Unsubscribed"), value: count(p.unsubscribes), sub: `${share(p.unsubscribes, p.delivered)} of delivered` },
     {
       id: "bounced",
-      label: "Bounced",
+      label: t("Bounced"),
       value: count(p.bounces),
       sub: `${count(p.hard_bounces)} hard, ${count(p.soft_bounces)} soft`,
       note: p.bounces > 0 ? `${share(p.bounces, p.sent)} of sent` : undefined,
     },
-    { id: "complaints", label: "Spam complaints", value: count(p.complaints), sub: `${share(p.complaints, p.delivered)} of delivered` },
+    { id: "complaints", label: t("Spam complaints"), value: count(p.complaints), sub: `${share(p.complaints, p.delivered)} of delivered` },
   ];
 }
 

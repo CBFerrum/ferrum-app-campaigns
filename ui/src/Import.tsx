@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { api, errorMessage, saveBlob, shell, t as tr } from "@ferrum/client";
+import { api, errorMessage, saveBlob, shell, t as tr, isolate } from "@ferrum/client";
 import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { list } from "./data";
@@ -53,12 +53,12 @@ interface Known {
 }
 
 const KINDS: { id: Target["kind"]; label: string }[] = [
-  { id: "skip", label: "Do not import" },
-  { id: "email", label: "Email address" },
-  { id: "first_name", label: "First name" },
-  { id: "last_name", label: "Last name" },
-  { id: "full_name", label: "Full name (split in two)" },
-  { id: "attribute", label: "Keep as an attribute" },
+  { id: "skip", get label() { return tr("Do not import"); } },
+  { id: "email", get label() { return tr("Email address"); } },
+  { id: "first_name", get label() { return tr("First name"); } },
+  { id: "last_name", get label() { return tr("Last name"); } },
+  { id: "full_name", get label() { return tr("Full name (split in two)"); } },
+  { id: "attribute", get label() { return tr("Keep as an attribute"); } },
 ];
 
 function Rail({ step, reached }: { step: Step; reached: Step }) {
@@ -67,7 +67,7 @@ function Rail({ step, reached }: { step: Step; reached: Step }) {
       {STEPS.map((s, i) => (
         <li key={s} aria-current={i === step ? "step" : undefined} data-done={i < reached || undefined}>
           <span className="cm-rail-n">{i < reached ? <Icon name="check" size={12} /> : i + 1}</span>
-          {s}
+          {isolate(s)}
         </li>
       ))}
     </ol>
@@ -82,7 +82,7 @@ function Sample({ table, n = 5 }: { table: Table; n?: number }) {
           <tr>
             {table.headers.map((h, i) => (
               <th key={i} scope="col">
-                {h}
+                {isolate(h)}
               </th>
             ))}
           </tr>
@@ -91,7 +91,7 @@ function Sample({ table, n = 5 }: { table: Table; n?: number }) {
           {table.rows.slice(0, n).map((r, i) => (
             <tr key={i}>
               {r.map((c, j) => (
-                <td key={j}>{c}</td>
+                <td key={j}>{isolate(c)}</td>
               ))}
             </tr>
           ))}
@@ -137,7 +137,7 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
       >
         <Icon name="upload" size={22} />
         <strong>{tr("Choose a CSV file")}</strong>
-        <span className="muted">{tr("or drop it here. The first row names the columns. Up to")} {count(MAX_ROWS)} rows.</span>
+        <span className="muted">{tr("or drop it here. The first row names the columns. Up to")} {tr("{MAX_ROWS} rows.", { MAX_ROWS: count(MAX_ROWS) })}</span>
         <input className="sr-only" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={(e) => void file(e.target.files?.[0])} />
       </label>
       <Field label={tr("Or paste them")} htmlFor="cm-paste" hint={tr("One address on each line, or rows copied from a spreadsheet with a header row.")}>
@@ -148,7 +148,7 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
           {tr("Use what I pasted")}
         </Button>
       </div>
-      {problem && <Alert tone="error">{problem}</Alert>}
+      {problem && <Alert tone="error">{isolate(problem)}</Alert>}
     </div>
   );
 }
@@ -161,8 +161,8 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
   return (
     <div className="stack" style={{ gap: 16 }}>
       <p className="muted">
-        {table.headerless ? "The file has no row of column names. " : ""}
-        {noun(table.rows.length, "row")} {tr("found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.")}
+        {table.headerless ? tr("The file has no row of column names. ") : ""}
+        {isolate(noun(table.rows.length, "row"))} {tr("found. Say what each column holds. Columns you do not choose are left out, so nothing is kept that you did not ask for.")}
       </p>
       <ul className="cm-cols">
         {table.headers.map((h, i) => {
@@ -171,12 +171,12 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
           return (
             <li key={i}>
               <div className="cm-col-name">
-                <strong>{h}</strong>
-                <span className="faint cm-col-example">{examples.join(" · ") || "(empty)"}</span>
+                <strong>{isolate(h)}</strong>
+                <span className="faint cm-col-example">{examples.join(" · ") || tr("(empty)")}</span>
               </div>
               <select
                 className="select"
-                aria-label={`What “${h}” holds`}
+                aria-label={tr("What “{h}” holds", { h })}
                 value={t.kind}
                 onChange={(e) => {
                   const kind = e.target.value as Target["kind"];
@@ -185,12 +185,12 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
               >
                 {KINDS.map((k) => (
                   <option key={k.id} value={k.id}>
-                    {k.label}
+                    {isolate(k.label)}
                   </option>
                 ))}
               </select>
               {t.kind === "attribute" && (
-                <input className="input cm-col-key" aria-label={`Attribute name for “${h}”`} placeholder="attribute_name" value={t.key} maxLength={40} onChange={(e) => set(i, { kind: "attribute", key: e.target.value })} />
+                <input className="input cm-col-key" aria-label={tr("Attribute name for “{h}”", { h })} placeholder="attribute_name" value={t.key} maxLength={40} onChange={(e) => set(i, { kind: "attribute", key: e.target.value })} />
               )}
             </li>
           );
@@ -200,7 +200,7 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
         <Alert tone="warning">
           <ul>
             {problems.map((p) => (
-              <li key={p}>{p}</li>
+              <li key={p}>{isolate(p)}</li>
             ))}
           </ul>
         </Alert>
@@ -214,9 +214,9 @@ function Columns({ table, mapping, onChange }: { table: Table; mapping: Mapping;
                 <div className="cm-sample-who">
                   {r.contact ? (
                     <>
-                      <strong>{r.contact.email}</strong>
-                      <span className="muted">{[r.contact.first_name, r.contact.last_name].filter(Boolean).join(" ") || "no name"}</span>
-                      {Object.keys(r.contact.attributes).length > 0 && <span className="faint">{Object.entries(r.contact.attributes).map(([k, v]) => `${k}: ${v}`).join(" · ")}</span>}
+                      <strong>{isolate(r.contact.email)}</strong>
+                      <span className="muted">{[r.contact.first_name, r.contact.last_name].filter(Boolean).join(" ") || tr("no name")}</span>
+                      {Object.keys(r.contact.attributes).length > 0 && <span className="faint">{isolate(Object.entries(r.contact.attributes).map(([k, v]) => `${k}: ${v}`).join(" · "))}</span>}
                     </>
                   ) : (
                     <span className="muted">{tr("Line {line}: {problem}", { line: r.line, problem: r.problem ?? "" })}</span>
@@ -254,7 +254,7 @@ function ConsentStep({ consent, onChange }: { consent: Consent; onChange: (c: Co
         </label>
       </fieldset>
       {agreed && (
-        <Field label={tr("How do you know they agreed?")} htmlFor="cm-basis" required hint={`For example: signed up at the spring fair, 3 May 2026. It is saved on each contact as the attribute ${BASIS_KEY}, next to who added them and when.`}>
+        <Field label={tr("How do you know they agreed?")} htmlFor="cm-basis" required hint={tr("For example: signed up at the spring fair, 3 May 2026. It is saved on each contact as the attribute {BASIS_KEY}, next to who added them and when.", { BASIS_KEY })}>
           <textarea id="cm-basis" className="textarea" rows={3} value={consent.basis} maxLength={500} onChange={(e) => onChange({ mode: "agreed", basis: e.target.value })} />
         </Field>
       )}
@@ -266,11 +266,11 @@ function ConsentStep({ consent, onChange }: { consent: Consent; onChange: (c: Co
 }
 
 const FATE: Record<Checked["fate"], { label: string; tone: "green" | "neutral" | "amber" | "red" }> = {
-  new: { label: "New", tone: "green" },
-  known: { label: "Already a contact", tone: "neutral" },
-  suppressed: { label: "Blocked", tone: "amber" },
-  duplicate: { label: "Repeated", tone: "neutral" },
-  invalid: { label: "Cannot import", tone: "red" },
+  new: { get label() { return tr("New"); }, tone: "green" },
+  known: { get label() { return tr("Already a contact"); }, tone: "neutral" },
+  suppressed: { get label() { return tr("Blocked"); }, tone: "amber" },
+  duplicate: { get label() { return tr("Repeated"); }, tone: "neutral" },
+  invalid: { get label() { return tr("Cannot import"); }, tone: "red" },
 };
 
 /** Step 4: who is new, and who is not, against the contacts and the suppression list as they are now. */
@@ -279,7 +279,7 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
   if (!checked) {
     return (
       <div className="stack" style={{ gap: 10 }} role="status">
-        <p>{tr("Checking")} {count(progress.total)} {tr("addresses against your contacts and the suppression list…")}</p>
+        <p>{tr("Checking")} {isolate(count(progress.total))} {tr("addresses against your contacts and the suppression list…")}</p>
         <Bar value={rate(progress.done, progress.total)} label={tr("Checked so far")} />
       </div>
     );
@@ -292,30 +292,30 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
       <dl className="cm-tiles">
         <div className="cm-tile">
           <dt>{tr("Will be added")}</dt>
-          <dd className="cm-tile-value">{count(adds)}</dd>
-          <dd className="cm-tile-note faint">{consent.mode === "agreed" ? "As subscribed contacts." : "As unsubscribed, on the suppression list."}</dd>
+          <dd className="cm-tile-value">{isolate(count(adds))}</dd>
+          <dd className="cm-tile-note faint">{consent.mode === "agreed" ? tr("As subscribed contacts.") : tr("As unsubscribed, on the suppression list.")}</dd>
         </div>
         <div className="cm-tile">
           <dt>{tr("Already contacts")}</dt>
-          <dd className="cm-tile-value">{count(t.known)}</dd>
-          <dd className="cm-tile-note faint">{consent.mode === "optout" ? "Unsubscribed if they are not already." : "Left exactly as they are."}</dd>
+          <dd className="cm-tile-value">{isolate(count(t.known))}</dd>
+          <dd className="cm-tile-note faint">{consent.mode === "optout" ? tr("Unsubscribed if they are not already.") : tr("Left exactly as they are.")}</dd>
         </div>
         <div className="cm-tile">
           <dt>{tr("Blocked")}</dt>
-          <dd className="cm-tile-value">{count(t.suppressed)}</dd>
+          <dd className="cm-tile-value">{isolate(count(t.suppressed))}</dd>
           <dd className="cm-tile-note faint">{tr("On the suppression list, so not added.")}</dd>
         </div>
         <div className="cm-tile">
           <dt>{tr("Left out")}</dt>
-          <dd className="cm-tile-value">{count(t.invalid + t.duplicate)}</dd>
+          <dd className="cm-tile-value">{isolate(count(t.invalid + t.duplicate))}</dd>
           <dd className="cm-tile-note faint">
-            {count(t.invalid)} {tr("not valid,")} {count(t.duplicate)} {tr("repeated in the file.")}
+            {isolate(count(t.invalid))} {tr("not valid,")} {isolate(count(t.duplicate))} {tr("repeated in the file.")}
           </dd>
         </div>
       </dl>
       {attention.length > 0 && (
         <div>
-          <h3 className="cm-sample-title">{checked.filter((c) => c.fate !== "new").length > attention.length ? "The first 20 that need a look" : "Rows that need a look"}</h3>
+          <h3 className="cm-sample-title">{checked.filter((c) => c.fate !== "new").length > attention.length ? tr("The first 20 that need a look") : tr("Rows that need a look")}</h3>
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -331,7 +331,7 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
                     <td className="num">{c.line}</td>
                     <td>{c.email || <span className="faint">{tr("(none)")}</span>}</td>
                     <td>
-                      <Badge tone={FATE[c.fate].tone}>{FATE[c.fate].label}</Badge> <span className="muted">{c.why}</span>
+                      <Badge tone={FATE[c.fate].tone}>{isolate(FATE[c.fate].label)}</Badge> <span className="muted">{isolate(c.why ?? "")}</span>
                     </td>
                   </tr>
                 ))}
@@ -357,7 +357,7 @@ interface Outcome {
 }
 
 export function Import() {
-  useShellTitle("Import contacts");
+  useShellTitle(tr("Import contacts"));
   const meta = useEntityMeta("MarketingContact");
   const [step, setStep] = useState<Step>(0);
   const [reached, setReached] = useState<Step>(0);
@@ -503,7 +503,7 @@ export function Import() {
               {table ? (
                 <div className="stack" style={{ gap: 14 }}>
                   <p>
-                    <strong>{name}</strong>: {noun(table.rows.length, "row")}, {noun(table.headers.length, "column")}.{" "}
+                    <strong>{isolate(name)}</strong>: {isolate(noun(table.rows.length, "row"))}, {isolate(noun(table.headers.length, "column"))}.{isolate(" ")}
                     <button type="button" className="link-btn" onClick={() => (setTable(null), setMapping([]), setChecked(null))}>
                       {tr("Choose another")}
                     </button>
@@ -548,26 +548,26 @@ export function Import() {
                   disabled={!checked || (tally(checked).new === 0 && !(consent.mode === "optout" && tally(checked).known > 0))}
                   onClick={() => void run()}
                 >
-                  {checked ? `Import ${people(tally(checked).new + (consent.mode === "optout" ? tally(checked).known : 0))}` : "Import"}
+                  {checked ? tr("Import {value}", { value: people(tally(checked).new + (consent.mode === "optout" ? tally(checked).known : 0)) }) : tr("Import")}
                 </Button>
               </div>
             </>
           )}
           {step === 4 && outcome && (
             <>
-              <h2 className="cm-wizard-title">{outcome.finished ? (outcome.stopped ? "Stopped" : outcome.error ? "Stopped by a problem" : "Done") : "Importing…"}</h2>
+              <h2 className="cm-wizard-title">{outcome.finished ? (outcome.stopped ? tr("Stopped") : outcome.error ? tr("Stopped by a problem") : tr("Done")) : tr("Importing…")}</h2>
               <div className="stack" style={{ gap: 14 }}>
                 <Bar value={rate(outcome.done, outcome.total)} label={tr("Imported so far")} />
                 <p role="status" aria-live="polite">
-                  {count(outcome.done)} of {count(outcome.total)} handled: <strong>{count(outcome.added)}</strong> added
+                  {tr("{value} of {value2} handled:", { value: count(outcome.done), value2: count(outcome.total) })} <strong>{isolate(count(outcome.added))}</strong> {tr("added")}
                   {outcome.unsubscribed > 0 && (
                     <>
-                      , <strong>{count(outcome.unsubscribed)}</strong> unsubscribed
+                      , <strong>{isolate(count(outcome.unsubscribed))}</strong> {tr("unsubscribed")}
                     </>
                   )}
                   {outcome.refused.length > 0 && (
                     <>
-                      , <strong>{count(outcome.refused.length)}</strong> refused
+                      , <strong>{isolate(count(outcome.refused.length))}</strong> {tr("refused")}
                     </>
                   )}
                   . {outcome.total > 0 && !outcome.finished ? `${percent(rate(outcome.done, outcome.total))}` : ""}
@@ -588,8 +588,8 @@ export function Import() {
                         {outcome.refused.slice(0, 20).map((r, i) => (
                           <tr key={i}>
                             <td className="num">{r.line || ""}</td>
-                            <td>{r.email}</td>
-                            <td className="muted">{r.why}</td>
+                            <td>{isolate(r.email)}</td>
+                            <td className="muted">{isolate(r.why)}</td>
                           </tr>
                         ))}
                       </tbody>

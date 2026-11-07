@@ -12,7 +12,7 @@ import { size } from "./format";
 import { attributeTag, BLOCKS, MERGE_TAGS, STARTER, UNSUBSCRIBE, validKey } from "./snippets";
 import type { Draft } from "./useDraft";
 import { insertInto } from "./ui";
-import { t as tr } from "@ferrum/client";
+import { t as tr, isolate } from "@ferrum/client";
 
 interface Template {
   id: string;
@@ -41,8 +41,8 @@ function Templates({ onPick, onClose }: { onPick: (t: Template) => void; onClose
           {q.data.rows.map((t) => (
             <li key={t.id}>
               <div>
-                <strong>{t.template_name}</strong>
-                <div className="muted">{t.subject}</div>
+                <strong>{isolate(t.template_name)}</strong>
+                <div className="muted">{isolate(t.subject)}</div>
               </div>
               <Button size="sm" onClick={() => onPick(t)}>
                 {tr("Use")}
@@ -106,7 +106,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
 
   const applyTemplate = async (t: Template) => {
     const filled = (doc.content ?? "").trim() && doc.content !== STARTER;
-    if (filled && !(await confirmDialog({ title: "Replace the content?", message: `“${t.template_name}” replaces what you have written for the email. The subject stays unless it is empty.`, confirmLabel: "Replace" }))) return;
+    if (filled && !(await confirmDialog({ title: tr("Replace the content?"), message: tr("“{template_name}” replaces what you have written for the email. The subject stays unless it is empty.", { template_name: t.template_name }), confirmLabel: tr("Replace") }))) return;
     set("content", t.body);
     if (!(doc.subject ?? "").trim()) set("subject", t.subject);
     setVersion("main");
@@ -133,17 +133,17 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
                   <>
                     {MERGE_TAGS.map((t) => (
                       <MenuItem key={t.id} onSelect={() => (close(), insert(t.code))}>
-                        {t.label}
+                        {isolate(t.label)}
                       </MenuItem>
                     ))}
                     <MenuItem onSelect={() => (close(), setDialog("attribute"))}>{tr("An attribute…")}</MenuItem>
-                    {!text && <MenuItem onSelect={() => (close(), insert(UNSUBSCRIBE.code))}>{UNSUBSCRIBE.label}</MenuItem>}
+                    {!text && <MenuItem onSelect={() => (close(), insert(UNSUBSCRIBE.code))}>{isolate(UNSUBSCRIBE.label)}</MenuItem>}
                   </>
                 )}
               </Menu>
               {!text && (
                 <Menu label={tr("Blocks")} icon="plus" ariaLabel="Insert a block of HTML" buttonClass="btn btn-default btn-sm">
-                  {(close) => BLOCKS.map((b) => <MenuItem key={b.id} onSelect={() => (close(), insert(b.code))}>{b.label}</MenuItem>)}
+                  {(close) => BLOCKS.map((b) => <MenuItem key={b.id} onSelect={() => (close(), insert(b.code))}>{isolate(b.label)}</MenuItem>)}
                 </Menu>
               )}
               <Button size="sm" icon="file" onClick={() => setDialog("templates")}>
@@ -156,7 +156,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
             <select className="select cm-version" aria-label={tr("Which version you are writing")} value={onVariant ? version : "main"} onChange={(e) => (setVersion(e.target.value), setFormat("html"))}>
               <option value="main">{tr("All versions")}</option>
               {variants.map((v) => (
-                <option key={v.id ?? v.variant} value={v.variant ?? ""}>{`Version ${v.variant ?? "?"} only`}</option>
+                <option key={v.id ?? v.variant} value={v.variant ?? ""}>{tr("Version {value} only", { value: v.variant ?? "?" })}</option>
               ))}
             </select>
           )}
@@ -164,7 +164,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
             <button type="button" aria-pressed={!text} onClick={() => setFormat("html")}>
               {tr("HTML")}
             </button>
-            <button type="button" aria-pressed={text} disabled={onVariant} title={onVariant ? "A version with its own content makes its plain text from its HTML" : undefined} onClick={() => setFormat("text")}>
+            <button type="button" aria-pressed={text} disabled={onVariant} title={onVariant ? tr("A version with its own content makes its plain text from its HTML") : undefined} onClick={() => setFormat("text")}>
               {tr("Plain text")}
             </button>
           </div>
@@ -172,7 +172,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
         {onVariant && <p className="cm-hint muted">{tr("Only version {version} gets this content. Leave it empty and it uses the content of all versions.", { version })}</p>}
         {text && <p className="cm-hint muted">{tr("The plain text some mail programs show instead. Leave it empty and it is made from the HTML, with the links kept.")}</p>}
         <label className="sr-only" htmlFor="cm-editor">
-          {text ? "Plain text of the email" : onVariant ? `HTML of version ${version}` : "HTML of the email"}
+          {text ? tr("Plain text of the email") : onVariant ? tr("HTML of version {version}", { version }) : tr("HTML of the email")}
         </label>
         <textarea
           id="cm-editor"
@@ -183,7 +183,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
           disabled={!editable}
           aria-invalid={problems.length > 0 || undefined}
           aria-describedby="cm-editor-help"
-          placeholder={onVariant ? "Empty: this version uses the content of all versions" : text ? "Empty: made from the HTML" : "<p>Write your email here…</p>"}
+          placeholder={onVariant ? tr("Empty: this version uses the content of all versions") : text ? tr("Empty: made from the HTML") : "<p>Write your email here…</p>"}
           onChange={(e) => write(e.target.value)}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -194,11 +194,11 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
         />
         {problems.map((m) => (
           <p key={m} className="field-error cm-editor-error">
-            {m}
+            {isolate(m)}
           </p>
         ))}
         <p className="cm-hint faint" id="cm-editor-help">
-          {size(bytes)}{tr(". Use")} {"{{ contact.first_name }}"} {tr("for what changes with each person. Unless the content has")} {"{{ unsubscribe_url }}"}{tr(", an unsubscribe link and your postal address are added at the bottom.")}
+          {isolate(size(bytes))}{tr(". Use")} {isolate("{{ contact.first_name }}")} {tr("for what changes with each person. Unless the content has")} {isolate("{{ unsubscribe_url }}")}{tr(", an unsubscribe link and your postal address are added at the bottom.")}
         </p>
       </section>
       <section className="cm-see" aria-label={tr("Preview")}>

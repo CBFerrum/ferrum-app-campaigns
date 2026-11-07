@@ -5,7 +5,7 @@ import { Icon } from "@ferrum/kit";
 import { clock } from "./format";
 import { insertAt } from "./snippets";
 import type { Draft } from "./useDraft";
-import { t } from "@ferrum/client";
+import { t, isolate } from "@ferrum/client";
 
 /** A thin bar for a share of something (a send's progress, a link's clicks). `value` is 0 to 100. */
 export function Bar({ value, label, tone }: { value: number | null; label: string; tone?: "primary" | "muted" }) {
@@ -23,23 +23,23 @@ export function SaveLine({ draft, editable }: { draft: Draft; editable: boolean 
   const s = draft.status;
   const text =
     s === "saving"
-      ? "Saving…"
+      ? t("Saving…")
       : s === "unsaved"
-        ? "Saving in a moment…"
+        ? t("Saving in a moment…")
         : s === "waiting"
-          ? (draft.message ?? "Not saved yet")
+          ? (draft.message ?? t("Not saved yet"))
           : s === "error"
-            ? `Not saved: ${draft.message ?? "something went wrong"}`
+            ? t("Not saved: {value}", { value: draft.message ?? "something went wrong" })
             : s === "conflict"
-              ? "Not saved: someone else changed this"
+              ? t("Not saved: someone else changed this")
               : draft.savedAt
-                ? `Saved ${clock(draft.savedAt)}`
-                : "All changes saved";
+                ? t("Saved {value}", { value: clock(draft.savedAt) })
+                : t("All changes saved");
   const bad = s === "error" || s === "conflict";
   return (
     <span className={`cm-save${bad ? " cm-save-bad" : ""}`} role="status" aria-live="polite">
       {s === "saved" && <Icon name="check" size={13} />}
-      {text}
+      {isolate(text)}
       {s === "error" && (
         <button type="button" className="link-btn" onClick={() => void draft.save()}>
           {t("Try again")}
@@ -54,7 +54,7 @@ export function Section({ title, aside, children, id }: { title: string; aside?:
   return (
     <section className="card cm-section" aria-labelledby={id}>
       <header className="card-head">
-        <h2 id={id}>{title}</h2>
+        <h2 id={id}>{isolate(title)}</h2>
         {aside && <div className="cm-aside">{aside}</div>}
       </header>
       <div className="card-body">{children}</div>

@@ -6,7 +6,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { api, docPath, errorMessage, humanize, t as tr } from "@ferrum/client";
+import { api, docPath, errorMessage, humanize, t as tr, isolate } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, Dialog, ErrorState, Icon, Menu, MenuItem, PageLoading, TabPanel, Tabs, toast, useShellTitle } from "@ferrum/kit";
 import { can, CollabPanel, type EntityMeta, useEntityMeta } from "@ferrum/records";
 import { audienceForSave, type Campaign, defaultTab, isTab, type Tab, tone, whenLine } from "./campaign";
@@ -72,16 +72,16 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const stop = async () => {
     const sending = doc.status === "Sending";
     const ok = await confirmDialog({
-      title: sending ? "Stop sending?" : "Cancel this send?",
-      message: sending ? "Emails still waiting will not go out. Emails that have already gone cannot be taken back." : "It will not be sent. You can amend it afterwards to start again from a copy.",
-      confirmLabel: sending ? "Stop sending" : "Cancel the send",
-      cancelLabel: "Keep it",
+      title: sending ? tr("Stop sending?") : tr("Cancel this send?"),
+      message: sending ? tr("Emails still waiting will not go out. Emails that have already gone cannot be taken back.") : tr("It will not be sent. You can amend it afterwards to start again from a copy."),
+      confirmLabel: sending ? tr("Stop sending") : tr("Cancel the send"),
+      cancelLabel: tr("Keep it"),
       danger: true,
     });
     if (!ok) return;
     try {
       refresh(await api.post<Campaign>(docPath("EmailCampaign", id, "cancel"), undefined, { ifMatch: doc.version }));
-      toast(sending ? "Stopped" : "Cancelled");
+      toast(sending ? tr("Stopped") : tr("Cancelled"));
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -106,7 +106,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
     }
   };
   const remove = async () => {
-    const ok = await confirmDialog({ title: `Delete “${doc.campaign_name}”?`, message: "It is deleted for good. Nothing was sent.", confirmLabel: "Delete", danger: true });
+    const ok = await confirmDialog({ title: tr("Delete “{campaign_name}”?", { campaign_name: doc.campaign_name }), message: tr("It is deleted for good. Nothing was sent."), confirmLabel: tr("Delete"), danger: true });
     if (!ok) return;
     try {
       await api.del(docPath("EmailCampaign", id), { ifMatch: doc.version });
@@ -126,8 +126,8 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const tabs = [
     { id: "setup", label: <>{tr("Setup")}{failed.setup > 0 && <span className="tab-errors">{failed.setup}</span>}</> },
     { id: "content", label: <>{tr("Content")}{failed.content > 0 && <span className="tab-errors">{failed.content}</span>}</> },
-    { id: "review", label: <>{tr("Review")}{doc.status === "Draft" && canSubmit ? " and send" : ""}</> },
-    { id: "results", label: "Results" },
+    { id: "review", label: <>{tr("Review")}{doc.status === "Draft" && canSubmit ? tr(" and send") : ""}</> },
+    { id: "results", label: tr("Results") },
   ];
 
   return (
@@ -140,15 +140,15 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
         <div className="cm-camp-bar">
           <div className="cm-camp-title">
             <div className="cm-camp-name">
-              <h1 className="page-title">{doc.campaign_name || "Untitled campaign"}</h1>
-              <Badge tone={tone(doc.status)}>{doc.status}</Badge>
+              <h1 className="page-title">{doc.campaign_name || tr("Untitled campaign")}</h1>
+              <Badge tone={tone(doc.status)}>{isolate(doc.status)}</Badge>
               {doc.ab_test && <Badge tone="purple">{tr("A/B test")}</Badge>}
             </div>
             <p className="page-sub">
-              {[doc.number, whenLine(doc)].filter(Boolean).join(" · ")}
+              {isolate([doc.number, whenLine(doc)].filter(Boolean).join(" · "))}
               {editable && (
                 <>
-                  {" · "}
+                  {isolate(" · ")}
                   <SaveLine draft={draft} editable />
                 </>
               )}
@@ -162,7 +162,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             )}
             {scheduledOrOn && canCancel && (
               <Button variant="danger" onClick={() => void stop()}>
-                {doc.status === "Sending" ? "Stop sending" : "Cancel the send"}
+                {doc.status === "Sending" ? tr("Stop sending") : tr("Cancel the send")}
               </Button>
             )}
             {doc.status === "Sent" && canCreate && (
@@ -180,7 +180,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             )}
             {editable && tab !== "review" && (
               <Button variant="primary" onClick={() => go("review")}>
-                {canSubmit ? "Review and send" : "Review"}
+                {canSubmit ? tr("Review and send") : tr("Review")}
               </Button>
             )}
             <Menu ariaLabel="More" icon="chevronDown" buttonClass="icon-btn">
@@ -213,13 +213,13 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             </div>
           }
         >
-          <strong>{tr("Someone else changed this campaign.")}</strong> {tr("You both changed")} {draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : "it"}{tr(". Keep what you wrote on top of theirs, or use theirs and lose your changes.")}
+          <strong>{tr("Someone else changed this campaign.")}</strong> {tr("You both changed")} {draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : tr("it")}{tr(". Keep what you wrote on top of theirs, or use theirs and lose your changes.")}
         </Alert>
       )}
       {!editable && doc.docstatus === 0 && <Alert tone="info">{tr("You can look at this campaign but not change it.")}</Alert>}
       {doc.docstatus === 1 && (tab === "setup" || tab === "content") && (
         <Alert tone="info" action={canCreate ? <Button onClick={() => void duplicate()}>{tr("Duplicate to change it")}</Button> : undefined}>
-          {doc.status === "Scheduled" ? "It is scheduled, so it can no longer be edited. Cancel the send to stop it, or duplicate it to change a copy." : "It has gone out, so it can no longer be edited."}
+          {doc.status === "Scheduled" ? tr("It is scheduled, so it can no longer be edited. Cancel the send to stop it, or duplicate it to change a copy.") : tr("It has gone out, so it can no longer be edited.")}
         </Alert>
       )}
 
