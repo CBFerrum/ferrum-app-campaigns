@@ -131,9 +131,9 @@ export function abStanding(
   now = Date.now(),
 ): string {
   if (c.winner_variant) return t("Version {winner_variant} won and went to everyone else.", { winner_variant: c.winner_variant });
-  if (!c.test_sent_at) return "Waiting for every test email to go out. Then the clock for the winner starts.";
+  if (!c.test_sent_at) return t("Waiting for every test email to go out. Then the clock for the winner starts.");
   const left = (new Date(c.test_sent_at).getTime() + (c.winner_after_hours ?? 4) * 3_600_000 - now) / 3_600_000;
-  return left > 0 ? t("The winner is chosen in {left}.", { left: span(left) }) : "The winner is chosen at the next round, within a minute.";
+  return left > 0 ? t("The winner is chosen in {left}.", { left: span(left) }) : t("The winner is chosen at the next round, within a minute.");
 }
 
 export interface LinkRow {

@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { api, docPath, errorMessage, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast, placed } from "@ferrum/kit";
 import { type Campaign, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
 import { clock, count, fromLocalInput, moment, toLocalInput, zoneName } from "./format";
@@ -45,7 +45,7 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
     >
       <div className="cm-reach">
         <p className="cm-reach-figure" aria-live="polite">
-          <span className="cm-reach-number">{isolate(count(check.mailable))}</span> <span className="cm-reach-unit">{check.mailable === 1 ? tr("person") : tr("people")} {tr("will get this email")}</span>
+          <span className="cm-reach-number">{isolate(count(check.mailable))}</span> <span className="cm-reach-unit">{(check.mailable === 1 ? tr("person will get this email") : tr("people will get this email"))}</span>
         </p>
         <Split check={check} />
         {reasons.length > 0 ? (
@@ -99,16 +99,16 @@ function Reach({ check, fetching, onAgain }: { check: AudienceCheck; fetching: b
       )}
       {check.new_contacts > 0 && (
         <p className="cm-note muted">
-          {isolate((check.new_contacts === 1 ? tr("1 person") : tr("{n} people", { n: count(check.new_contacts) })))} {tr("in your email groups")} {check.new_contacts === 1 ? tr("is") : tr("are")} {tr("not marketing contacts yet. Starting the campaign adds them as subscribed.")}
+          {placed(tr("{p1} in your email groups {p2} not marketing contacts yet. Starting the campaign adds them as subscribed."), { p1: isolate((check.new_contacts === 1 ? tr("1 person") : tr("{n} people", { n: count(check.new_contacts) }))), p2: check.new_contacts === 1 ? tr("is") : tr("are") })}
         </p>
       )}
       {check.split && (
         <p className="cm-note muted">
-          {tr("A/B test:")} {isolate((check.split.test === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.test) })))} {tr("get the {variants} versions first,", { variants: check.split.variants })} {isolate((check.split.rest === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.rest) })))} {tr("get the winner later.")}
+          {placed(tr("A/B test: {p1} get the {variants} versions first, {p2} get the winner later."), { p1: isolate((check.split.test === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.test) }))), variants: check.split.variants, p2: isolate((check.split.rest === 1 ? tr("1 person") : tr("{n} people", { n: count(check.split.rest) }))) })}
         </p>
       )}
       <p className="cm-note faint">
-        {tr("Counted")} {isolate(clock(check.checked_at))}{tr(", the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little.")}
+        {placed(tr("Counted {p1}, the way sending counts. The segments are worked out again when the campaign starts: people who join them by then are added, and anyone who has unsubscribed or asked us to restrict how their data is used is skipped. So the final number can differ a little."), { p1: isolate(clock(check.checked_at)) })}
       </p>
     </Section>
   );
@@ -198,7 +198,7 @@ export function ReviewTab({
   if (doc.status === "Sending" || doc.status === "Sent" || doc.status === "Cancelled") {
     return (
       <Alert tone="info" action={<Button onClick={() => go("results")}>{tr("See the results")}</Button>}>
-        {doc.status === "Cancelled" ? tr("This campaign was cancelled.") : tr("This campaign has been sent.")} {tr("Who it reached is on the results tab.")}
+        {(doc.status === "Cancelled" ? tr("This campaign was cancelled. Who it reached is on the results tab.") : tr("This campaign has been sent. Who it reached is on the results tab."))}
       </Alert>
     );
   }
@@ -210,13 +210,13 @@ export function ReviewTab({
     setProblem(null);
     try {
       const saved = await draft.save();
-      if (!saved) throw new Error("The campaign could not be saved yet. Fix what is marked first.");
+      if (!saved) throw new Error(tr("The campaign could not be saved yet. Fix what is marked first."));
       // The numbers a person confirms are the ones of this moment.
       const fresh = await checkAudience(saved.id);
       qc.setQueryData(checkKey(saved.id, saved.version), fresh);
       const found = findings(fresh, saved);
       if (!canSend(found)) {
-        setProblem("Something has changed since you looked, and it stops the send. The list above shows what.");
+        setProblem(tr("Something has changed since you looked, and it stops the send. The list above shows what."));
         return;
       }
       const moved = changedSince(check?.mailable ?? fresh.mailable, fresh.mailable);
@@ -230,7 +230,7 @@ export function ReviewTab({
               <strong>{isolate(saved.subject)}</strong>
               <br />
               <span className="muted">
-                {at ? tr("Goes out from {at}.", { at: moment(at) }) : tr("Starts within a minute.")} {tr("It leaves at up to")} {isolate((fresh.rate.per_hour === 1 ? tr("1 email") : tr("{n} emails", { n: count(fresh.rate.per_hour) })))} {tr("an hour.")}
+                {((emails: string) => (at ? tr("Goes out from {at}. It leaves at up to {emails} an hour.", { at: moment(at), emails }) : tr("Starts within a minute. It leaves at up to {emails} an hour.", { emails })))(fresh.rate.per_hour === 1 ? tr("1 email") : tr("{n} emails", { n: count(fresh.rate.per_hour) }))}
               </span>
             </p>
             <p className="muted">

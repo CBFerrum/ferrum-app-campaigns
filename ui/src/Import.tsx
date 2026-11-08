@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api, errorMessage, saveBlob, shell, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle } from "@ferrum/kit";
+import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle, placed } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { list } from "./data";
 import { count, percent, rate, size } from "./format";
@@ -108,7 +108,7 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
   const [pasted, setPasted] = useState("");
   const read = (text: string, name: string) => {
     const t = readTable(text);
-    if (!t.rows.length) return setProblem("There is nothing to import in it: no rows below the first line.");
+    if (!t.rows.length) return setProblem(tr("There is nothing to import in it: no rows below the first line."));
     if (t.rows.length > MAX_ROWS) return setProblem(tr("It has {value} rows. Import at most {MAX_ROWS} at a time: split the file and import the parts one after the other.", { value: count(t.rows.length), MAX_ROWS: count(MAX_ROWS) }));
     setProblem(null);
     onTable(t, name);
@@ -119,7 +119,7 @@ function Source({ onTable }: { onTable: (t: Table, name: string) => void }) {
     try {
       read(await f.text(), f.name);
     } catch {
-      setProblem("The file could not be read.");
+      setProblem(tr("The file could not be read."));
     }
   };
   return (
@@ -279,7 +279,7 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
   if (!checked) {
     return (
       <div className="stack" style={{ gap: 10 }} role="status">
-        <p>{tr("Checking")} {isolate(count(progress.total))} {tr("addresses against your contacts and the suppression list…")}</p>
+        <p>{placed(tr("Checking {p1} addresses against your contacts and the suppression list…"), { p1: isolate(count(progress.total)) })}</p>
         <Bar value={rate(progress.done, progress.total)} label={tr("Checked so far")} />
       </div>
     );
@@ -309,7 +309,7 @@ function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Ch
           <dt>{tr("Left out")}</dt>
           <dd className="cm-tile-value">{isolate(count(t.invalid + t.duplicate))}</dd>
           <dd className="cm-tile-note faint">
-            {isolate(count(t.invalid))} {tr("not valid,")} {isolate(count(t.duplicate))} {tr("repeated in the file.")}
+            {placed(tr("{p1} not valid, {p2} repeated in the file."), { p1: isolate(count(t.invalid)), p2: isolate(count(t.duplicate)) })}
           </dd>
         </div>
       </dl>
@@ -442,7 +442,7 @@ export function Import() {
         if (stop.current) break;
         const r = await api.post<{ succeeded: number; results: { id: string; ok: boolean; error?: { message?: string } }[] }>("/api/v1/MarketingContact/_bulk", { ids: group, op: "update", values: { consent_status: "Unsubscribed" } });
         o.unsubscribed += r.succeeded;
-        for (const f of r.results.filter((x) => !x.ok)) o.refused.push({ line: 0, email: [...known.entries()].find(([, k]) => k.id === f.id)?.[0] ?? "", why: f.error?.message ?? "Could not be unsubscribed" });
+        for (const f of r.results.filter((x) => !x.ok)) o.refused.push({ line: 0, email: [...known.entries()].find(([, k]) => k.id === f.id)?.[0] ?? "", why: f.error?.message ?? tr("Could not be unsubscribed") });
         o.done += group.length;
         setOutcome({ ...o });
       }
@@ -459,7 +459,7 @@ export function Import() {
       ...(checked ?? []).filter((c) => c.fate !== "new").map((c) => [String(c.line), c.email, c.why ?? ""]),
       ...(outcome?.refused ?? []).map((r) => [r.line ? String(r.line) : "", r.email, r.why]),
     ];
-    saveBlob(new Blob(["﻿" + toCsv(["Line", "Email", "Why it was not imported"], rows)], { type: "text/csv;charset=utf-8" }), "not-imported.csv");
+    saveBlob(new Blob(["﻿" + toCsv([tr("Line"), tr("Email"), tr("Why it was not imported")], rows)], { type: "text/csv;charset=utf-8" }), "not-imported.csv");
   };
 
   if (meta.error) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
@@ -559,17 +559,15 @@ export function Import() {
               <div className="stack" style={{ gap: 14 }}>
                 <Bar value={rate(outcome.done, outcome.total)} label={tr("Imported so far")} />
                 <p role="status" aria-live="polite">
-                  {tr("{value} of {value2} handled:", { value: count(outcome.done), value2: count(outcome.total) })} <strong>{isolate(count(outcome.added))}</strong> {tr("added")}
-                  {outcome.unsubscribed > 0 && (
+                  {placed(tr("{value} of {value2} handled: {p1} added{p2}{p3}"), { value: count(outcome.done), value2: count(outcome.total), p1: <strong>{isolate(count(outcome.added))}</strong>, p2: outcome.unsubscribed > 0 && (
                     <>
                       , <strong>{isolate(count(outcome.unsubscribed))}</strong> {tr("unsubscribed")}
                     </>
-                  )}
-                  {outcome.refused.length > 0 && (
+                  ), p3: outcome.refused.length > 0 && (
                     <>
                       , <strong>{isolate(count(outcome.refused.length))}</strong> {tr("refused")}
                     </>
-                  )}
+                  ) })}
                   . {outcome.total > 0 && !outcome.finished ? `${percent(rate(outcome.done, outcome.total))}` : ""}
                 </p>
                 {outcome.error && <Alert tone="error">{tr("{error} What was added before the problem stays added; running the file again skips those people.", { error: outcome.error })}</Alert>}

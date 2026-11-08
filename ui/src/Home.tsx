@@ -41,7 +41,7 @@ function Item({ row, canCreate, canDelete, onDuplicate, onDelete }: { row: Row; 
         </div>
         <div className="cm-item-subject muted">{isolate(row.subject)}</div>
         <div className="cm-item-when faint">
-          {isolate([row.status === "Draft" && row.updated_at ? `Edited ${relativeTime(row.updated_at)}` : whenLine(row), row.number].filter(Boolean).join(" · "))}
+          {isolate([row.status === "Draft" && row.updated_at ? t("Edited {updated_at}", { updated_at: relativeTime(row.updated_at) }) : whenLine(row), row.number].filter(Boolean).join(" · "))}
         </div>
       </div>
       {hasResults(row) && (

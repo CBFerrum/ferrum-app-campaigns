@@ -152,7 +152,7 @@ export const BASIS_KEY = "consent_basis";
 /** What is wrong with a mapping as a whole, in words. */
 export function mappingProblems(mapping: Mapping, headers: string[]): string[] {
   const out: string[] = [];
-  if (!mapping.some((t) => t.kind === "email")) out.push("Choose which column holds the email address.");
+  if (!mapping.some((t) => t.kind === "email")) out.push(tr("Choose which column holds the email address."));
   const seen = new Map<string, string>();
   mapping.forEach((t, i) => {
     if (t.kind === "skip") return;
@@ -208,8 +208,8 @@ export function readContacts(table: Pick<Table, "rows" | "lines">, mapping: Mapp
       return c < 0 ? "" : (cells[c] ?? "").trim();
     };
     const email = cell("email").toLowerCase();
-    if (!email) return { line, contact: null, problem: "No email address" };
-    if (!validAddress(email)) return { line, contact: null, problem: "Not a valid email address" };
+    if (!email) return { line, contact: null, problem: tr("No email address") };
+    if (!validAddress(email)) return { line, contact: null, problem: tr("Not a valid email address") };
     const named = cell("first_name") || cell("last_name") ? { first_name: cell("first_name") || undefined, last_name: cell("last_name") || undefined } : splitName(cell("full_name"));
     for (const [what, v] of [["First name", named.first_name], ["Last name", named.last_name]] as const) {
       if (v && v.length > NAME_MAX) return { line, contact: null, problem: tr("{what} is longer than {NAME_MAX} characters", { what, NAME_MAX }) };
@@ -249,8 +249,8 @@ export function classify(read: Read[], known: Set<string>, suppressed: Set<strin
     const before = first.get(email);
     if (before !== undefined) return { line: r.line, email, fate: "duplicate", why: tr("Same address as line {before}", { before }), contact: r.contact };
     first.set(email, r.line);
-    if (known.has(email)) return { line: r.line, email, fate: "known", why: "Already a contact", contact: r.contact };
-    if (suppressed.has(email)) return { line: r.line, email, fate: "suppressed", why: "On the suppression list: not added", contact: r.contact };
+    if (known.has(email)) return { line: r.line, email, fate: "known", why: tr("Already a contact"), contact: r.contact };
+    if (suppressed.has(email)) return { line: r.line, email, fate: "suppressed", why: tr("On the suppression list: not added"), contact: r.contact };
     return { line: r.line, email, fate: "new", contact: r.contact };
   });
 }
@@ -299,7 +299,7 @@ export interface Refusal {
 /** What the server said about a row it refused, in a sentence. */
 export function reason(r: Refusal): string {
   if (r.fields?.length) return r.fields.map((f) => f.message).join("; ");
-  if (r.error === "conflict") return "Already a contact";
+  if (r.error === "conflict") return tr("Already a contact");
   return r.message ?? r.error;
 }
 

@@ -10,7 +10,7 @@ import { Alert, Button, EmptyState, ErrorState, Field, PageLoading, useShellTitl
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import type { AudienceRow, Campaign } from "./campaign";
 import { AudienceRows } from "./Setup";
-import { STARTER } from "./snippets";
+import { starter } from "./snippets";
 
 export function NewCampaign() {
   useShellTitle(t("New campaign"));
@@ -29,7 +29,7 @@ export function NewCampaign() {
         subject: subject.trim() || undefined,
         audience: audience.filter((r) => r.segment || r.email_group).map((r) => ({ segment: r.segment ?? null, email_group: r.email_group ?? null, exclude: !!r.exclude })),
         // A template fills what is blank; without one the email starts from a layout to write over.
-        ...(template ? { email_template: template.id } : { content: STARTER }),
+        ...(template ? { email_template: template.id } : { content: starter() }),
       }),
     onSuccess: (made) => navigate(`/c/${made.id}?tab=content`, { replace: true }),
   });

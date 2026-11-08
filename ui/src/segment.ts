@@ -131,33 +131,33 @@ export interface Problem {
 
 /** What is wrong with a rule that the server would refuse; null when it is fine. */
 export function problem(r: Rule): Problem | null {
-  if (!operatorsFor(r).includes(r.operator)) return { field: "operator", message: "Choose how to compare" };
+  if (!operatorsFor(r).includes(r.operator)) return { field: "operator", message: t("Choose how to compare") };
   const value = (r.value ?? "").trim();
   switch (r.rule_type) {
     case "Contact Field":
-      if (!r.field) return { field: "field", message: "Choose a detail" };
+      if (!r.field) return { field: "field", message: t("Choose a detail") };
       break;
     case "Attribute":
-      if (!validKey((r.attribute ?? "").trim())) return { field: "attribute", message: "Use lowercase letters, digits and _, starting with a letter" };
+      if (!validKey((r.attribute ?? "").trim())) return { field: "attribute", message: t("Use lowercase letters, digits and _, starting with a letter") };
       break;
     case "Email Group":
-      return r.email_group ? null : { field: "email_group", message: "Choose an email group" };
+      return r.email_group ? null : { field: "email_group", message: t("Choose an email group") };
     default: {
-      if (!r.activity) return { field: "activity", message: "Choose what they did" };
+      if (!r.activity) return { field: "activity", message: t("Choose what they did") };
       const days = Number(r.within_days);
-      return Number.isInteger(days) && days >= 1 && days <= 3650 ? null : { field: "within_days", message: "Enter a number of days, 1 to 3650" };
+      return Number.isInteger(days) && days >= 1 && days <= 3650 ? null : { field: "within_days", message: t("Enter a number of days, 1 to 3650") };
     }
   }
   switch (valueKind(r)) {
     case "text":
-      return value ? null : { field: "value", message: "Enter a value" };
+      return value ? null : { field: "value", message: t("Enter a value") };
     case "number":
-      return value !== "" && Number.isFinite(Number(value)) ? null : { field: "value", message: "Enter a number" };
+      return value !== "" && Number.isFinite(Number(value)) ? null : { field: "value", message: t("Enter a number") };
     case "date":
-      return DATE.test(value) ? null : { field: "value", message: "Enter a date as YYYY-MM-DD" };
+      return DATE.test(value) ? null : { field: "value", message: t("Enter a date as YYYY-MM-DD") };
     case "days": {
       const days = Number(value);
-      return Number.isInteger(days) && days >= 1 && days <= 36500 ? null : { field: "value", message: "Enter a number of days, 1 to 36500" };
+      return Number.isInteger(days) && days >= 1 && days <= 36500 ? null : { field: "value", message: t("Enter a number of days, 1 to 36500") };
     }
     default:
       return null;
