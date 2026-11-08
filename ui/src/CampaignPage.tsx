@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, docPath, errorMessage, humanize, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, Dialog, ErrorState, Icon, Menu, MenuItem, PageLoading, TabPanel, Tabs, toast, useShellTitle } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, Dialog, ErrorState, Icon, Menu, MenuItem, PageLoading, TabPanel, Tabs, toast, useShellTitle, placed } from "@ferrum/kit";
 import { can, CollabPanel, type EntityMeta, useEntityMeta } from "@ferrum/records";
 import { audienceForSave, type Campaign, defaultTab, isTab, type Tab, tone, whenLine } from "./campaign";
 import { Content } from "./Content";
@@ -126,7 +126,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const tabs = [
     { id: "setup", label: <>{tr("Setup")}{failed.setup > 0 && <span className="tab-errors">{failed.setup}</span>}</> },
     { id: "content", label: <>{tr("Content")}{failed.content > 0 && <span className="tab-errors">{failed.content}</span>}</> },
-    { id: "review", label: <>{tr("Review")}{doc.status === "Draft" && canSubmit ? tr(" and send") : ""}</> },
+    { id: "review", label: <>{(doc.status === "Draft" && canSubmit ? tr("Review and send") : tr("Review"))}</> },
     { id: "results", label: tr("Results") },
   ];
 
@@ -183,7 +183,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
                 {canSubmit ? tr("Review and send") : tr("Review")}
               </Button>
             )}
-            <Menu ariaLabel="More" icon="chevronDown" buttonClass="icon-btn">
+            <Menu ariaLabel={tr("More")} icon="chevronDown" buttonClass="icon-btn">
               {(close) => (
                 <>
                   <MenuItem onSelect={() => (close(), setDialog("talk"))}>{tr("Comments and history")}</MenuItem>
@@ -213,7 +213,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             </div>
           }
         >
-          <strong>{tr("Someone else changed this campaign.")}</strong> {tr("You both changed")} {draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : tr("it")}{tr(". Keep what you wrote on top of theirs, or use theirs and lose your changes.")}
+          {placed(tr("{p1} You both changed {p2}. Keep what you wrote on top of theirs, or use theirs and lose your changes."), { p1: <strong>{tr("Someone else changed this campaign.")}</strong>, p2: draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : tr("it") })}
         </Alert>
       )}
       {!editable && doc.docstatus === 0 && <Alert tone="info">{tr("You can look at this campaign but not change it.")}</Alert>}

@@ -4,7 +4,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, docPath, errorMessage, shell } from "@ferrum/client";
+import { api, ApiError, docPath, errorMessage, shell, t as tr } from "@ferrum/client";
 import { useLiveEntity } from "@ferrum/kit";
 import { patchOf, savable, type Campaign } from "./campaign";
 import { getCampaign, keys, whole } from "./data";
@@ -99,7 +99,7 @@ export function useDraft(id: string, writable: boolean) {
           const overlap = Object.keys(snapshot).filter((k) => !same(get(base, k), get(fresh, k)));
           if (!overlap.length && !retried) return attempt(fresh, snapshot, true, waiting);
           setTheirs(overlap);
-          setProblem({ kind: "conflict", text: "Someone else changed this campaign while you were editing it." });
+          setProblem({ kind: "conflict", text: tr("Someone else changed this campaign while you were editing it.") });
           return null;
         }
         if (e instanceof ApiError && e.fields.length) {
@@ -155,7 +155,7 @@ export function useDraft(id: string, writable: boolean) {
     const overlap = Object.keys(editsRef.current).filter((k) => !same(get(was, k), get(saved, k)));
     if (overlap.length) {
       setTheirs(overlap);
-      setProblem({ kind: "conflict", text: "Someone else changed this campaign while you were editing it." });
+      setProblem({ kind: "conflict", text: tr("Someone else changed this campaign while you were editing it.") });
     }
   }, [saved]);
   useLiveEntity(

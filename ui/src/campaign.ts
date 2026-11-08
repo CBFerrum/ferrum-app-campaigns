@@ -139,13 +139,13 @@ export function defaultTab(c: Pick<Campaign, "status" | "started_at">): Tab {
 export function whenLine(c: Pick<Campaign, "status" | "schedule_at" | "started_at" | "finished_at">, locale?: string): string {
   switch (c.status) {
     case "Scheduled":
-      return c.schedule_at ? t("Scheduled for {value}", { value: moment(c.schedule_at, locale) }) : "Scheduled: starts within a minute";
+      return c.schedule_at ? t("Scheduled for {value}", { value: moment(c.schedule_at, locale) }) : t("Scheduled: starts within a minute");
     case "Sending":
       return t("Sending since {value}", { value: moment(c.started_at, locale) });
     case "Sent":
       return t("Sent {value}", { value: moment(c.finished_at ?? c.started_at, locale) });
     case "Cancelled":
-      return c.started_at ? t("Stopped {value}", { value: moment(c.finished_at ?? c.started_at, locale) }) : "Cancelled before it started";
+      return c.started_at ? t("Stopped {value}", { value: moment(c.finished_at ?? c.started_at, locale) }) : t("Cancelled before it started");
     default:
       return c.schedule_at ? t("Draft, planned for {value}", { value: moment(c.schedule_at, locale) }) : "Draft";
   }
@@ -169,8 +169,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 
 /** Why edits cannot be saved yet, if they cannot: a row waiting for its choice. */
 export function incomplete(edits: Partial<Campaign>): string | null {
-  if (edits.audience?.some((r) => !r.segment && !r.email_group)) return "Choose a segment or an email group for every audience row.";
-  if (edits.variants?.some((r) => !r.subject?.trim())) return "Give every version a subject.";
+  if (edits.audience?.some((r) => !r.segment && !r.email_group)) return t("Choose a segment or an email group for every audience row.");
+  if (edits.variants?.some((r) => !r.subject?.trim())) return t("Give every version a subject.");
   return null;
 }
 

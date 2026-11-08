@@ -29,7 +29,7 @@ export function SaveLine({ draft, editable }: { draft: Draft; editable: boolean 
         : s === "waiting"
           ? (draft.message ?? t("Not saved yet"))
           : s === "error"
-            ? t("Not saved: {value}", { value: draft.message ?? "something went wrong" })
+            ? t("Not saved: {value}", { value: draft.message ?? t("something went wrong") })
             : s === "conflict"
               ? t("Not saved: someone else changed this")
               : draft.savedAt

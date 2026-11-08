@@ -63,7 +63,7 @@ export function InboxLine({ sender, subject, preheader, device }: { sender?: { n
   return (
     <div className={`cm-inbox cm-inbox-${device}`} role="group" aria-label={t("How it looks in an inbox")}>
       <span className="cm-inbox-mark" aria-hidden="true">
-        {isolate((sender?.name ?? "Your sender").slice(0, 1).toUpperCase())}
+        {isolate((sender?.name ?? t("Your sender")).slice(0, 1).toUpperCase())}
       </span>
       <div className="cm-inbox-text">
         <div className="cm-inbox-from">
@@ -132,7 +132,7 @@ export function PreviewPane({ doc, dirty, editable }: { doc: Campaign; dirty: bo
           <InboxLine sender={sender.data} subject={p?.subject ?? ""} preheader={p ? preheaderOf(p.html) : ""} device={device} />
           <div className={`cm-device cm-device-${device}`} data-stale={preview.isPlaceholderData || undefined}>
             {p ? (
-              <iframe title={t("Preview of the email on a {value}", { value: device === "phone" ? "phone" : "computer" })} sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={previewDoc(p.html)} />
+              <iframe title={(device === "phone" ? t("Preview of the email on a phone") : t("Preview of the email on a computer"))} sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={previewDoc(p.html)} />
             ) : (
               <div className="cm-device-wait">
                 <Spinner label={t("Building the preview")} />

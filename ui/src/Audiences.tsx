@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, ApiError, relativeTime, t as tr, isolate } from "@ferrum/client";
-import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle } from "@ferrum/kit";
+import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle, placed } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { countOf, keys, list } from "./data";
 import { count } from "./format";
@@ -47,11 +47,11 @@ function Standing() {
   const q = useStanding();
   const items = q.data
     ? [
-        { id: "Subscribed", label: tr("Subscribed"), value: q.data.subscribed, to: "/e/MarketingContact?f.consent_status=Subscribed", note: "Emailed, unless they are on the suppression list." },
-        { id: "Pending", label: tr("Not confirmed yet"), value: q.data.pending, to: "/e/MarketingContact?f.consent_status=Pending", note: "Signed up, waiting to confirm their address." },
-        { id: "Unsubscribed", label: tr("Unsubscribed"), value: q.data.unsubscribed, to: "/e/MarketingContact?f.consent_status=Unsubscribed", note: "Opted out. Only they can opt back in." },
-        { id: "away", label: tr("Bounced or complained"), value: q.data.away, to: "/e/MarketingContact?f.consent_status=Bounced", note: "Never emailed again." },
-        { id: "suppressed", label: tr("On the suppression list"), value: q.data.suppressed, to: "/e/EmailSuppression", note: "Addresses that are never emailed." },
+        { id: "Subscribed", label: tr("Subscribed"), value: q.data.subscribed, to: "/e/MarketingContact?f.consent_status=Subscribed", note: tr("Emailed, unless they are on the suppression list.") },
+        { id: "Pending", label: tr("Not confirmed yet"), value: q.data.pending, to: "/e/MarketingContact?f.consent_status=Pending", note: tr("Signed up, waiting to confirm their address.") },
+        { id: "Unsubscribed", label: tr("Unsubscribed"), value: q.data.unsubscribed, to: "/e/MarketingContact?f.consent_status=Unsubscribed", note: tr("Opted out. Only they can opt back in.") },
+        { id: "away", label: tr("Bounced or complained"), value: q.data.away, to: "/e/MarketingContact?f.consent_status=Bounced", note: tr("Never emailed again.") },
+        { id: "suppressed", label: tr("On the suppression list"), value: q.data.suppressed, to: "/e/EmailSuppression", note: tr("Addresses that are never emailed.") },
       ]
     : [];
   if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -85,8 +85,7 @@ function Growth() {
       <header className="card-head">
         <h2 id="cm-growth">{tr("The last 30 days")}</h2>
         <div className="cm-aside faint">
-          {isolate(((sum(joined)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(joined)) })))} {tr("joined,")} {tr("{value} left:", { value: ((sum(left)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(left)) })) })} {net >= 0 ? "+" : "−"}
-          {isolate(count(Math.abs(net)))}
+          {placed(tr("{p1} joined, {value} left: {p2}{p3}"), { p1: isolate(((sum(joined)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(joined)) }))), value: ((sum(left)) === 1 ? tr("1 person") : tr("{n} people", { n: count(sum(left)) })), p2: net >= 0 ? "+" : "−", p3: isolate(count(Math.abs(net))) })}
         </div>
       </header>
       <div className="card-body">
@@ -98,7 +97,7 @@ function Growth() {
             { id: "joined", label: tr("Joined"), color: "var(--chart-1)", values: joined },
             { id: "left", label: tr("Unsubscribed, bounced or complained"), color: "var(--chart-5)", values: left },
           ]}
-          empty="No one has joined or left in the last 30 days."
+          empty={tr("No one has joined or left in the last 30 days.")}
         />
       </div>
     </section>

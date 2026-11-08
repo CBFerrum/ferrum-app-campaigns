@@ -6,7 +6,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { Alert, Badge, Button, EmptyState, ErrorState, PageLoading } from "@ferrum/kit";
+import { Alert, Badge, Button, EmptyState, ErrorState, PageLoading, placed } from "@ferrum/kit";
 import { localBucket } from "./chart";
 import type { Campaign } from "./campaign";
 import { abResultsOf, linksOf, performanceOf, timelineOf } from "./data";
@@ -52,7 +52,7 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
   return (
     <Section title={tr("A/B test")} id="cm-ab-results" aside={doc.winner_variant ? <Badge tone="green">{tr("Version {winner_variant} won", { winner_variant: doc.winner_variant })}</Badge> : <Badge tone="blue">{tr("Deciding")}</Badge>}>
       <p className="muted">
-        {isolate(abStanding(doc))} {tr("The winner is the version with the most")} {isolate(metric.toLowerCase())} {tr("for the emails that arrived,")} {doc.test_percent ?? 20}{tr("% of the audience got the versions first.")}
+        {placed(tr("{p1} The winner is the version with the most {p2} for the emails that arrived, {p3}% of the audience got the versions first."), { p1: isolate(abStanding(doc)), p2: isolate(metric.toLowerCase()), p3: doc.test_percent ?? 20 })}
       </p>
       {ab.error ? (
         <ErrorState error={ab.error} onRetry={() => void ab.refetch()} />
@@ -86,7 +86,7 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
       )}
       {lines.length > 1 && (
         <LineChart
-          title={tr("{value} rate of each version as the send went on", { value: metric === "Clicks" ? "Click" : "Open" })}
+          title={(metric === "Clicks" ? tr("Click rate of each version as the send went on") : tr("Open rate of each version as the send went on"))}
           at={at}
           interval={tl.data!.interval}
           integers={false}
@@ -95,7 +95,7 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
           series={lines.map((l) => ({ id: l.variant, label: tr("Version {variant}", { variant: l.variant }), color: colour(l.variant), values: l.values }))}
           marker={chosen >= 0 ? { index: chosen, label: tr("Winner chosen") } : undefined}
           stale={tl.isPlaceholderData}
-          empty="Nothing yet."
+          empty={tr("Nothing yet.")}
         />
       )}
     </Section>
@@ -145,7 +145,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
       )}
       <div className="cm-results-bar">
         <span className="faint" role="status">
-          {sending ? tr("Sending: ") : ""}{tr("updated {value}", { value: clock(Math.max(perf.dataUpdatedAt, tl.dataUpdatedAt)) })}
+          {(sending ? tr("Sending: updated {value}", { value: clock(Math.max(perf.dataUpdatedAt, tl.dataUpdatedAt)) }) : tr("updated {value}", { value: clock(Math.max(perf.dataUpdatedAt, tl.dataUpdatedAt)) }))}
           {sending && tr(", and again every minute")}
         </span>
         <Button size="sm" icon="refresh" loading={perf.isFetching} onClick={refresh}>
@@ -184,7 +184,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
               interval={data.interval}
               kind="columns"
               series={[{ id: "sent", label: tr("Sent"), color: "var(--chart-8)", values: data.series.sent }]}
-              empty="Nothing has gone out yet."
+              empty={tr("Nothing has gone out yet.")}
               stale={stale}
             />
             <div className="row cm-chart-mode">
@@ -206,7 +206,7 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
                 { id: "opens", label: tr("Opened"), color: "var(--chart-1)", values: shape(data.series.opens, running) },
                 { id: "clicks", label: tr("Clicked"), color: "var(--chart-3)", values: shape(data.series.clicks, running) },
               ]}
-              empty="Nobody has opened it yet."
+              empty={tr("Nobody has opened it yet.")}
               stale={stale}
             />
             {rare ? (
@@ -290,15 +290,15 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
 
       <Section title={tr("Who it went to")} id="cm-people">
         <p className="muted">
-          {isolate((row.recipients === 1 ? tr("1 person") : tr("{n} people", { n: count(row.recipients) })))} {row.recipients === 1 ? tr("was") : tr("were")} {tr("chosen when it started:")}{isolate(" ")}
-          {isolate([
-            `${count(row.sent)} sent`,
-            row.failed > 0 ? `${count(row.failed)} failed` : "",
-            row.skipped > 0 ? `${count(row.skipped)} skipped, because they had unsubscribed or been blocked since` : "",
-          ]
-            .filter(Boolean)
-            .join(", "))}
-          .
+          {((list: string) => (row.recipients === 1 ? tr("1 person was chosen when it started: {list}.", { list }) : tr("{n} people were chosen when it started: {list}.", { n: count(row.recipients), list })))(
+            [
+              tr("{n} sent", { n: count(row.sent) }),
+              row.failed > 0 ? tr("{n} failed", { n: count(row.failed) }) : "",
+              row.skipped > 0 ? tr("{n} skipped, because they had unsubscribed or been blocked since", { n: count(row.skipped) }) : "",
+            ]
+              .filter(Boolean)
+              .join(", "),
+          )}
         </p>
         <div className="row">
           <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}`}>
@@ -306,17 +306,17 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
           </Link>
           {row.failed > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.status=Failed`}>
-              {tr("Failed (")}{isolate(count(row.failed))})
+              {tr("Failed ({n})", { n: count(row.failed) })}
             </Link>
           )}
           {row.skipped > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.status=Skipped`}>
-              {tr("Skipped (")}{isolate(count(row.skipped))})
+              {tr("Skipped ({n})", { n: count(row.skipped) })}
             </Link>
           )}
           {row.bounces > 0 && (
             <Link className="btn btn-default btn-md" to={`/e/CampaignRecipient?f.campaign=${doc.id}&f.bounce_type=Hard`}>
-              {tr("Hard bounces (")}{isolate(count(row.hard_bounces))})
+              {tr("Hard bounces ({n})", { n: count(row.hard_bounces) })}
             </Link>
           )}
         </div>

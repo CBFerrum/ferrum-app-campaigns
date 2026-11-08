@@ -1,4 +1,4 @@
-import { t } from "@ferrum/client";
+import { currentLanguage, direction, t } from "@ferrum/client";
 // The pieces a person drops into an email: merge tags for what changes with each person, and a few
 // blocks of email-safe HTML (tables and inline styles: mail programs ignore most of the rest).
 // Pure, so inserting at the caret is tested without a browser.
@@ -29,32 +29,35 @@ export const attributeTag = (key: string): string => `{{ contact.attributes.${ke
 const FONT = "font-family:Arial,Helvetica,sans-serif;";
 
 export const BLOCKS: Insertable[] = [
-  { id: "heading", get label() { return t("Heading"); }, code: `<h1 style="margin:0 0 16px;${FONT}font-size:26px;line-height:1.25;color:#111827;">A clear headline</h1>` },
-  { id: "paragraph", get label() { return t("Paragraph"); }, code: `<p style="margin:0 0 16px;${FONT}font-size:16px;line-height:1.5;color:#374151;">Say something worth reading.</p>` },
+  { id: "heading", get label() { return t("Heading"); }, get code() { return `<h1 style="margin:0 0 16px;${FONT}font-size:26px;line-height:1.25;color:#111827;">${t("A clear headline")}</h1>`; } },
+  { id: "paragraph", get label() { return t("Paragraph"); }, get code() { return `<p style="margin:0 0 16px;${FONT}font-size:16px;line-height:1.5;color:#374151;">${t("Say something worth reading.")}</p>`; } },
   {
     id: "button",
     get label() { return t("Button"); },
-    code:
-      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr><td style="border-radius:6px;background:#2f5bea;">' +
-      `<a href="https://example.com" style="display:inline-block;padding:12px 22px;${FONT}font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">Read more</a>` +
-      "</td></tr></table>",
+    get code() {
+      return (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr><td style="border-radius:6px;background:#2f5bea;">' +
+        `<a href="https://example.com" style="display:inline-block;padding:12px 22px;${FONT}font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">${t("Read more")}</a>` +
+        "</td></tr></table>"
+      );
+    },
   },
-  { id: "image", get label() { return t("Picture"); }, code: '<img src="https://" alt="Describe the picture" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;margin:0 0 16px;">' },
+  { id: "image", get label() { return t("Picture"); }, get code() { return `<img src="https://" alt="${t("Describe the picture").replace(/"/g, "&quot;")}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;margin:0 0 16px;">`; } },
   { id: "divider", get label() { return t("Divider"); }, code: '<hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0;">' },
 ];
 
 /** A whole email to start from: a centred column on a grey page. The sender adds the unsubscribe
  *  footer and your postal address if the content has no unsubscribe link of its own. */
-export const STARTER = `<!doctype html>
-<html lang="en">
+export const starter = (): string => `<!doctype html>
+<html lang="${currentLanguage()}" dir="${direction(currentLanguage())}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:8px;"><tr><td style="padding:32px;${FONT}font-size:16px;line-height:1.5;color:#374151;">
-<h1 style="margin:0 0 16px;${FONT}font-size:26px;line-height:1.25;color:#111827;">Hello {{ contact.first_name or "there" }},</h1>
-<p style="margin:0 0 16px;">Tell people what is new, in a sentence or two.</p>
+<h1 style="margin:0 0 16px;${FONT}font-size:26px;line-height:1.25;color:#111827;">${t("Hello {name},", { name: `{{ contact.first_name or "${t("there")}" }}` })}</h1>
+<p style="margin:0 0 16px;">${t("Tell people what is new, in a sentence or two.")}</p>
 ${BLOCKS.find((b) => b.id === "button")!.code}
-<p style="margin:0;">Thanks,<br>The team</p>
+<p style="margin:0;">${t("Thanks,")}<br>${t("The team")}</p>
 </td></tr></table>
 </td></tr></table>
 </body>

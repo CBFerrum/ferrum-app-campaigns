@@ -3,7 +3,7 @@
 // opens and clicks are counted, how fast it goes out, and an A/B test of its subject or content.
 
 import { type ReactNode, useRef, useState } from "react";
-import { Alert, Button, Field, Icon, Menu, MenuItem } from "@ferrum/kit";
+import { Alert, Button, Field, Icon, Menu, MenuItem, placed } from "@ferrum/kit";
 import { LinkInput } from "@ferrum/records";
 import type { AudienceRow, Campaign, VariantRow } from "./campaign";
 import { count } from "./format";
@@ -313,7 +313,7 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
               </Field>
             </div>
             {((doc.winner_metric ?? "Opens") === "Opens" && !doc.track_opens) || (doc.winner_metric === "Clicks" && !doc.track_clicks) ? (
-              <Alert tone="warning">{tr("Choosing the winner by")} {isolate((doc.winner_metric ?? "Opens").toLowerCase())} {tr("needs that to be counted: turn it on under Sending.")}</Alert>
+              <Alert tone="warning">{placed(tr("Choosing the winner by {p1} needs that to be counted: turn it on under Sending."), { p1: isolate((doc.winner_metric ?? "Opens").toLowerCase()) })}</Alert>
             ) : null}
             <p className="faint cm-note">{tr("To give a version its own content, write it on the Content tab.")}</p>
           </div>

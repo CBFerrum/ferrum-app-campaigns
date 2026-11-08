@@ -7,7 +7,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, ApiError, docPath, errorMessage, shell, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, EmptyState, ErrorState, Field, Icon, Menu, MenuItem, PageLoading, Spinner, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, EmptyState, ErrorState, Field, Icon, Menu, MenuItem, PageLoading, Spinner, toast, useDebounced, useLiveEntity, useShellTitle, placed } from "@ferrum/kit";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import { countSegment, keys, list, type Segment } from "./data";
 import { count } from "./format";
@@ -106,7 +106,7 @@ function RuleRow({ rule, index, disabled, error, onChange, onRemove }: { rule: R
               className="input cm-rule-value"
               type={INPUT_TYPE[kind]}
               inputMode={kind === "number" || kind === "days" ? "decimal" : undefined}
-              aria-label={tr("Rule {n}: {value}", { n, value: kind === "days" ? "number of days" : "value" })}
+              aria-label={tr("Rule {n}: {value}", { n, value: kind === "days" ? tr("number of days") : "value" })}
               aria-invalid={bad("value")}
               placeholder={kind === "date" ? tr("YYYY-MM-DD") : kind === "days" ? tr("Days") : tr("Value")}
               value={rule.value ?? ""}
@@ -245,7 +245,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
       toast(tr("Saved"));
     } catch (e) {
       const stale = e instanceof ApiError && (e.status === 409 || e.status === 412);
-      setFailure({ message: stale ? "Someone else changed this segment while you were editing it." : errorMessage(e), stale });
+      setFailure({ message: stale ? tr("Someone else changed this segment while you were editing it.") : errorMessage(e), stale });
     } finally {
       setSaving(false);
     }
@@ -283,7 +283,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
               <Icon name="mail" />
               {tr("Send a campaign to it")}
             </Link>
-            <Menu ariaLabel="More" icon="chevronDown" buttonClass="icon-btn">
+            <Menu ariaLabel={tr("More")} icon="chevronDown" buttonClass="icon-btn">
               {(close) => (
                 <>
                   <MenuItem onSelect={() => (close(), navigate(`/records/MarketingSegment/${id}`))}>{tr("Open as a record")}</MenuItem>
@@ -418,7 +418,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
           <div className="card-body">
             {!sendable ? (
               <p className="muted">
-                {tr("Rule")} {problems.findIndex(Boolean) + 1} {tr("is not finished:")} {isolate(problems.find(Boolean)?.message.replace(/^./, (c) => c.toLowerCase()) ?? "")}{tr(". Finish it to see who matches.")}
+                {placed(tr("Rule {p1} is not finished: {p2}. Finish it to see who matches."), { p1: problems.findIndex(Boolean) + 1, p2: isolate(problems.find(Boolean)?.message.replace(/^./, (c) => c.toLowerCase()) ?? "") })}
               </p>
             ) : counted.error && !c ? (
               <ErrorState error={counted.error} onRetry={() => void counted.refetch()} title={tr("They could not be counted")} />
@@ -429,7 +429,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
                 <p className="cm-match-figure" aria-live="polite">
                   <span className="cm-reach-number">{isolate(count(c.contact_count))}</span> <span className="cm-reach-unit">{c.contact_count === 1 ? tr("person matches") : tr("people match")}</span>
                 </p>
-                <p className="muted">{isolate(count(c.mailable_count))} {tr("of them can be emailed.")}{c.mailable_count < c.contact_count ? tr(" {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: ((c.contact_count - c.mailable_count) === 1 ? tr("1 person") : tr("{n} people", { n: count(c.contact_count - c.mailable_count) })) }) : ""}</p>
+                <p className="muted">{isolate(count(c.mailable_count))} {(c.mailable_count < c.contact_count ? tr("of them can be emailed. {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: ((c.contact_count - c.mailable_count) === 1 ? tr("1 person") : tr("{n} people", { n: count(c.contact_count - c.mailable_count) })) }) : tr("of them can be emailed."))}</p>
                 {c.sample.length === 0 ? (
                   <EmptyState title={tr("Nobody matches")} icon="user" />
                 ) : (

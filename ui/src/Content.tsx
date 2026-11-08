@@ -5,11 +5,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useRef, useState } from "react";
-import { confirmDialog, Dialog, Button, EmptyState, ErrorState, Field, Menu, MenuItem, PageLoading } from "@ferrum/kit";
+import { confirmDialog, Dialog, Button, EmptyState, ErrorState, Field, Menu, MenuItem, PageLoading, placed } from "@ferrum/kit";
 import { list } from "./data";
 import { PreviewPane } from "./PreviewPane";
 import { size } from "./format";
-import { attributeTag, BLOCKS, MERGE_TAGS, STARTER, UNSUBSCRIBE, validKey } from "./snippets";
+import { attributeTag, BLOCKS, MERGE_TAGS, starter, UNSUBSCRIBE, validKey } from "./snippets";
 import type { Draft } from "./useDraft";
 import { insertInto } from "./ui";
 import { t as tr, isolate } from "@ferrum/client";
@@ -65,7 +65,7 @@ function AttributeDialog({ onInsert, onClose }: { onInsert: (code: string) => vo
   return (
     <Dialog open onClose={onClose} title={tr("Insert an attribute")}>
       <form className="stack" onSubmit={submit}>
-        <Field label={tr("Attribute name")} htmlFor="cm-attr" error={key && !ok ? "Use lowercase letters, digits and _, starting with a letter." : undefined} hint={tr("The name a contact's attribute has, such as city or plan. A person without it gets nothing in its place.")}>
+        <Field label={tr("Attribute name")} htmlFor="cm-attr" error={key && !ok ? tr("Use lowercase letters, digits and _, starting with a letter.") : undefined} hint={tr("The name a contact's attribute has, such as city or plan. A person without it gets nothing in its place.")}>
           <input id="cm-attr" className="input" value={key} autoComplete="off" onChange={(e) => setKey(e.target.value)} />
         </Field>
         <div className="row" style={{ justifyContent: "flex-end" }}>
@@ -105,7 +105,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
   ];
 
   const applyTemplate = async (t: Template) => {
-    const filled = (doc.content ?? "").trim() && doc.content !== STARTER;
+    const filled = (doc.content ?? "").trim() && doc.content !== starter();
     if (filled && !(await confirmDialog({ title: tr("Replace the content?"), message: tr("“{template_name}” replaces what you have written for the email. The subject stays unless it is empty.", { template_name: t.template_name }), confirmLabel: tr("Replace") }))) return;
     set("content", t.body);
     if (!(doc.subject ?? "").trim()) set("subject", t.subject);
@@ -128,7 +128,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
         <div className="cm-toolbar">
           {editable && (
             <>
-              <Menu label={tr("Insert")} icon="plus" ariaLabel="Insert a person's detail" buttonClass="btn btn-default btn-sm">
+              <Menu label={tr("Insert")} icon="plus" ariaLabel={tr("Insert a person's detail")} buttonClass="btn btn-default btn-sm">
                 {(close) => (
                   <>
                     {MERGE_TAGS.map((t) => (
@@ -142,7 +142,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
                 )}
               </Menu>
               {!text && (
-                <Menu label={tr("Blocks")} icon="plus" ariaLabel="Insert a block of HTML" buttonClass="btn btn-default btn-sm">
+                <Menu label={tr("Blocks")} icon="plus" ariaLabel={tr("Insert a block of HTML")} buttonClass="btn btn-default btn-sm">
                   {(close) => BLOCKS.map((b) => <MenuItem key={b.id} onSelect={() => (close(), insert(b.code))}>{isolate(b.label)}</MenuItem>)}
                 </Menu>
               )}
@@ -198,7 +198,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
           </p>
         ))}
         <p className="cm-hint faint" id="cm-editor-help">
-          {isolate(size(bytes))}{tr(". Use")} {isolate("{{ contact.first_name }}")} {tr("for what changes with each person. Unless the content has")} {isolate("{{ unsubscribe_url }}")}{tr(", an unsubscribe link and your postal address are added at the bottom.")}
+          {placed(tr("{p1}. Use {p2} for what changes with each person. Unless the content has {p3}, an unsubscribe link and your postal address are added at the bottom."), { p1: isolate(size(bytes)), p2: isolate("{{ contact.first_name }}"), p3: isolate("{{ unsubscribe_url }}") })}
         </p>
       </section>
       <section className="cm-see" aria-label={tr("Preview")}>

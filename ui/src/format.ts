@@ -39,7 +39,7 @@ export const clock = (at: string | number): string => formatMoment(at, { hour: "
 
 /** How long a number of hours is, roughly: "under an hour", "about 3 hours", "about 2 days". */
 export function span(hours: number): string {
-  if (!(hours > 0.75)) return "under an hour";
+  if (!(hours > 0.75)) return t("under an hour");
   if (hours < 36) {
     const h = Math.round(hours);
     return (h === 1 ? t("about 1 hour") : t("about {h} hours", { h }));

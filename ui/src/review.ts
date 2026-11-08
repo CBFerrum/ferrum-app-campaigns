@@ -50,12 +50,12 @@ export interface LeftOut {
 export function leftOut(check: AudienceCheck): LeftOut[] {
   const l = check.left_out;
   const all: LeftOut[] = [
-    { key: "unsubscribed", label: t("Unsubscribed"), count: l.unsubscribed, note: "They opted out. Only they can opt back in." },
-    { key: "complained", label: t("Marked an earlier email as spam"), count: l.complained, note: "Mailing them again would hurt your sending reputation." },
-    { key: "bounced", label: t("Their address bounced"), count: l.bounced, note: "Emails to them were rejected." },
-    { key: "suppressed", label: t("On the suppression list"), count: l.suppressed, note: "Blocked by hand, or after repeated bounces." },
-    { key: "pending", label: t("Not confirmed yet"), count: l.pending, note: "They signed up but have not confirmed their address." },
-    { key: "excluded", label: t("Left out by your exclusion rules"), count: check.excluded, note: "A segment or group you chose to leave out." },
+    { key: "unsubscribed", label: t("Unsubscribed"), count: l.unsubscribed, note: t("They opted out. Only they can opt back in.") },
+    { key: "complained", label: t("Marked an earlier email as spam"), count: l.complained, note: t("Mailing them again would hurt your sending reputation.") },
+    { key: "bounced", label: t("Their address bounced"), count: l.bounced, note: t("Emails to them were rejected.") },
+    { key: "suppressed", label: t("On the suppression list"), count: l.suppressed, note: t("Blocked by hand, or after repeated bounces.") },
+    { key: "pending", label: t("Not confirmed yet"), count: l.pending, note: t("They signed up but have not confirmed their address.") },
+    { key: "excluded", label: t("Left out by your exclusion rules"), count: check.excluded, note: t("A segment or group you chose to leave out.") },
   ];
   return all.filter((x) => x.count > 0);
 }
@@ -105,12 +105,12 @@ export function linksIn(html: string, tracked: string[], trackClicks: boolean): 
     if (!raw || seen.has(raw)) continue;
     seen.add(raw);
     const url = unescape(raw);
-    if (raw.includes("{{") || raw.includes("{%")) out.push({ url: raw, tracked: false, why: "it changes for each person" });
-    else if (/^mailto:/i.test(url)) out.push({ url, tracked: false, why: "an email address" });
-    else if (!/^https?:\/\//i.test(url)) out.push({ url, tracked: false, why: url.startsWith("#") ? "a link within the email" : "not a web address" });
-    else if (!trackClicks) out.push({ url, tracked: false, why: "click tracking is off" });
+    if (raw.includes("{{") || raw.includes("{%")) out.push({ url: raw, tracked: false, why: t("it changes for each person") });
+    else if (/^mailto:/i.test(url)) out.push({ url, tracked: false, why: t("an email address") });
+    else if (!/^https?:\/\//i.test(url)) out.push({ url, tracked: false, why: url.startsWith("#") ? t("a link within the email") : t("not a web address") });
+    else if (!trackClicks) out.push({ url, tracked: false, why: t("click tracking is off") });
     else if (tracked.includes(url)) out.push({ url, tracked: true });
-    else out.push({ url, tracked: false, why: "past the limit of 100 tracked links" });
+    else out.push({ url, tracked: false, why: t("past the limit of 100 tracked links") });
   }
   return out;
 }
@@ -128,7 +128,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       id: "nobody",
       level: "block",
       title: t("Nobody would receive this"),
-      detail: check.contacts > 0 ? "Everyone in the audience is left out (see why below)." : "The audience is empty. Add a segment or an email group.",
+      detail: check.contacts > 0 ? t("Everyone in the audience is left out (see why below).") : t("The audience is empty. Add a segment or an email group."),
       tab: "setup",
     });
   }
@@ -137,7 +137,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       id: "public_url",
       level: "block",
       title: t("Tracking and unsubscribe links cannot be built yet"),
-      detail: "Set the Public URL in the Mail app's Communication Settings: links in the email must reach this server from the internet.",
+      detail: t("Set the Public URL in the Mail app's Communication Settings: links in the email must reach this server from the internet."),
       href: "/open/CommsSettings",
     });
   }
@@ -154,7 +154,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       id: "postal",
       level: "warn",
       title: t("Your postal address is not set"),
-      detail: "Anti-spam laws such as CAN-SPAM ask for one in every marketing email. Add it in Campaign Settings.",
+      detail: t("Anti-spam laws such as CAN-SPAM ask for one in every marketing email. Add it in Campaign Settings."),
       href: "/open/CampaignSettings",
     });
   }
@@ -163,25 +163,25 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
     out.push(
       main.unsubscribe === "own"
         ? { id: "unsub", level: "ok", title: t("Your content has its own unsubscribe link") }
-        : { id: "unsub", level: "ok", title: t("An unsubscribe link is added at the bottom"), detail: "Your content has none of its own, so the sender adds a footer with the link and your postal address." },
+        : { id: "unsub", level: "ok", title: t("An unsubscribe link is added at the bottom"), detail: t("Your content has none of its own, so the sender adds a footer with the link and your postal address.") },
     );
   }
   const html = [c.content, ...(c.ab_test ? c.variants.map((v) => v.content ?? "") : [])].join("\n");
   const noAlt = imagesWithoutAlt(html);
   if (noAlt > 0) {
-    out.push({ id: "alt", level: "warn", title: t("{noAlt} without alternative text", { noAlt: (noAlt === 1 ? t("1 picture") : t("{n} pictures", { n: count(noAlt) })) }), detail: "Add alt=\"…\" so they make sense when pictures are blocked.", tab: "content" });
+    out.push({ id: "alt", level: "warn", title: t("{noAlt} without alternative text", { noAlt: (noAlt === 1 ? t("1 picture") : t("{n} pictures", { n: count(noAlt) })) }), detail: t("Add alt=\"…\" so they make sense when pictures are blocked."), tab: "content" });
   }
   const big = check.emails.filter((e) => (e.bytes ?? 0) > CLIP_BYTES);
   if (big.length) {
-    out.push({ id: "size", level: "warn", title: t("The email is {value}", { value: size(Math.max(...big.map((e) => e.bytes ?? 0))) }), detail: "Gmail cuts emails off at about 100 KB and hides the rest.", tab: "content" });
+    out.push({ id: "size", level: "warn", title: t("The email is {value}", { value: size(Math.max(...big.map((e) => e.bytes ?? 0))) }), detail: t("Gmail cuts emails off at about 100 KB and hides the rest."), tab: "content" });
   }
-  if (!c.track_clicks) out.push({ id: "clicks", level: "info", title: t("Clicks are not tracked"), detail: "Turn click tracking on in Setup to see which links people use.", tab: "setup" });
+  if (!c.track_clicks) out.push({ id: "clicks", level: "info", title: t("Clicks are not tracked"), detail: t("Turn click tracking on in Setup to see which links people use."), tab: "setup" });
   if (check.mailable > 0) {
     out.push({
       id: "rate",
       level: "info",
       title: t("Goes out at up to {value} an hour: {value2}", { value: (check.rate.per_hour === 1 ? t("1 email") : t("{n} emails", { n: count(check.rate.per_hour) })), value2: sendTime(check.mailable, check.rate.per_hour) }),
-      detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? "This campaign's own limit applies." : "The limit is shared with newsletters and journeys.",
+      detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? t("This campaign's own limit applies.") : t("The limit is shared with newsletters and journeys."),
     });
   }
   if (check.split) {

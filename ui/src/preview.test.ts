@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clip, preheaderOf, previewDoc } from "./preview";
-import { attributeTag, BLOCKS, insertAt, MERGE_TAGS, STARTER, UNSUBSCRIBE, validKey } from "./snippets";
+import { attributeTag, BLOCKS, insertAt, MERGE_TAGS, starter, UNSUBSCRIBE, validKey } from "./snippets";
 
 describe("a preview", () => {
   it("is a light page that loads pictures and styles only, whose links open elsewhere, with the email after it", () => {
@@ -53,9 +53,9 @@ describe("what a person drops into an email", () => {
   });
 
   it("starts an email from a whole page the sender can build", () => {
-    expect(STARTER).toContain("<!doctype html>");
-    expect(STARTER).toContain("{{ contact.first_name");
-    expect(STARTER).toContain("Read more");
-    expect(STARTER).not.toContain("unsubscribe_url");
+    expect(starter()).toContain("<!doctype html>");
+    expect(starter()).toContain("{{ contact.first_name");
+    expect(starter()).toContain("Read more");
+    expect(starter()).not.toContain("unsubscribe_url");
   });
 });
