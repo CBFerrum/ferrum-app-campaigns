@@ -10,6 +10,7 @@
 
 use crate::util::{self, id, s, sys, values};
 use async_trait::async_trait;
+use ferrum_kernel::retention::Purpose;
 use ferrum_kernel::{Doc, DocHook, Error, FieldError, HookCtx, Result, Tx};
 use ferrum_meta::FieldType;
 use serde_json::{Map, Value, json};
@@ -139,6 +140,18 @@ impl DocHook for ContactHook {
             }
             if !hc.ctx.is_system || s(doc, "consent_ip_hash") == old_ip {
                 doc.insert("consent_ip_hash".into(), Value::Null);
+            }
+            // What the person said goes where every app's marketing asks it (FEO-015): an unsubscribe
+            // or a complaint withdraws their consent; confirming a subscription they asked for gives it.
+            // A list imported as subscribed says nothing of the kind, so it overrides no withdrawal.
+            let granted = match (old_status, s(doc, "consent_status")) {
+                (_, Some("Unsubscribed" | "Complained")) => Some(false),
+                (Some("Pending"), Some("Subscribed")) => Some(true),
+                _ => None,
+            };
+            if let (Some(granted), Some(email)) = (granted, s(doc, "email").map(str::to_string)) {
+                let source = format!("Campaigns: {}", s(doc, "consent_source").unwrap_or("contact"));
+                hc.kernel.record_consent_tx(hc.tx, hc.ctx, &email, Purpose::Marketing, granted, &util::cut(&source, 200)).await?;
             }
         }
         Ok(())

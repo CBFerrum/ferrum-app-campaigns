@@ -929,6 +929,19 @@ async fn scenario() {
         1,
         "idempotent"
     );
+    // Every app's marketing hears it: the platform's record of their consent says withdrawn (FEO-015).
+    assert!(!t.scalar::<bool>("select granted from contact_consent where tenant_id = $1 and email = 'ivy@news.test' and $2::uuid is not null", Some(c1)).await);
+    assert!(
+        t.scalar::<String>("select source from contact_consent where tenant_id = $1 and email = 'ivy@news.test' and $2::uuid is not null", Some(c1))
+            .await
+            .starts_with("Campaigns: unsubscribe link"),
+        "where it was said"
+    );
+    // A campaign's mail goes to the Mail app as marketing, which it sends only to whom it may.
+    assert_eq!(
+        t.scalar::<i64>("select count(*) from e_communication where tenant_id = $1 and reference_entity = 'MarketingContact' and purpose <> 'Marketing' and $2::uuid is not null", Some(c1)).await,
+        0
+    );
     // Chen is linked to a CRM contact: unsubscribing sets the CRM flag as well.
     t.post_page(&links(&mail_of("chen@x.test").html, "u")[0]).await;
     assert_eq!(t.get("Contact", crm_chen).await["unsubscribed"], json!(true));
@@ -1263,6 +1276,18 @@ async fn scenario() {
     let nia = t.contact("nia@site.test").await;
     assert_eq!((nia["consent_status"].clone(), nia["consent_source"].clone()), (json!("Subscribed"), json!("double opt-in: Website")));
     assert_eq!(nia["consent_ip_hash"].as_str().map(str::len), Some(64));
+    // Confirmed by them: their consent is on the platform's record; the confirmation itself was a transactional message.
+    assert!(
+        t.scalar::<bool>("select granted from contact_consent where tenant_id = $1 and email = 'nia@site.test' and $2::uuid is not null", Some(website)).await
+    );
+    assert_eq!(
+        t.scalar::<String>(
+            "select purpose from e_communication where tenant_id = $1 and subject = 'Please confirm your subscription' and $2::uuid is not null limit 1",
+            Some(website)
+        )
+        .await,
+        "Transactional"
+    );
     assert_eq!(
         t.scalar::<i64>(
             "select count(*) from e_email_group_member where tenant_id = $1 and email = 'nia@site.test' and email_group = $2 and not unsubscribed",
