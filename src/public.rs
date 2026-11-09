@@ -426,7 +426,7 @@ async fn subscribe(k: &Kernel, req: &SiteRequest, form: &str) -> Result<SiteResp
             text: format!("{}\n\nConfirm: {url}\n", send::html_text(&html)),
             html,
         };
-        send::queue(k, &sys, &mut tx, id(&f, "email_account"), &email, &composed, ("MarketingContact", cid)).await?;
+        send::queue(k, &sys, &mut tx, id(&f, "email_account"), &email, &composed, ("MarketingContact", cid), false).await?;
         k.set_values_tx(&sys, &mut tx, "MarketingContact", cid, values([("confirmation_sent_at", json!(util::ts(util::now())))])).await?;
     }
     sqlx::query("update e_subscription_form set submission_count = coalesce(submission_count, 0) + 1 where tenant_id = $1 and id = $2")

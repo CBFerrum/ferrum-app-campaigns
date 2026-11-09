@@ -15,6 +15,7 @@ use crate::send::{self, Composed, Draft, Links};
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use ferrum_domain::util::elevated;
+use ferrum_kernel::retention::Purpose;
 use ferrum_kernel::{Ctx, Doc, DocHook, Error, FieldError, HookCtx, Kernel, Result, Tx, with_retry};
 use serde_json::{Map, Value, json};
 use sqlx::{Postgres, QueryBuilder};
@@ -315,7 +316,7 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
     let mut sent = Vec::new();
     for to in &addresses {
         let c = send::compose(&d, &contact, &extra(doc), Uuid::now_v7(), &links)?;
-        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign)).await?);
+        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), false).await?);
     }
     Ok(json!({"sent": sent.len(), "communications": sent}))
 }
@@ -584,13 +585,14 @@ pub async fn hand_over(
     links: &Links,
     contact_id: Uuid,
 ) -> Result<Handover> {
-    // A person whose data may not be processed gets nothing, whatever list they are on.
-    if !k.may_contact(tx, sys.tenant, email).await? {
-        return Ok(Handover::Skipped("processing of this person's data is restricted"));
+    // A person whose data may not be processed, or who withdrew their consent to marketing in any app,
+    // gets nothing, whatever list they are on (FEO-015); the Mail app asks again as it sends.
+    if !k.may_contact_for(tx, sys.tenant, email, Purpose::Marketing).await? {
+        return Ok(Handover::Skipped("this person may not be sent marketing (consent withdrawn, or processing restricted)"));
     }
     let composed: Composed = send::compose(d, contact, extra, recipient, links)?;
     sqlx::query("savepoint campaigns_recipient").execute(&mut **tx).await?;
-    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id)).await {
+    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id), true).await {
         Ok(comm) => {
             sqlx::query("release savepoint campaigns_recipient").execute(&mut **tx).await?;
             Ok(Handover::Queued(comm))
