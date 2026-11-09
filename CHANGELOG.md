@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+One record of consent for every app (Ferrum's closure review, FEO-015).
+
+- An unsubscribe or a complaint records the person's withdrawal of consent to marketing with the platform (Kernel::record_consent), and confirming a subscription they asked for records their consent; a list imported as subscribed records nothing, so it overrides no withdrawal heard elsewhere.
+- Before a campaign or a journey hands an email to Mail, it asks the platform's one decision for marketing (consent withdrawn in any app, or processing restricted), and marks the email Marketing, so Mail asks again as it sends. The double opt-in confirmation and test sends are transactional.
+
 ## 0.3.16
 
 The reports it defines in code (their titles and parameters) have names in Arabic and Hindi too, with its models' and manifest's (373 each in ui/src/locales/names). Translated by the model, to be reviewed by native speakers.
