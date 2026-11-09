@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.4.0** | Unsubscribes and confirmed subscriptions go on the platform's one record of consent, which every campaign and journey asks before mailing. |
 | **0.3.16** | Its reports' names in Arabic and Hindi. |
 | **0.3.15** | Its names in Arabic and Hindi; the last English sentences translated. |
 | **0.3.14** | Sentences built in code are words too, in Arabic and Hindi. |

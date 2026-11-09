@@ -141,7 +141,20 @@ pub fn compose(d: &Draft, contact: &Value, extra: &Map<String, Value>, recipient
 
 /// Queues the email as an outgoing `Communication` on the contact's timeline, in the caller's
 /// transaction: the Mail app sends it after commit (never if the transaction rolls back).
-pub async fn queue(k: &Kernel, ctx: &Ctx, tx: &mut Tx, account: Option<Uuid>, to: &str, c: &Composed, reference: (&str, Uuid)) -> Result<Uuid> {
+/// Queues an email with the Mail app. `marketing`: a campaign's or a journey's, which the Mail app sends
+/// only to someone who has not withdrawn their consent to marketing, asked as it goes (FEO-015); a
+/// confirmation they asked for, or a test send, is transactional.
+#[allow(clippy::too_many_arguments)]
+pub async fn queue(
+    k: &Kernel,
+    ctx: &Ctx,
+    tx: &mut Tx,
+    account: Option<Uuid>,
+    to: &str,
+    c: &Composed,
+    reference: (&str, Uuid),
+    marketing: bool,
+) -> Result<Uuid> {
     let id = Uuid::now_v7();
     let doc = values([
         ("id", json!(id.to_string())),
@@ -154,6 +167,7 @@ pub async fn queue(k: &Kernel, ctx: &Ctx, tx: &mut Tx, account: Option<Uuid>, to
         ("text_content", json!(c.text)),
         ("reference_entity", json!(reference.0)),
         ("reference_id", json!(reference.1.to_string())),
+        ("purpose", json!(if marketing { "Marketing" } else { "Transactional" })),
     ]);
     k.insert_tx(ctx, tx, "Communication", doc).await?;
     Ok(id)
