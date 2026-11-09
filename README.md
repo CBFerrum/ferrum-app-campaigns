@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.4.2** | Works with Mail, Chat and Calendar 0.11 and 0.12. |
 | **0.4.1** | Requires Mail, Chat and Calendar 0.11. |
 | **0.4.0** | Unsubscribes and confirmed subscriptions go on the platform's one record of consent, which every campaign and journey asks before mailing. |
 | **0.3.16** | Its reports' names in Arabic and Hindi. |
