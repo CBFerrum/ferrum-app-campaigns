@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+Requires Mail, Chat and Calendar 0.11, whose communications carry the purpose 0.4.0 marks its mail with.
+
 ## 0.4.0
 
 One record of consent for every app (Ferrum's closure review, FEO-015).
