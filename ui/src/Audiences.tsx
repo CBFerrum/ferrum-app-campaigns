@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, ApiError, relativeTime, t as tr, isolate } from "@ferrum/client";
-import { Button, Dialog, EmptyState, ErrorState, Field, Icon, PageLoading, useLiveEntity, useShellTitle, placed } from "@ferrum/kit";
+import { Button, Dialog, Field, Icon, useLiveEntity, useShellTitle, placed, ListSkeleton, StatePanel } from "@ferrum/kit";
+import { Problem } from "./ui";
 import { can, useEntityMeta } from "@ferrum/records";
 import { countOf, keys, list } from "./data";
 import { count } from "./format";
@@ -54,8 +55,8 @@ function Standing() {
         { id: "suppressed", label: tr("On the suppression list"), value: q.data.suppressed, to: "/e/EmailSuppression", note: tr("Addresses that are never emailed.") },
       ]
     : [];
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
-  if (!q.data) return <PageLoading label={tr("Counting contacts")} />;
+  if (q.error) return <Problem error={q.error} onRetry={() => void q.refetch()} />;
+  if (!q.data) return <ListSkeleton rows={2} />;
   return (
     <dl className="cm-tiles">
       {items.map((t) => (
@@ -73,8 +74,8 @@ function Standing() {
 
 function Growth() {
   const q = useQuery({ queryKey: ["campaigns", "growth"], queryFn: () => api.get<{ rows: GrowthRow[] }>("/api/reports/audience_growth") });
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} title={tr("The audience's growth could not be loaded")} />;
-  if (!q.data) return <PageLoading label={tr("Loading the last 30 days")} />;
+  if (q.error) return <Problem error={q.error} onRetry={() => void q.refetch()} title={tr("The audience's growth could not be loaded")} />;
+  if (!q.data) return <ListSkeleton rows={4} />;
   const rows = q.data.rows;
   const joined = rows.map((r) => r.subscribed);
   const left = rows.map((r) => r.unsubscribed + r.bounced + r.complained);
@@ -197,20 +198,25 @@ export function Audiences({ creating = false }: { creating?: boolean }) {
           )}
         </header>
         {segments.error ? (
-          <ErrorState error={segments.error} onRetry={() => void segments.refetch()} />
+          <Problem error={segments.error} onRetry={() => void segments.refetch()} />
         ) : !segments.data ? (
-          <PageLoading label={tr("Loading segments")} />
+          <ListSkeleton rows={3} />
         ) : segments.data.rows.length === 0 ? (
-          <EmptyState title={tr("No segments yet")} icon="list">
-            <p className="muted">{tr("A segment is a saved question about your contacts, such as “opened something in the last 30 days” or “lives in Pune”. It is worked out afresh whenever a campaign uses it.")}</p>
-            {canCreate && (
-              <Button variant="primary" icon="plus" onClick={() => setMaking(true)}>
-                {tr("New segment")}
-              </Button>
-            )}
-          </EmptyState>
+          <StatePanel
+            kind="empty"
+            title={tr("No segments yet")}
+            action={
+              canCreate && (
+                <Button variant="primary" icon="plus" onClick={() => setMaking(true)}>
+                  {tr("New segment")}
+                </Button>
+              )
+            }
+          >
+            {tr("A segment is a saved question about your contacts, such as “opened something in the last 30 days” or “lives in Pune”. It is worked out afresh whenever a campaign uses it.")}
+          </StatePanel>
         ) : rows.length === 0 ? (
-          <EmptyState title={tr("No segment matches")} icon="search" />
+          <StatePanel kind="no-matches" title={tr("No segment matches")} onClear={() => setFilter("")} clearLabel={tr("Show every segment")} />
         ) : (
           <ul className="cm-segs">
             {rows.map((r) => (

@@ -6,14 +6,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { Alert, Badge, Button, EmptyState, ErrorState, PageLoading, placed } from "@ferrum/kit";
+import { Alert, Badge, Button, placed, ListSkeleton, StatePanel } from "@ferrum/kit";
 import { localBucket } from "./chart";
 import type { Campaign } from "./campaign";
 import { abResultsOf, linksOf, performanceOf, timelineOf } from "./data";
 import { clock, count, percent, rate } from "./format";
 import { LineChart } from "./LineChart";
 import { abBars, abStanding, hasAny, host, linkShares, shape, tiles, variantRates } from "./results";
-import { Bar, Section } from "./ui";
+import { Bar, Problem, Section } from "./ui";
 import { t as tr, isolate } from "@ferrum/client";
 
 /** Variants keep their colour: A is always the first, whatever the filter. */
@@ -55,9 +55,9 @@ function AbCard({ doc, interval }: { doc: Campaign; interval: "auto" | "hour" | 
         {placed(tr("{p1} The winner is the version with the most {p2} for the emails that arrived, {p3}% of the audience got the versions first."), { p1: isolate(abStanding(doc)), p2: isolate(metric.toLowerCase()), p3: doc.test_percent ?? 20 })}
       </p>
       {ab.error ? (
-        <ErrorState error={ab.error} onRetry={() => void ab.refetch()} />
+        <Problem error={ab.error} onRetry={() => void ab.refetch()} />
       ) : !ab.data ? (
-        <PageLoading label={tr("Loading the test")} />
+        <ListSkeleton rows={3} />
       ) : (
         <ul className="cm-hbars" aria-label={tr("{metric} rate of each version", { metric })}>
           {bars.map((b) => (
@@ -117,13 +117,13 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
   const [all, setAll] = useState(false);
 
   const row = perf.data?.rows[0];
-  if (perf.error) return <ErrorState error={perf.error} onRetry={() => void perf.refetch()} />;
-  if (!perf.data) return <PageLoading label={tr("Loading the results")} />;
+  if (perf.error) return <Problem error={perf.error} onRetry={() => void perf.refetch()} />;
+  if (!perf.data) return <ListSkeleton rows={4} />;
   if (!row) {
     return (
-      <EmptyState title={tr("No results yet")} icon="chart">
-        <p className="muted">{doc.status === "Draft" ? tr("Results appear once the campaign has been sent.") : tr("They appear as soon as it starts sending, within a minute of its time.")}</p>
-      </EmptyState>
+      <StatePanel kind="empty" title={tr("No results yet")}>
+        {doc.status === "Draft" ? tr("Results appear once the campaign has been sent.") : tr("They appear as soon as it starts sending, within a minute of its time.")}
+      </StatePanel>
     );
   }
 
@@ -173,9 +173,9 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
         }
       >
         {tl.error && !data ? (
-          <ErrorState error={tl.error} onRetry={() => void tl.refetch()} />
+          <Problem error={tl.error} onRetry={() => void tl.refetch()} />
         ) : !data ? (
-          <PageLoading label={tr("Loading the timeline")} />
+          <ListSkeleton rows={4} />
         ) : (
           <div className="cm-charts">
             <LineChart
@@ -238,9 +238,9 @@ export function ResultsTab({ doc }: { doc: Campaign }) {
         {!doc.track_clicks ? (
           <p className="muted">{tr("Clicks were not counted for this campaign.")}</p>
         ) : links.error ? (
-          <ErrorState error={links.error} onRetry={() => void links.refetch()} />
+          <Problem error={links.error} onRetry={() => void links.refetch()} />
         ) : !links.data ? (
-          <PageLoading label={tr("Loading links")} />
+          <ListSkeleton rows={3} />
         ) : shares.length === 0 ? (
           <p className="muted">{tr("The content has no links that can be counted.")}</p>
         ) : (
