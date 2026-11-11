@@ -128,11 +128,26 @@ struct Mail {
     subject: String,
     html: String,
     text: String,
+    /// The whole message as the server received it, folded header lines joined.
+    raw: String,
+}
+
+/// The mail's own unsubscribe link is in List-Unsubscribe, with the one-click companion (RFC 8058).
+fn assert_one_click(m: &Mail) {
+    let own = &links(&m.html, "u")[0];
+    assert!(m.raw.contains(&format!("List-Unsubscribe: <{BASE}{own}>")), "List-Unsubscribe with this recipient's link {own}: {}", m.raw);
+    assert!(m.raw.contains("List-Unsubscribe-Post: List-Unsubscribe=One-Click"), "{}", m.raw);
 }
 
 fn parse(m: &Received) -> Mail {
     let p = ferrum_app_comms::inbound::parse_mime(m.data.as_bytes()).expect("a parsable mail");
-    Mail { to: m.to.join(","), subject: p.subject, html: p.html.unwrap_or_default(), text: p.text.unwrap_or_default() }
+    Mail {
+        to: m.to.join(","),
+        subject: p.subject,
+        html: p.html.unwrap_or_default(),
+        text: p.text.unwrap_or_default(),
+        raw: m.data.replace("\r\n ", " ").replace("\r\n\t", " "),
+    }
 }
 
 /// The site paths of this app's links of one kind (`o`, `c` or `u`) in a text.
@@ -834,6 +849,7 @@ async fn scenario() {
         "the plain-text part carries the unsubscribe link: {}",
         asha_mail.text
     );
+    assert_one_click(asha_mail);
     // The Mail app's verdict comes back.
     t.maint().await;
     let done = t.get("EmailCampaign", c1).await;
@@ -1258,6 +1274,7 @@ async fn scenario() {
     let confirmations = t.received("Please confirm your subscription");
     assert_eq!(confirmations.len(), 1, "one confirmation, however often the form is sent");
     assert_eq!(confirmations[0].to, "nia@site.test");
+    assert!(!confirmations[0].raw.contains("List-Unsubscribe"), "a double opt-in request is no marketing: {}", confirmations[0].raw);
     let confirm_path =
         regex::Regex::new(&format!(r"{}(/confirm/[A-Za-z0-9.]+)", regex::escape(BASE))).unwrap().captures(&confirmations[0].html).unwrap()[1].to_string();
     let page = t.get_page(&confirm_path, iphone).await;
@@ -1401,6 +1418,7 @@ async fn scenario() {
     let jay = t.contact("jay@site.test").await;
     assert_eq!((jay["attributes"]["engaged"].clone(), jay["source"].clone()), (json!("yes"), json!("Email Group")));
     let misses = t.received("We miss you");
+    assert_one_click(&misses[0]);
     assert_eq!(misses.iter().map(|m| m.to.as_str()).collect::<Vec<_>>(), vec!["kim@site.test"]);
     assert_eq!(
         t.scalar::<i64>("select count(*) from e_email_group_member where tenant_id = $1 and email = 'kim@site.test' and email_group = $2", Some(reengage))

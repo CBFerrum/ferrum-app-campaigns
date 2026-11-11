@@ -27,7 +27,7 @@ forms, and journeys that send, wait and branch over time.
 |---|---|
 | 📦 Version | `0.3.3` |
 | 🧱 Platform | Ferrum `>=0.3.2, <0.4` |
-| 🔗 Requires | comms `>=0.11, <0.12` |
+| 🔗 Requires | comms `>=0.13.1, <0.14` |
 | 🖥️ Interface | Its own screens at `/campaigns/` (campaigns, results, audiences), and the records screens for the rest |
 | 🗃️ Records | 14 entities in 1 package |
 | 👥 Roles | 2: Marketing User, Marketing Manager |
@@ -129,7 +129,7 @@ flowchart LR
     BAR --> API
     K <--> APP
     K --> OB --> EV["Notifications · webhooks<br/>automations"]
-    APP -. requires .-> D0["comms >=0.11, <0.12"]
+    APP -. requires .-> D0["comms >=0.13.1, <0.14"]
     classDef app fill:#a63089,color:#fff,stroke:#a63089
     class APP app
 ```
@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.4.4** | One-click unsubscribe headers on every campaign and journey email. |
 | **0.4.3** | The redesigned interface: the upgraded design system, shaped loading, told-apart states. |
 | **0.4.2** | Works with Mail, Chat and Calendar 0.11 and 0.12. |
 | **0.4.1** | Requires Mail, Chat and Calendar 0.11. |
