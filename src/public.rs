@@ -425,6 +425,7 @@ async fn subscribe(k: &Kernel, req: &SiteRequest, form: &str) -> Result<SiteResp
             subject: crate::render::render_line(s(&f, "confirmation_subject").unwrap_or("Please confirm your subscription"), &ctx)?,
             text: format!("{}\n\nConfirm: {url}\n", send::html_text(&html)),
             html,
+            unsubscribe: None,
         };
         send::queue(k, &sys, &mut tx, id(&f, "email_account"), &email, &composed, ("MarketingContact", cid), false).await?;
         k.set_values_tx(&sys, &mut tx, "MarketingContact", cid, values([("confirmation_sent_at", json!(util::ts(util::now())))])).await?;
