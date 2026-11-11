@@ -69,6 +69,14 @@ pub struct Composed {
     pub subject: String,
     pub html: String,
     pub text: String,
+    /// The recipient's signed unsubscribe link; `None` for mail that is not marketing (a confirmation asks for no opt-out).
+    pub unsubscribe: Option<String>,
+}
+
+/// The `headers` of a marketing Communication: List-Unsubscribe (RFC 2369) with the recipient's own link, and the
+/// one-click form of it (RFC 8058) so mail clients unsubscribe with one POST.
+pub fn unsubscribe_headers(url: &str) -> Value {
+    json!({"List-Unsubscribe": format!("<{url}>"), "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
 }
 
 pub fn open_url(l: &Links, recipient: Uuid) -> String {
@@ -136,7 +144,7 @@ pub fn compose(d: &Draft, contact: &Value, extra: &Map<String, Value>, recipient
     if subject.is_empty() {
         return Err(Error::invalid("the subject renders empty"));
     }
-    Ok(Composed { subject, html, text })
+    Ok(Composed { subject, html, text, unsubscribe: Some(unsubscribe) })
 }
 
 /// Queues the email as an outgoing `Communication` on the contact's timeline, in the caller's
@@ -169,6 +177,10 @@ pub async fn queue(
         ("reference_id", json!(reference.1.to_string())),
         ("purpose", json!(if marketing { "Marketing" } else { "Transactional" })),
     ]);
+    let mut doc = doc;
+    if let (true, Some(url)) = (marketing, &c.unsubscribe) {
+        doc.insert("headers".into(), unsubscribe_headers(url));
+    }
     k.insert_tx(ctx, tx, "Communication", doc).await?;
     Ok(id)
 }
