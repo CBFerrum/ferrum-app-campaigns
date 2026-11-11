@@ -6,13 +6,13 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, docPath, download, errorMessage, relativeTime, t, isolate } from "@ferrum/client";
-import { Badge, Button, confirmDialog, EmptyState, ErrorState, Icon, Menu, MenuItem, PageLoading, toast, useDebounced, useLiveEntity, useShellTitle } from "@ferrum/kit";
+import { Badge, Button, confirmDialog, Icon, Menu, MenuItem, toast, useDebounced, useLiveEntity, useShellTitle, ListSkeleton, StatePanel } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { type Campaign, clickRate, hasResults, isStatus, LIST_FIELDS, listFilters, openRate, progress, STATUS_FILTERS, tone, whenLine } from "./campaign";
 import { duplicateCampaign, keys, list } from "./data";
 import { count, percent } from "./format";
 import { Nav } from "./Nav";
-import { Bar } from "./ui";
+import { Bar, Problem } from "./ui";
 
 type Row = Pick<Campaign, "id" | "campaign_name" | "status" | "subject" | "number" | "docstatus" | "version" | "schedule_at" | "started_at" | "finished_at" | "updated_at" | "total_recipients" | "sent_count" | "bounce_count" | "unique_opens" | "unique_clicks" | "unsubscribe_count" | "ab_test">;
 
@@ -165,31 +165,35 @@ export function Home() {
   const exportCsv = () => download("/api/v1/EmailCampaign/_export", "campaigns.csv", { filters: listFilters(status), search: q || undefined }).catch((e) => toast(errorMessage(e), "error"));
 
   const body = result.error ? (
-    <ErrorState error={result.error} onRetry={() => void result.refetch()} />
+    <Problem error={result.error} onRetry={() => void result.refetch()} />
   ) : !result.data ? (
-    <PageLoading label={t("Loading campaigns")} />
+    <ListSkeleton rows={5} />
   ) : rows.length === 0 ? (
     filtered ? (
-      <EmptyState title={t("No campaign matches")} icon="search">
-        <Button
-          onClick={() => {
-            setTyped("");
-            setSp({}, { replace: true });
-          }}
-        >
-          {t("Show every campaign")}
-        </Button>
-      </EmptyState>
+      <StatePanel
+        kind="no-matches"
+        title={t("No campaign matches")}
+        clearLabel={t("Show every campaign")}
+        onClear={() => {
+          setTyped("");
+          setSp({}, { replace: true });
+        }}
+      />
     ) : (
-      <EmptyState title={t("No campaigns yet")} icon="mail">
-        <p className="muted">{t("Write an email, check who it will reach, and send it. Everything you need is on one page.")}</p>
-        {canCreate && (
-          <Link className="btn btn-primary btn-md" to="/new">
-            <Icon name="plus" />
-            {t("New campaign")}
-          </Link>
-        )}
-      </EmptyState>
+      <StatePanel
+        kind="empty"
+        title={t("No campaigns yet")}
+        action={
+          canCreate && (
+            <Link className="btn btn-primary btn-md" to="/new">
+              <Icon name="plus" />
+              {t("New campaign")}
+            </Link>
+          )
+        }
+      >
+        {t("Write an email, check who it will reach, and send it. Everything you need is on one page.")}
+      </StatePanel>
     )
   ) : (
     <>

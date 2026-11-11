@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api, errorMessage, saveBlob, shell, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, EmptyState, ErrorState, Field, Icon, PageLoading, useShellTitle, placed } from "@ferrum/kit";
+import { Alert, Badge, Button, Field, Icon, useShellTitle, placed, FormSkeleton, StatePanel } from "@ferrum/kit";
 import { can, useEntityMeta } from "@ferrum/records";
 import { list } from "./data";
 import { count, percent, rate, size } from "./format";
@@ -36,7 +36,7 @@ import {
   toCsv,
 } from "./importer";
 import { Nav } from "./Nav";
-import { Bar } from "./ui";
+import { Bar, Problem } from "./ui";
 
 const STEPS = ["File", "Columns", "Consent", "Check", "Import"] as const;
 type Step = 0 | 1 | 2 | 3 | 4;
@@ -275,7 +275,7 @@ const FATE: Record<Checked["fate"], { label: string; tone: "green" | "neutral" |
 
 /** Step 4: who is new, and who is not, against the contacts and the suppression list as they are now. */
 function CheckStep({ checked, error, progress, consent, onRetry }: { checked: Checked[] | null; error: unknown; progress: { done: number; total: number }; consent: Consent; onRetry: () => void }) {
-  if (error) return <ErrorState error={error} onRetry={onRetry} title={tr("The addresses could not be checked")} />;
+  if (error) return <Problem error={error} onRetry={onRetry} title={tr("The addresses could not be checked")} />;
   if (!checked) {
     return (
       <div className="stack" style={{ gap: 10 }} role="status">
@@ -462,13 +462,13 @@ export function Import() {
     saveBlob(new Blob(["﻿" + toCsv([tr("Line"), tr("Email"), tr("Why it was not imported")], rows)], { type: "text/csv;charset=utf-8" }), "not-imported.csv");
   };
 
-  if (meta.error) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
-  if (!meta.data) return <PageLoading />;
+  if (meta.error) return <Problem error={meta.error} onRetry={() => void meta.refetch()} />;
+  if (!meta.data) return <FormSkeleton />;
   if (!can(meta.data.permissions, "import") || !can(meta.data.permissions, "create")) {
     return (
-      <EmptyState title={tr("You cannot import contacts")} icon="upload">
+      <StatePanel kind="denied" title={tr("You cannot import contacts")}>
         {tr("Ask a Marketing Manager for the Marketing User role.")}
-      </EmptyState>
+      </StatePanel>
     );
   }
 

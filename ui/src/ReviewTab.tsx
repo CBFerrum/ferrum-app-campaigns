@@ -7,14 +7,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { api, docPath, errorMessage, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, ErrorState, Icon, PageLoading, toast, placed } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, Icon, toast, placed, ListSkeleton } from "@ferrum/kit";
 import { type Campaign, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
 import { clock, count, fromLocalInput, moment, toLocalInput, zoneName } from "./format";
 import { type AudienceCheck, canSend, changedSince, type Finding, findings, leftOut, linksIn, type Level } from "./review";
 import { checkKey, useAudienceCheck } from "./useCheck";
 import type { Draft } from "./useDraft";
-import { Section } from "./ui";
+import { Problem, Section } from "./ui";
 
 const ORDER: Level[] = ["block", "warn", "info", "ok"];
 
@@ -271,9 +271,9 @@ export function ReviewTab({
         </Alert>
       )}
       {q.error && !check ? (
-        <ErrorState error={q.error} onRetry={() => void q.refetch()} title={tr("The audience could not be counted")} />
+        <Problem error={q.error} onRetry={() => void q.refetch()} title={tr("The audience could not be counted")} />
       ) : !check ? (
-        <PageLoading label={tr("Counting who will get it")} />
+        <ListSkeleton rows={2} />
       ) : (
         <>
           <Reach check={check} fetching={q.isFetching} onAgain={() => void q.refetch()} />

@@ -1,11 +1,10 @@
 // Small pieces the screens share.
 
 import type { ReactNode } from "react";
-import { Icon } from "@ferrum/kit";
-import { clock } from "./format";
+import { SaveStatus, StatePanel, type SaveState } from "@ferrum/kit";
 import { insertAt } from "./snippets";
 import type { Draft } from "./useDraft";
-import { t, isolate } from "@ferrum/client";
+import { ApiError, t, isolate } from "@ferrum/client";
 
 /** A thin bar for a share of something (a send's progress, a link's clicks). `value` is 0 to 100. */
 export function Bar({ value, label, tone }: { value: number | null; label: string; tone?: "primary" | "muted" }) {
@@ -17,29 +16,16 @@ export function Bar({ value, label, tone }: { value: number | null; label: strin
   );
 }
 
-/** What a draft's saving is up to, in words, where it can be seen. */
+/** What a draft's saving is up to, in words, where it can be seen: the kit's SaveStatus, plus the server's reason where there is one. */
 export function SaveLine({ draft, editable }: { draft: Draft; editable: boolean }) {
   if (!editable) return null;
   const s = draft.status;
-  const text =
-    s === "saving"
-      ? t("Saving…")
-      : s === "unsaved"
-        ? t("Saving in a moment…")
-        : s === "waiting"
-          ? (draft.message ?? t("Not saved yet"))
-          : s === "error"
-            ? t("Not saved: {value}", { value: draft.message ?? t("something went wrong") })
-            : s === "conflict"
-              ? t("Not saved: someone else changed this")
-              : draft.savedAt
-                ? t("Saved {value}", { value: clock(draft.savedAt) })
-                : t("All changes saved");
-  const bad = s === "error" || s === "conflict";
+  const state: SaveState = s === "saving" ? "saving" : s === "unsaved" || s === "waiting" ? "draft" : s === "error" ? "failed" : s === "conflict" ? "conflict" : "saved";
+  const reason = s === "waiting" || s === "error" ? draft.message : null;
   return (
-    <span className={`cm-save${bad ? " cm-save-bad" : ""}`} role="status" aria-live="polite">
-      {s === "saved" && <Icon name="check" size={13} />}
-      {isolate(text)}
+    <span className="cm-save">
+      <SaveStatus state={state} at={state === "saved" ? draft.savedAt : null} />
+      {reason && <span className={s === "error" ? "cm-save-bad" : undefined}>{isolate(reason)}</span>}
       {s === "error" && (
         <button type="button" className="link-btn" onClick={() => void draft.save()}>
           {t("Try again")}
@@ -70,4 +56,11 @@ export function insertInto(el: HTMLInputElement | HTMLTextAreaElement | null, va
     el?.focus();
     el?.setSelectionRange(next.caret, next.caret);
   });
+}
+
+/** Why something could not be shown: not allowed (never shown as empty), no connection, or failed. */
+export function Problem({ error, onRetry, title }: { error: unknown; onRetry: () => void; title?: string }) {
+  if (error instanceof ApiError && error.status === 403) return <StatePanel kind="denied" title={title} />;
+  if (error instanceof ApiError && error.status === 0) return <StatePanel kind="offline" title={title} onRetry={onRetry} />;
+  return <StatePanel kind="failed" title={title} error={error} onRetry={onRetry} />;
 }

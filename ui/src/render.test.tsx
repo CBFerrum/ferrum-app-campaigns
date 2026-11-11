@@ -242,7 +242,7 @@ describe("the pages, drawn from a record in the cache", () => {
 
   it("opens a draft on its setup, with the way on to the review", () => {
     const html = page("/c/c1", campaign);
-    for (const text of ["Spring sale", "EC-2026-00001", "Draft", "Setup", "Content", "Review and send", "Results", "Send a test", "All changes saved", "A/B test"]) expect(html).toContain(text);
+    for (const text of ["Spring sale", "EC-2026-00001", "Draft", "Setup", "Content", "Review and send", "Results", "Send a test", "Saved", "A/B test"]) expect(html).toContain(text);
     expect(html).not.toContain("undefined");
   });
 
@@ -258,7 +258,7 @@ describe("the pages, drawn from a record in the cache", () => {
     const sent = { ...campaign, docstatus: 1, status: "Sent" as const, started_at: "2026-11-01T10:00:00Z" };
     const html = page("/c/c1", sent);
     expect(html).toContain("Duplicate");
-    expect(html).toContain("Loading the results");
+    expect(html).toContain("Loading…");
   });
 
   it("opens a cancelled campaign with a way to start again", () => {
