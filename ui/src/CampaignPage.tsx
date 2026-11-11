@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { api, docPath, errorMessage, humanize, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, Dialog, ErrorState, Icon, Menu, MenuItem, PageLoading, TabPanel, Tabs, toast, useShellTitle, placed } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, Dialog, Icon, Menu, MenuItem, TabPanel, Tabs, toast, useShellTitle, placed, FormSkeleton } from "@ferrum/kit";
 import { can, CollabPanel, type EntityMeta, useEntityMeta } from "@ferrum/records";
 import { audienceForSave, type Campaign, defaultTab, isTab, type Tab, tone, whenLine } from "./campaign";
 import { Content } from "./Content";
@@ -18,7 +18,7 @@ import { SendTest } from "./SendTest";
 import { Setup } from "./Setup";
 import { useAudienceCheck } from "./useCheck";
 import { useDraft } from "./useDraft";
-import { SaveLine } from "./ui";
+import { Problem, SaveLine } from "./ui";
 
 /** Which tab a field is on, for the count of what could not be saved. */
 const TAB_OF: Record<string, Tab> = { content: "content", text_content: "content", schedule_at: "review" };
@@ -26,8 +26,8 @@ const TAB_OF: Record<string, Tab> = { content: "content", text_content: "content
 export function CampaignRoute() {
   const { id = "" } = useParams();
   const meta = useEntityMeta("EmailCampaign");
-  if (meta.error) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
-  if (!meta.data) return <PageLoading />;
+  if (meta.error) return <Problem error={meta.error} onRetry={() => void meta.refetch()} />;
+  if (!meta.data) return <FormSkeleton />;
   return <CampaignPage key={id} id={id} meta={meta.data} />;
 }
 
@@ -46,8 +46,8 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   const tab: Tab = isTab(asked) ? asked : doc ? defaultTab(doc) : "setup";
   const counted = useAudienceCheck(id, audienceKey, tab === "setup" && !!saved && (saved.status === "Draft" || saved.status === "Scheduled") && audienceKey !== "[]");
 
-  if (draft.query.error && !doc) return <ErrorState error={draft.query.error} onRetry={() => void draft.query.refetch()} title={tr("This campaign could not be opened")} />;
-  if (!doc) return <PageLoading label={tr("Opening the campaign")} />;
+  if (draft.query.error && !doc) return <Problem error={draft.query.error} onRetry={() => void draft.query.refetch()} title={tr("This campaign could not be opened")} />;
+  if (!doc) return <FormSkeleton fields={6} />;
 
   const editable = draft.editable;
   const canSubmit = can(meta.permissions, "submit");

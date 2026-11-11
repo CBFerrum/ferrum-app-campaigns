@@ -6,7 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, ApiError, errorMessage, t, isolate } from "@ferrum/client";
-import { Alert, Button, EmptyState, ErrorState, Field, PageLoading, useShellTitle } from "@ferrum/kit";
+import { Alert, Button, Field, useShellTitle, FormSkeleton, StatePanel } from "@ferrum/kit";
+import { Problem } from "./ui";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import type { AudienceRow, Campaign } from "./campaign";
 import { AudienceRows } from "./Setup";
@@ -34,13 +35,13 @@ export function NewCampaign() {
     onSuccess: (made) => navigate(`/c/${made.id}?tab=content`, { replace: true }),
   });
 
-  if (meta.error) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
-  if (!meta.data) return <PageLoading />;
+  if (meta.error) return <Problem error={meta.error} onRetry={() => void meta.refetch()} />;
+  if (!meta.data) return <FormSkeleton />;
   if (!can(meta.data.permissions, "create")) {
     return (
-      <EmptyState title={t("You cannot create campaigns")} icon="mail">
+      <StatePanel kind="denied" title={t("You cannot create campaigns")}>
         {t("Ask a Marketing Manager for the Marketing User role.")}
-      </EmptyState>
+      </StatePanel>
     );
   }
 

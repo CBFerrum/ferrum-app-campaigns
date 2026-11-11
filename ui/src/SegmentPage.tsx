@@ -7,7 +7,8 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, ApiError, docPath, errorMessage, shell, t as tr, isolate } from "@ferrum/client";
-import { Alert, Badge, Button, confirmDialog, EmptyState, ErrorState, Field, Icon, Menu, MenuItem, PageLoading, Spinner, toast, useDebounced, useLiveEntity, useShellTitle, placed } from "@ferrum/kit";
+import { Alert, Badge, Button, confirmDialog, Field, Icon, Menu, MenuItem, Spinner, toast, useDebounced, useLiveEntity, useShellTitle, placed, FormSkeleton, ListSkeleton, StatePanel } from "@ferrum/kit";
+import { Problem } from "./ui";
 import { can, LinkInput, useEntityMeta } from "@ferrum/records";
 import { countSegment, keys, list, type Segment } from "./data";
 import { count } from "./format";
@@ -31,8 +32,8 @@ import {
 export function SegmentRoute() {
   const { id = "" } = useParams();
   const meta = useEntityMeta("MarketingSegment");
-  if (meta.error) return <ErrorState error={meta.error} onRetry={() => void meta.refetch()} />;
-  if (!meta.data) return <PageLoading />;
+  if (meta.error) return <Problem error={meta.error} onRetry={() => void meta.refetch()} />;
+  if (!meta.data) return <FormSkeleton />;
   return <SegmentPage key={id} id={id} canWrite={can(meta.data.permissions, "write")} canDelete={can(meta.data.permissions, "delete")} />;
 }
 
@@ -217,8 +218,8 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
     placeholderData: keepPreviousData,
   });
 
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} title={tr("This segment could not be opened")} />;
-  if (!saved) return <PageLoading label={tr("Opening the segment")} />;
+  if (q.error) return <Problem error={q.error} onRetry={() => void q.refetch()} title={tr("This segment could not be opened")} />;
+  if (!saved) return <FormSkeleton fields={5} />;
 
   const setRule = (i: number, patch: Partial<Rule>) => setRules(current.rules.map((r, j) => (j === i ? change(r, patch) : r)));
   const discard = () => {
@@ -421,9 +422,9 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
                 {placed(tr("Rule {p1} is not finished: {p2}. Finish it to see who matches."), { p1: problems.findIndex(Boolean) + 1, p2: isolate(problems.find(Boolean)?.message.replace(/^./, (c) => c.toLowerCase()) ?? "") })}
               </p>
             ) : counted.error && !c ? (
-              <ErrorState error={counted.error} onRetry={() => void counted.refetch()} title={tr("They could not be counted")} />
+              <Problem error={counted.error} onRetry={() => void counted.refetch()} title={tr("They could not be counted")} />
             ) : !c ? (
-              <PageLoading label={tr("Counting")} />
+              <ListSkeleton rows={2} />
             ) : (
               <>
                 <p className="cm-match-figure" aria-live="polite">
@@ -431,7 +432,7 @@ function SegmentPage({ id, canWrite, canDelete }: { id: string; canWrite: boolea
                 </p>
                 <p className="muted">{isolate(count(c.mailable_count))} {(c.mailable_count < c.contact_count ? tr("of them can be emailed. {value} cannot: they have unsubscribed, bounced, complained, not confirmed, or are on the suppression list.", { value: ((c.contact_count - c.mailable_count) === 1 ? tr("1 person") : tr("{n} people", { n: count(c.contact_count - c.mailable_count) })) }) : tr("of them can be emailed."))}</p>
                 {c.sample.length === 0 ? (
-                  <EmptyState title={tr("Nobody matches")} icon="user" />
+                  <StatePanel kind="no-matches" title={tr("Nobody matches")} />
                 ) : (
                   <>
                     <h3 className="cm-sample-title">{c.contact_count > c.sample.length ? tr("The first {length}, by address", { length: c.sample.length }) : tr("Everyone")}</h3>

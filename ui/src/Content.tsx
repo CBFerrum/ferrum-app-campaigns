@@ -5,13 +5,13 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useRef, useState } from "react";
-import { confirmDialog, Dialog, Button, EmptyState, ErrorState, Field, Menu, MenuItem, PageLoading, placed } from "@ferrum/kit";
+import { confirmDialog, Dialog, Button, Field, Menu, MenuItem, placed, ListSkeleton, StatePanel } from "@ferrum/kit";
 import { list } from "./data";
 import { PreviewPane } from "./PreviewPane";
 import { size } from "./format";
 import { attributeTag, BLOCKS, MERGE_TAGS, starter, UNSUBSCRIBE, validKey } from "./snippets";
 import type { Draft } from "./useDraft";
-import { insertInto } from "./ui";
+import { Problem, insertInto } from "./ui";
 import { t as tr, isolate } from "@ferrum/client";
 
 interface Template {
@@ -29,13 +29,13 @@ function Templates({ onPick, onClose }: { onPick: (t: Template) => void; onClose
   return (
     <Dialog open onClose={onClose} title={tr("Start from a template")}>
       {q.error ? (
-        <ErrorState error={q.error} onRetry={() => void q.refetch()} />
+        <Problem error={q.error} onRetry={() => void q.refetch()} />
       ) : !q.data ? (
-        <PageLoading label={tr("Loading templates")} />
+        <ListSkeleton rows={3} />
       ) : q.data.rows.length === 0 ? (
-        <EmptyState title={tr("No templates yet")} icon="file">
-          <p className="muted">{tr("Templates are kept in the Mail app. Anything you write here can be saved there for next time.")}</p>
-        </EmptyState>
+        <StatePanel kind="empty" title={tr("No templates yet")}>
+          {tr("Templates are kept in the Mail app. Anything you write here can be saved there for next time.")}
+        </StatePanel>
       ) : (
         <ul className="cm-templates">
           {q.data.rows.map((t) => (
