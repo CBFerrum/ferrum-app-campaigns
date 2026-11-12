@@ -11,7 +11,7 @@ modules:
     order: 42
     items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
             JourneyEnrollment, CampaignSettings, report:email_campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
-            report:audience_growth]
+            report:audience_growth, report:revenue_attribution]
 
 # What a personal-data request exports and erases for a contact (their email). The suppression list
 # keeps unsubscribed addresses, so an erased person is never mailed again.
@@ -57,4 +57,4 @@ roles:
       - {entity: EmailTemplate, read: true, write: true, create: true}
       - {entity: EmailAccount, read: true}
       - {entity: Customer, read: true}
-export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change]
+export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]

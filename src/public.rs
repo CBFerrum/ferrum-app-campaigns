@@ -192,6 +192,11 @@ async fn click(k: &Kernel, req: &SiteRequest, token: &str) -> Result<SiteRespons
         .fetch_optional(&mut *tx)
         .await?;
     let Some(url) = url else { return Ok(util::invalid_link()) };
+    // A campaign that adds tracking parameters sends the visit on with them, and keeps them on the click.
+    let utm = crate::attribution::utm_of(&mut tx, req.tenant, owner).await?;
+    let pairs: Vec<(&str, &str)> = utm.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let url = if utm.is_empty() { url } else { crate::attribution::tag(&url, &pairs) };
+    let utm = (!utm.is_empty()).then(|| Value::Object(utm.iter().map(|(k, v)| (k.to_string(), json!(v))).collect()));
     // A click proves the email was opened, even with images blocked.
     sqlx::query(
         "update e_campaign_recipient set click_count = click_count + 1, clicked_at = coalesce(clicked_at, now()), last_clicked_at = now(), \
@@ -202,11 +207,12 @@ async fn click(k: &Kernel, req: &SiteRequest, token: &str) -> Result<SiteRespons
     .bind(rid)
     .execute(&mut *tx)
     .await?;
-    sqlx::query("insert into campaigns_click (tenant_id, recipient_id, owner_id, link_no) values ($1, $2, $3, $4)")
+    sqlx::query("insert into campaigns_click (tenant_id, recipient_id, owner_id, link_no, utm) values ($1, $2, $3, $4, $5)")
         .bind(req.tenant)
         .bind(rid)
         .bind(owner)
         .bind(link)
+        .bind(utm)
         .execute(&mut *tx)
         .await?;
     delivery::engaged(&mut tx, req.tenant, contact).await?;

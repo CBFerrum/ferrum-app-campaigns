@@ -10,12 +10,19 @@
     - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
     - {name: webhook_secret, type: secret, description: "Signs bounce and complaint webhooks (HMAC-SHA256). Write-only; the New Webhook Secret action creates one"}
     - {name: signing_key, type: secret, read_only: true, hidden: true, description: "Signs tracking, unsubscribe and confirmation links; created automatically"}
+    - {name: attribution_document, type: select, options: [Sales Order, Sales Invoice], default: Sales Order,
+       description: "What counts as a purchase when ERP is installed: a submitted sales order or sales invoice of a customer a contact came from, or whose email is the contact's"}
+    - {name: attribution_days, type: int, default: 5, min: 1, max: 90, label: Attribution Window (Days),
+       description: "A purchase counts for the last email touch of its person within this many days before it (last touch: one email gets each purchase, so two campaigns never both count it)"}
+    - {name: attribution_touch, type: select, options: [Clicks, Clicks and Opens], default: Clicks,
+       description: "What is a touch: a click on a link, or also an open (automatic opens never count)"}
   actions:
     - {name: rotate_webhook_secret, label: New Webhook Secret, permission: write, confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"}
   form:
     - {label: Compliance, fields: [postal_address]}
     - {label: Deliverability, fields: [soft_bounce_limit, webhook_secret]}
     - {label: Links, fields: [link_expiry_days, confirmation_hours]}
+    - {label: Attribution, fields: [attribution_document, attribution_days, attribution_touch]}
 
 - name: MarketingContact
   label: Marketing Contact

@@ -45,6 +45,11 @@
        description: "This campaign's own sending rate; 0 = only the workspace limit (Communication Settings, shared with newsletters and journeys)"}
     - {name: track_opens, type: check, default: true}
     - {name: track_clicks, type: check, default: true}
+    - {name: utm_tags, type: check, label: Add Tracking Parameters,
+       description: "Tracked links lead on with utm_campaign, utm_source and utm_medium (a link's own values are kept), kept on each click; forms and shops that read them see where the visit came from"}
+    - {name: utm_campaign, type: data, max_length: 100, visible_if: "doc.utm_tags", description: "Blank = the campaign's name"}
+    - {name: utm_source, type: data, max_length: 100, default: newsletter, visible_if: "doc.utm_tags"}
+    - {name: utm_medium, type: data, max_length: 100, default: email, visible_if: "doc.utm_tags"}
     - {name: ab_test, type: check, label: A/B Test}
     - {name: variants, type: table, of: CampaignVariant, visible_if: "doc.ab_test", description: "2 to 5 variants (A, B, ...): a subject each and, optionally, their own content"}
     - {name: test_percent, type: int, label: Test Share (%), default: 20, min: 1, max: 90, visible_if: "doc.ab_test", description: "Share of the audience that receives the variants; the rest receives the winner"}
@@ -64,6 +69,8 @@
     - {name: unsubscribe_count, type: int, label: Unsubscribes, read_only: true, no_copy: true}
     - {name: bounce_count, type: int, label: Bounces, read_only: true, no_copy: true}
     - {name: complaint_count, type: int, label: Complaints, read_only: true, no_copy: true}
+    - {name: attributed_orders, type: int, read_only: true, no_copy: true, description: "Purchases whose last touch was this campaign (Campaign Settings: Attribution)"}
+    - {name: attributed_revenue, type: decimal, read_only: true, no_copy: true, description: "Their total in the company currency"}
     - {name: started_at, type: datetime, read_only: true, no_copy: true}
     - {name: finished_at, type: datetime, read_only: true, no_copy: true}
     - {name: last_error, type: text, read_only: true, no_copy: true}
@@ -80,10 +87,10 @@
     - {label: Campaign, fields: [campaign_name, status, channel, message_template, email_account, topic, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}
     - {label: Audience, fields: [audience]}
-    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks]}
+    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks, utm_tags, utm_campaign, utm_source, utm_medium]}
     - {label: A/B Test, collapsible: true, fields: [ab_test, variants, test_percent, winner_metric, winner_after_hours, winner_variant, test_sent_at, winner_chosen_at]}
     - {label: Results, fields: [total_recipients, sent_count, failed_count, skipped_count, unique_opens, total_opens, unique_clicks, total_clicks, unsubscribe_count,
-                                bounce_count, complaint_count, started_at, finished_at, last_error]}
+                                bounce_count, complaint_count, attributed_orders, attributed_revenue, started_at, finished_at, last_error]}
   list: {columns: [campaign_name, status, schedule_at, sent_count, unique_opens, unique_clicks], sort: schedule_at desc}
 
 - name: CampaignRecipient
