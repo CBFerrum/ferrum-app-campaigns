@@ -8,10 +8,11 @@
 //! concurrent maintenance runs can never claim (or mail) a recipient twice.
 
 use crate::check;
-use crate::contact::{self, MAILABLE};
+use crate::contact;
 use crate::import;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Composed, Draft, Links};
+use crate::topics::Reach;
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use ferrum_domain::util::elevated;
@@ -184,6 +185,7 @@ impl DocHook for CampaignHook {
                 segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
             }
         }
+        Reach::of(hc.tx, tenant, id(doc, "topic")).await?;
         // Every variant must render for a stand-in contact (runtime errors, fuel).
         let links = Links { base, key: vec![0; 32], track_opens: true, tracked: Some(HashMap::new()), postal_address: None };
         let mut versions = vec![None];
@@ -316,7 +318,7 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
     let mut sent = Vec::new();
     for to in &addresses {
         let c = send::compose(&d, &contact, &extra(doc), Uuid::now_v7(), &links)?;
-        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), false).await?);
+        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), send::Kind::Transactional).await?);
     }
     Ok(json!({"sent": sent.len(), "communications": sent}))
 }
@@ -439,10 +441,19 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
             return record_error(k, tenant, campaign, &e.to_string()).await;
         }
     };
+    let reach = match Reach::of(&mut tx, tenant, id(&doc, "topic")).await {
+        Ok(r) => r,
+        Err(e) => {
+            tx.rollback().await?;
+            return record_error(k, tenant, campaign, &e.to_string()).await;
+        }
+    };
     import::adopt_group_members(&mut tx, tenant, &groups).await?;
     let (today, tz) = (sys.today(), sys.schema.timezone.clone());
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("with audience as (select c.id, c.email from e_marketing_contact c where c.tenant_id = ");
-    qb.push_bind(tenant).push(format!(" and {MAILABLE} and ("));
+    qb.push_bind(tenant).push(" and ");
+    reach.push(&mut qb);
+    qb.push(" and (");
     push_any(&mut qb, &include, today, &tz);
     qb.push(") and not (");
     push_any(&mut qb, &exclude, today, &tz);
@@ -451,12 +462,14 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
         .push_bind(campaign.to_string())
         .push(" || a.id::text, 'UTF8')), a.id) as rn, count(*) over () as n from audience a) ")
         .push(
-            "insert into e_campaign_recipient (tenant_id, id, campaign, contact, email, variant, status, open_count, machine_open_count, click_count, \
+            "insert into e_campaign_recipient (tenant_id, id, campaign, topic, contact, email, variant, status, open_count, machine_open_count, click_count, \
              created_at, updated_at) select ",
         )
         .push_bind(tenant)
         .push(", gen_random_uuid(), ")
         .push_bind(campaign)
+        .push(", ")
+        .push_bind(reach.topic)
         .push(", r.id, r.email, ");
     let labels: Vec<String> = rows(&doc, "variants").iter().filter_map(|r| s(r, "variant").map(str::to_string)).collect();
     if b(&doc, "ab_test") && labels.len() >= 2 {
@@ -535,7 +548,10 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) ->
         return Ok(0);
     }
     let ids: Vec<Uuid> = claimed.iter().map(|c| c.1).collect();
-    let contacts: HashMap<Uuid, (Value, bool)> = contact::load_for_sending(&mut tx, tenant, &ids).await?.into_iter().map(|(i, v, m)| (i, (v, m))).collect();
+    // A topic turned off since the campaign started: what is left is sent to whom it reached then.
+    let reach = Reach::of(&mut tx, tenant, id(&doc, "topic")).await.unwrap_or_default();
+    let contacts: HashMap<Uuid, (Value, bool)> =
+        contact::load_for_sending(&mut tx, tenant, &ids, &reach).await?.into_iter().map(|(i, v, m)| (i, (v, m))).collect();
     let account = id(&doc, "email_account");
     let extra = extra(&doc);
     let mut drafts: HashMap<Option<String>, Draft> = HashMap::new();
@@ -543,8 +559,8 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) ->
     for (recipient, contact_id, email, variant) in claimed {
         let d = drafts.entry(variant.clone()).or_insert_with(|| draft(&doc, variant.as_deref())).clone();
         let outcome = match contacts.get(&contact_id) {
-            Some((view, true)) => hand_over(k, sys, &mut tx, account, &email, &d, view, &extra, recipient, links, contact_id).await,
-            Some((_, false)) => Ok(Handover::Skipped("unsubscribed or suppressed since the campaign started")),
+            Some((view, true)) => hand_over(k, sys, &mut tx, account, &email, &d, view, &extra, recipient, links, contact_id, reach.purpose()).await,
+            Some((_, false)) => Ok(Handover::Skipped("unsubscribed, suppressed or out of the topic since the campaign started")),
             None => Ok(Handover::Skipped("the contact was deleted")),
         };
         match outcome {
@@ -584,15 +600,16 @@ pub async fn hand_over(
     recipient: Uuid,
     links: &Links,
     contact_id: Uuid,
+    purpose: Purpose,
 ) -> Result<Handover> {
     // A person whose data may not be processed, or who withdrew their consent to marketing in any app,
     // gets nothing, whatever list they are on (FEO-015); the Mail app asks again as it sends.
-    if !k.may_contact_for(tx, sys.tenant, email, Purpose::Marketing).await? {
+    if !k.may_contact_for(tx, sys.tenant, email, purpose).await? {
         return Ok(Handover::Skipped("this person may not be sent marketing (consent withdrawn, or processing restricted)"));
     }
     let composed: Composed = send::compose(d, contact, extra, recipient, links)?;
     sqlx::query("savepoint campaigns_recipient").execute(&mut **tx).await?;
-    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id), true).await {
+    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id), send::Kind::Bulk(purpose)).await {
         Ok(comm) => {
             sqlx::query("release savepoint campaigns_recipient").execute(&mut **tx).await?;
             Ok(Handover::Queued(comm))

@@ -63,6 +63,43 @@
     - {name: note, type: text}
   list: {columns: [email, reason, source], sort: email asc}
 
+- name: MarketingTopic
+  label: Marketing Topic
+  kind: master
+  module: marketing
+  title_field: topic_name
+  description: "A kind of mail people choose on their preference page (a newsletter, offers, product news). A campaign or journey step that names a topic goes only to the people in it; \"stop everything\" on the page stops promotional mail of every topic."
+  fields:
+    - {name: topic_name, type: data, required: true, unique: true, in_list: true}
+    - {name: description, type: text, description: "Shown under the topic's name on the preference page"}
+    - {name: category, type: select, options: [Promotional, Operational], default: Promotional, required: true, in_list: true, in_filter: true,
+       description: "Promotional mail stops when the person stops everything (their marketing opt-out); operational mail (account and service notices) goes to the people in the topic until they untick it, and never to a bounced, complained or blocked address"}
+    - {name: default_in, type: check, default: true, label: People Are In By Default, in_list: true,
+       description: "Everyone is in it until they untick it (contacts that existed before the topic too); off: only those who ticked it or joined it through a signup form"}
+    - {name: enabled, type: check, default: true, in_list: true, description: "Shown on the preference page and chosen by campaigns and journeys"}
+    - {name: sort_order, type: int, default: 0, description: "Order on the preference page"}
+  list: {columns: [topic_name, category, default_in, enabled], sort: sort_order asc}
+
+- name: TopicSubscription
+  label: Topic Subscription
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "A contact's own choice for one topic, with its evidence: when, where and how it was made. A contact without one for a topic is in it when the topic is in by default."
+  fields:
+    - {name: contact, type: link, to: MarketingContact, required: true, on_delete: cascade, in_list: true, in_filter: true}
+    - {name: topic, type: link, to: MarketingTopic, required: true, on_delete: cascade, in_list: true, in_filter: true}
+    - {name: email, type: data, read_only: true, in_list: true}
+    - {name: status, type: select, options: [Subscribed, Pending, Unsubscribed], default: Subscribed, required: true, in_list: true, in_filter: true,
+       description: "Pending: waiting for the person to confirm a signup form for this topic"}
+    - {name: changed_at, type: datetime, read_only: true, no_copy: true, in_list: true}
+    - {name: method, type: select, options: [Staff, Preference Page, Unsubscribe Link, Signup Form, Confirmation, Import], read_only: true, no_copy: true, in_filter: true,
+       description: "How the choice was made"}
+    - {name: source, type: data, read_only: true, no_copy: true, description: "Where: the email the page was reached from, the form, or the person who recorded it"}
+  unique: [[contact, topic]]
+  list: {columns: [email, topic, status, changed_at, method], sort: changed_at desc}
+
 - name: SegmentRule
   label: Segment Rule
   kind: child
@@ -140,6 +177,7 @@
     - {name: endpoint, type: data, read_only: true, no_copy: true, description: "POST here (JSON or a form): email, first_name, last_name and the allowed attributes"}
     - {name: embed_html, type: text, read_only: true, no_copy: true, label: HTML for Your Website, description: "Paste it into a page of your website: it posts the address, the first name and the allowed attributes here, and its hidden field catches bots"}
     - {name: email_group, type: link, to: EmailGroup, in_list: true, description: "Confirmed subscribers join this Mail email group"}
+    - {name: topic, type: link, to: MarketingTopic, in_list: true, description: "Confirmed subscribers are in this topic: the confirmation is asked for it, also of people who already get other mail"}
     - {name: email_account, type: link, to: EmailAccount, description: "Sends the confirmation email; blank = the default outgoing account"}
     - {name: allowed_attributes, type: data, description: "Attribute keys the form may set, comma-separated (e.g. city, interests)"}
     - {name: confirmation_subject, type: data, required: true, default: "Please confirm your subscription", max_length: 998}

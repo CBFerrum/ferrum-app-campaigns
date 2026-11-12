@@ -30,6 +30,7 @@
     - {name: preheader, type: data, max_length: 250, description: "Preview text most inboxes show after the subject"}
     - {name: email_account, type: link, to: EmailAccount, label: From Account, in_filter: true, description: "Blank = the default outgoing account"}
     - {name: email_template, type: link, to: EmailTemplate, description: "Fills a blank subject and content from a Mail email template"}
+    - {name: topic, type: link, to: MarketingTopic, in_filter: true, description: "Only people in this topic receive it; blank = everyone in the audience who takes marketing mail"}
     - {name: content, type: text, required: true,
        description: "HTML (sandboxed template): {{ contact.first_name }}, {{ contact.last_name }}, {{ contact.email }}, {{ contact.attributes.<key> }}, {{ unsubscribe_url }}; values are HTML-escaped and missing ones render empty. A footer with the unsubscribe link and your postal address is added when the content has no {{ unsubscribe_url }}"}
     - {name: text_content, type: text, label: Plain Text, description: "The plain-text part; blank = derived from the HTML"}
@@ -71,7 +72,7 @@
     - {name: audience_check, label: Check Audience, permission: read, read_only: true, hidden: true}
     - {name: timeline, label: Timeline, permission: read, read_only: true, hidden: true}
   form:
-    - {label: Campaign, fields: [campaign_name, status, email_account, subject, preheader, email_template]}
+    - {label: Campaign, fields: [campaign_name, status, email_account, topic, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}
     - {label: Audience, fields: [audience]}
     - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks]}
@@ -95,6 +96,7 @@
     - {name: contact, type: link, to: MarketingContact, on_delete: cascade, in_filter: true}
     - {name: email, type: data, read_only: true, in_list: true}
     - {name: variant, type: data, read_only: true, in_list: true, in_filter: true}
+    - {name: topic, type: link, to: MarketingTopic, on_delete: set_null, read_only: true, description: "The topic the email was sent for"}
     - {name: status, type: select, options: [Pending, Held, Queued, Sent, Failed, Skipped, Cancelled], read_only: true, in_list: true, in_filter: true,
        description: "Pending: waiting for its batch; Held: waiting for the A/B winner; Queued: handed to the Mail app; Sent: accepted by the mail server"}
     - {name: skip_reason, type: data, read_only: true}

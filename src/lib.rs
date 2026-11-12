@@ -17,6 +17,7 @@ mod render;
 mod reports;
 mod segment;
 mod send;
+mod topics;
 mod util;
 
 pub use public::machine_open;
@@ -57,7 +58,9 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("JourneyEnrollment", Arc::new(journey::EnrollmentHook))
         .register("SubscriptionForm", Arc::new(public::FormHook))
         .register("CampaignSettings", Arc::new(public::SettingsHook))
+        .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
         .add_site(util::PACKAGE, Arc::new(public::CampaignsSite));
+    hooks.add_personal_held(Arc::new(topics::Erased));
 }
 
 /// This app's reports.

@@ -5,6 +5,7 @@
 
 use crate::render::{self, add_preheader, append_to_body, footer, pixel, rewrite_links};
 use crate::util::{self, simple, values};
+use ferrum_kernel::retention::Purpose;
 use ferrum_kernel::{Ctx, Error, Kernel, Result, Tx};
 use regex::Regex;
 use serde_json::{Map, Value, json};
@@ -152,17 +153,17 @@ pub fn compose(d: &Draft, contact: &Value, extra: &Map<String, Value>, recipient
 /// Queues an email with the Mail app. `marketing`: a campaign's or a journey's, which the Mail app sends
 /// only to someone who has not withdrawn their consent to marketing, asked as it goes (FEO-015); a
 /// confirmation they asked for, or a test send, is transactional.
+/// What a queued email is: mail to a list (with its unsubscribe headers), sent as marketing or, for an operational
+/// topic, as a notice; or one the person asked for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Kind {
+    Bulk(Purpose),
+    Transactional,
+}
+
 #[allow(clippy::too_many_arguments)]
-pub async fn queue(
-    k: &Kernel,
-    ctx: &Ctx,
-    tx: &mut Tx,
-    account: Option<Uuid>,
-    to: &str,
-    c: &Composed,
-    reference: (&str, Uuid),
-    marketing: bool,
-) -> Result<Uuid> {
+pub async fn queue(k: &Kernel, ctx: &Ctx, tx: &mut Tx, account: Option<Uuid>, to: &str, c: &Composed, reference: (&str, Uuid), kind: Kind) -> Result<Uuid> {
+    let marketing = kind == Kind::Bulk(Purpose::Marketing);
     let id = Uuid::now_v7();
     let doc = values([
         ("id", json!(id.to_string())),
@@ -178,7 +179,7 @@ pub async fn queue(
         ("purpose", json!(if marketing { "Marketing" } else { "Transactional" })),
     ]);
     let mut doc = doc;
-    if let (true, Some(url)) = (marketing, &c.unsubscribe) {
+    if let (Kind::Bulk(_), Some(url)) = (kind, &c.unsubscribe) {
         doc.insert("headers".into(), unsubscribe_headers(url));
     }
     k.insert_tx(ctx, tx, "Communication", doc).await?;
