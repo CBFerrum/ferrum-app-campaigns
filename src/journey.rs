@@ -11,6 +11,7 @@ use crate::contact::{self, MAILABLE};
 use crate::import;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Draft, Links};
+use crate::topics::{self, Reach};
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, TimeZone, Utc};
@@ -608,6 +609,16 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     st.next_run_at = util::now() + Duration::minutes(10);
                     break;
                 };
+                // A step for a topic skips who is not in it (a topic turned off since: as if it had none).
+                let reach = Reach::of(&mut tx, tenant, id(r, "topic")).await.unwrap_or_default();
+                if let Some(t) = reach.topic
+                    && !topics::is_in(&mut tx, tenant, contact_id, t).await?
+                {
+                    log(&mut tx, tenant, journey, enrollment, here, "not in the topic").await?;
+                    st.step = next;
+                    st.steps_done += 1;
+                    continue;
+                }
                 send::lock_budget(&mut tx, tenant).await?;
                 if send::hourly_room(&mut tx, tenant).await? <= 0 {
                     st.next_run_at = util::now() + Duration::minutes(5);
@@ -615,8 +626,8 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                 }
                 let recipient = Uuid::now_v7();
                 sqlx::query(
-                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, status, queued_at, \
-                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, 'Queued', now(), 0, 0, 0, now(), now())",
+                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, topic, status, queued_at, \
+                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, 'Queued', now(), 0, 0, 0, now(), now())",
                 )
                 .bind(tenant)
                 .bind(recipient)
@@ -625,6 +636,7 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                 .bind(enrollment)
                 .bind(contact_id)
                 .bind(&email)
+                .bind(reach.topic)
                 .execute(&mut *tx)
                 .await?;
                 let d = Draft {
@@ -634,7 +646,9 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     text: None,
                 };
                 let extra: Map<String, Value> = values([("journey", json!({"name": s(jdoc, "journey_name")}))]);
-                match campaign::hand_over(k, sys, &mut tx, id(jdoc, "email_account"), &email, &d, &view, &extra, recipient, links, contact_id).await {
+                match campaign::hand_over(k, sys, &mut tx, id(jdoc, "email_account"), &email, &d, &view, &extra, recipient, links, contact_id, reach.purpose())
+                    .await
+                {
                     Ok(Handover::Queued(comm)) => {
                         sqlx::query("update e_campaign_recipient set communication = $3 where tenant_id = $1 and id = $2")
                             .bind(tenant)

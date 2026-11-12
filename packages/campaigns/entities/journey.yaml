@@ -8,6 +8,7 @@
     - {name: preheader, type: data, max_length: 250, description: "Send Email"}
     - {name: content, type: text, description: "Send Email: HTML, the same template values as campaigns"}
     - {name: email_template, type: link, to: EmailTemplate, description: "Send Email: fills a blank subject and content from a Mail email template"}
+    - {name: topic, type: link, to: MarketingTopic, description: "Send Email: only to people in this topic (the others go on to the next step)"}
     - {name: wait_amount, type: int, min: 1, max: 10000, in_list: true, description: "Wait"}
     - {name: wait_unit, type: select, options: [Hours, Days], default: Days, in_list: true,
        description: "Wait: days keep the time of day in the workspace's time zone (across daylight saving changes)"}

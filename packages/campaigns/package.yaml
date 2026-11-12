@@ -9,7 +9,7 @@ modules:
     label: Marketing
     icon: megaphone
     order: 42
-    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
+    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
             JourneyEnrollment, CampaignSettings, report:email_campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
             report:audience_growth]
 
@@ -17,12 +17,15 @@ modules:
 # keeps unsubscribed addresses, so an erased person is never mailed again.
 personal_data:
   - {entity: MarketingContact, match: email, erase: [email, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes]}
+  - {entity: TopicSubscription, match: email, erase: [email]}
 roles:
   - name: Marketing User
     description: Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them.
     permissions:
       - {entity: MarketingContact, read: true, write: true, create: true, export: true, import: true}
       - {entity: MarketingSegment, read: true, write: true, create: true}
+      - {entity: MarketingTopic, read: true}
+      - {entity: TopicSubscription, read: true, write: true, create: true}
       - {entity: EmailCampaign, read: true, write: true, create: true, delete: true, if_owner: true}
       - {entity: CampaignRecipient, read: true}
       - {entity: MarketingJourney, read: true}
@@ -39,6 +42,8 @@ roles:
     permissions:
       - {entity: MarketingContact, read: true, write: true, create: true, delete: true, export: true, import: true}
       - {entity: MarketingSegment, read: true, write: true, create: true, delete: true}
+      - {entity: MarketingTopic, read: true, write: true, create: true, delete: true}
+      - {entity: TopicSubscription, read: true, write: true, create: true, delete: true, export: true}
       - {entity: EmailCampaign, read: true, write: true, create: true, delete: true, submit: true, cancel: true, export: true}
       - {entity: CampaignRecipient, read: true, export: true}
       - {entity: MarketingJourney, read: true, write: true, create: true, delete: true}
