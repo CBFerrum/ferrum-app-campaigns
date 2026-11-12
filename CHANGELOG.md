@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+* **Works with Mail 0.20.** The range of Mail versions Campaigns accepts now includes 0.20 (inbound headers, app sending with threading, inbound registrations); nothing in Campaigns changes.
+
 ## 0.5.1
 
 * **Re-subscribing from the preference page follows the workspace's opt-in rule.** New setting Confirm Re-subscribing By Email (Campaign Settings, off by default, so nothing changes until an administrator turns it on). On: a person who left and saves their page as "subscribe again" is sent a confirmation email (subject and body are settings with built-in defaults) and becomes subscribed only when they confirm it, because a signed link in a forwarded mail would otherwise let someone else do it; an opt-out recorded in another app is lifted on the same confirmation; at most one such email in ten minutes. Off: as before, recorded as `re-subscription from the preference page`. Unsubscribing and narrowing topics are immediate either way.
