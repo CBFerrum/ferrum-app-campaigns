@@ -11,6 +11,7 @@ mod channels;
 mod check;
 mod contact;
 mod delivery;
+mod events;
 mod import;
 mod journey;
 mod public;
@@ -60,6 +61,7 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("SubscriptionForm", Arc::new(public::FormHook))
         .register("CampaignSettings", Arc::new(public::SettingsHook))
         .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
+        .add_event_sink(Arc::new(events::JourneySink))
         .add_site(util::PACKAGE, Arc::new(public::CampaignsSite));
     hooks.add_personal_held(Arc::new(topics::Erased));
 }
@@ -119,8 +121,17 @@ async fn purge(k: &Kernel, tenant: Uuid) -> Result<usize> {
         .execute(&mut *tx)
         .await?
         .rows_affected();
+    // Events matter while their person is in the journey.
+    let c = sqlx::query(
+        "delete from campaigns_journey_event v where tenant_id = $1 and not exists (select 1 from e_journey_enrollment e where e.tenant_id = v.tenant_id \
+         and e.journey = v.journey_id and e.contact = v.contact_id and e.status = 'Active')",
+    )
+    .bind(tenant)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
     tx.commit().await?;
-    Ok((a + b) as usize)
+    Ok((a + b + c) as usize)
 }
 
 #[cfg(test)]

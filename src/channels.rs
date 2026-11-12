@@ -87,7 +87,9 @@ pub async fn room(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
 }
 
 /// Hands one person to the platform in the caller's transaction: the template about their contact record, to their
-/// number. Returns the platform's send and what the recipient row becomes (`Queued`, or `Skipped` and why).
+/// number. Returns the platform's send and what the recipient row becomes (`Queued`, or `Skipped` and why). `record`:
+/// the record that started a journey, which the template may read as `values.record`.
+#[allow(clippy::too_many_arguments)]
 pub async fn hand_over(
     k: &Kernel,
     sys: &Ctx,
@@ -96,6 +98,7 @@ pub async fn hand_over(
     template: &str,
     contact: Uuid,
     phone: Option<&str>,
+    record: Option<Value>,
 ) -> Result<(Option<Uuid>, &'static str, Option<String>)> {
     let Some(phone) = phone.map(str::trim).filter(|p| !p.is_empty()) else { return Ok((None, "Skipped", Some("no phone number".into()))) };
     let m = Message {
@@ -104,6 +107,7 @@ pub async fn hand_over(
         record: Some(contact),
         to: vec![Recipient { phone: Some(phone.to_string()), ..Default::default() }],
         channels: vec![channel.platform().to_string()],
+        values: record.map(|r| serde_json::Map::from_iter([("record".to_string(), r)])).unwrap_or_default(),
         ..Default::default()
     };
     let sent = messages::send(k, tx, sys, &m).await?;

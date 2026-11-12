@@ -237,7 +237,7 @@ async fn scenario() {
             admin_email: "admin@acme.test".into(),
             admin_password: PASSWORD.into(),
             admin_name: None,
-            packages: vec!["core".into(), "comms".into(), "campaigns".into()],
+            packages: vec!["core".into(), "comms".into(), "campaigns".into(), "selling".into()],
             settings: Some(json!({"timezone": "UTC"})),
         })
         .await
@@ -269,6 +269,160 @@ async fn scenario() {
 
     topics(&t, &mgr, &admin, &audience, [asha, ben, cy, dee]).await;
     messages(&t, &mgr, &admin, &audience, [asha, ben]).await;
+    let (admin, mgr) = journeys(&t, tenant, mgr_id, [asha, ben]).await;
+    let _ = (admin, mgr);
+}
+
+/// A sales order of ERP's for `customer`, submitted.
+async fn sales_order(t: &T, admin: &Ctx, customer: Uuid, rate: &str) -> Uuid {
+    let item: Vec<Doc> = t.list("Item", json!({"item_code": "WIDGET"})).await;
+    let item = match item.first() {
+        Some(i) => uid(i),
+        None => {
+            let products = &t.list("ItemGroup", json!({"group_name": "Products"})).await[0];
+            let nos = &t.list("Uom", json!({"uom_name": "Nos"})).await[0];
+            uid(&t
+                .insert(
+                    admin,
+                    "Item",
+                    json!({"item_code": "WIDGET", "item_name": "Widget", "item_group": products["id"], "stock_uom": nos["id"], "standard_rate": "150"}),
+                )
+                .await)
+        }
+    };
+    let so = uid(&t
+        .insert(admin, "SalesOrder", json!({"company": t.list("Company", json!({})).await[0]["id"], "customer": customer.to_string(), "delivery_date": chrono::Utc::now().date_naive().to_string(),
+            "items": [{"item": item.to_string(), "qty": "1", "rate": rate}]}))
+        .await);
+    t.k.submit(admin, "SalesOrder", so, None).await.unwrap_or_else(|e| panic!("submit the sales order: {e:?}"));
+    so
+}
+
+/// Item 3: journeys that start, wait for, branch on and end with record events of any entity.
+async fn journeys(t: &T, tenant: Uuid, mgr_id: Uuid, [asha, ben]: [Uuid; 2]) -> (Ctx, Ctx) {
+    // A made-up entity of the workspace's own: no other app needed.
+    let cart = json!({"name": "XCart", "label": "Cart", "kind": "master", "title_field": "title", "fields": [
+        {"name": "title", "type": "data", "required": true}, {"name": "email", "type": "email"},
+        {"name": "status", "type": "select", "options": ["Open", "Ordered"], "default": "Open"}, {"name": "total", "type": "int"}]});
+    let custom: ferrum_kernel::customize::NewCustomization =
+        serde_json::from_value(json!({"entity": "XCart", "op": {"op": "define_entity", "entity": cart}})).unwrap();
+    t.k.batch_customizations(&t.admin, vec![custom], false).await.map_err(|(_, e)| e).expect("the cart entity");
+    let session = t.k.login("acme", "admin@acme.test", PASSWORD).await.expect("login");
+    let admin = t.k.load_ctx(tenant, session.user, Some(session.token_version), "it".into()).await.unwrap();
+    let mgr = t.k.load_ctx(tenant, mgr_id, None, "it".into()).await.unwrap();
+    let (admin, mgr) = (&admin, &mgr);
+    let inr = &t.list("Currency", json!({"code": "INR"})).await[0];
+    t.insert(admin, "Company", json!({"company_name": "Acme Ltd", "abbr": "AC", "default_currency": inr["id"]})).await;
+    let admin = &t.k.load_ctx(tenant, session.user, Some(session.token_version), "it".into()).await.unwrap();
+    let customer = uid(&t.insert(admin, "Customer", json!({"customer_name": "Ben Ode"})).await);
+    t.update(mgr, "MarketingContact", ben, json!({"record_entity": "Customer", "record_id": customer.to_string()})).await;
+
+    let rules = json!([
+        {"label": "Cart left open", "entity_name": "XCart", "event": "Created", "condition": "doc.status == 'Open' && doc.total > 0", "person_field": "email"},
+        {"label": "Cart ordered", "entity_name": "XCart", "event": "Updated", "condition": "doc.status == 'Ordered' && old.status == 'Open'", "person_field": "email"},
+        {"label": "Order placed", "entity_name": "SalesOrder", "event": "Submitted", "person_field": "customer"}]);
+    let steps = json!([
+        {"step_type": "Wait", "wait_amount": 30, "wait_unit": "Minutes"},
+        {"step_type": "Branch", "branch_on": "Record Condition", "condition": "doc.status == 'Open'"},
+        {"step_type": "Send Email", "subject": "You left {{ record.title }} behind", "content": "<p>Your {{ record.title }} waits</p>"},
+        {"step_type": "Send Message", "channel": "Text Message", "message_template": "shop.flash_sale"},
+        {"step_type": "Wait For Event", "event_rule": 2, "wait_amount": 2, "wait_unit": "Days", "next_step": 6, "else_step": 7},
+        {"step_type": "Update Attribute", "attribute": "rescued", "value": "yes", "next_step": 8},
+        {"step_type": "Update Attribute", "attribute": "rescued", "value": "no"},
+        {"step_type": "Exit"}]);
+    let journey = |rules: Value| {
+        json!({"journey_name": format!("Cart rescue {}", Uuid::now_v7()), "trigger_type": "Record Event", "trigger_rule": 1,
+        "goal_rule": 3, "event_rules": rules, "steps": steps})
+    };
+    // Rules are checked against the workspace's entities when saved.
+    for bad in [
+        json!([{"entity_name": "Nope", "event": "Created"}]),
+        json!([{"entity_name": "XCart", "event": "Created", "condition": "doc.colour == 'red'"}]),
+        json!([{"entity_name": "XCart", "event": "Created", "person_field": "title"}]),
+        json!([{"entity_name": "XCart", "event": "Created", "condition": "doc.total >"}]),
+    ] {
+        refused(t.k.insert(mgr, "MarketingJourney", obj(journey(bad))).await);
+    }
+    let j = uid(&t.insert(mgr, "MarketingJourney", journey(rules)).await);
+    t.action(mgr, "MarketingJourney", j, "activate", json!({})).await;
+    let enrollments = |status: &'static str| async move {
+        t.list("JourneyEnrollment", json!({"journey": j.to_string(), "status": status}))
+            .await
+            .iter()
+            .map(|e| e["email"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+
+    // Asha leaves a cart: she enters, once; a cart of an unknown address makes no contact, an empty one does not count.
+    let cart1 = uid(&t.insert(admin, "XCart", json!({"title": "Blue shoes", "email": "Asha@X.test", "total": 90})).await);
+    t.insert(admin, "XCart", json!({"title": "Hat", "email": "stranger@y.test", "total": 5})).await;
+    t.insert(admin, "XCart", json!({"title": "Nothing", "email": "ben@x.test", "total": 0})).await;
+    t.drain().await;
+    assert_eq!(enrollments("Active").await, ["asha@x.test"]);
+    assert!(t.list("MarketingContact", json!({"email": "stranger@y.test"})).await.is_empty(), "a record names a person; it does not give consent");
+    let e = &t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await[0];
+    assert_eq!((e["trigger_entity"].clone(), e["trigger_record"].clone()), (json!("XCart"), json!(cart1.to_string())));
+    t.insert(admin, "XCart", json!({"title": "Red shoes", "email": "asha@x.test", "total": 40})).await;
+    t.drain().await;
+    assert_eq!(t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await.len(), 1, "once per person, journey and entry rule");
+
+    // Thirty minutes later the cart is still open: one email and one text message, however many rounds run at once.
+    t.maint().await;
+    assert!(t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await[0]["waiting"] == json!(true));
+    t.exec("update e_journey_enrollment set next_run_at = now() - interval '1 second' where tenant_id = $1 and journey = $2", Some(j)).await;
+    let mut rounds = Vec::new();
+    for _ in 0..4 {
+        let k = t.k.clone();
+        rounds.push(tokio::spawn(async move { ferrum_app_campaigns::maintenance(&k).await }));
+    }
+    for r in rounds {
+        r.await.unwrap().expect("concurrent maintenance");
+    }
+    let sent = t.list("CampaignRecipient", json!({"journey": j.to_string()})).await;
+    assert_eq!(sent.len(), 2, "{sent:?}");
+    assert_eq!(
+        t.scalar::<i64>("select count(*) from e_communication where tenant_id = $1 and subject = 'You left Blue shoes behind' and $2::uuid is null", None)
+            .await,
+        1
+    );
+    let e = &t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await[0];
+    assert_eq!((e["current_step"].clone(), e["waiting"].clone()), (json!(5), json!(true)), "waiting for the order, two days at most");
+    // She orders: the wait ends at once, on the event.
+    t.update(admin, "XCart", cart1, json!({"status": "Ordered"})).await;
+    t.drain().await;
+    t.maint().await;
+    assert_eq!(enrollments("Completed").await, ["asha@x.test"]);
+    assert_eq!(t.get("MarketingContact", asha).await["attributes"]["rescued"], json!("yes"));
+
+    // Re-entry is a setting: not within the hours it names, then again.
+    t.update(mgr, "MarketingJourney", j, json!({"allow_reentry": true, "reentry_hours": 24})).await;
+    t.insert(admin, "XCart", json!({"title": "Socks", "email": "asha@x.test", "total": 9})).await;
+    t.drain().await;
+    assert!(enrollments("Active").await.is_empty(), "she entered less than 24 hours ago");
+    t.update(mgr, "MarketingJourney", j, json!({"reentry_hours": 0})).await;
+    t.insert(admin, "XCart", json!({"title": "Scarf", "email": "asha@x.test", "total": 12})).await;
+    t.drain().await;
+    assert_eq!(enrollments("Active").await, ["asha@x.test"]);
+
+    // Ben's cart, then his order in ERP: the goal ends his run.
+    t.insert(admin, "XCart", json!({"title": "Lamp", "email": "ben@x.test", "total": 30})).await;
+    t.drain().await;
+    assert_eq!(enrollments("Active").await, ["asha@x.test", "ben@x.test"]);
+    sales_order(t, admin, customer, "150").await;
+    t.drain().await;
+    assert_eq!(enrollments("Goal Reached").await, ["ben@x.test"]);
+
+    // Someone who opts out, or is erased, leaves every journey at once.
+    t.update(mgr, "MarketingContact", asha, json!({"consent_status": "Unsubscribed"})).await;
+    assert!(enrollments("Active").await.is_empty());
+    let eve = uid(&t.insert(mgr, "MarketingContact", json!({"email": "eve@x.test"})).await);
+    t.insert(admin, "XCart", json!({"title": "Kettle", "email": "eve@x.test", "total": 20})).await;
+    t.drain().await;
+    assert_eq!(enrollments("Active").await, ["eve@x.test"]);
+    t.k.erase_personal_data(admin, "eve@x.test", "her request").await.expect("erasure");
+    assert!(enrollments("Active").await.is_empty(), "erased");
+    assert_ne!(t.get("MarketingContact", eve).await["email"], json!("eve@x.test"));
+    (admin.clone(), mgr.clone())
 }
 
 /// Item 2: text and chat-app messages through the platform's templates and channels.

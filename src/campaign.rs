@@ -583,7 +583,7 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: Option<&Li
             let outcome = match contacts.get(&contact_id) {
                 Some((view, true)) => {
                     sqlx::query("savepoint campaigns_recipient").execute(&mut *tx).await?;
-                    match channels::hand_over(k, sys, &mut tx, channel, &template, contact_id, view.get("phone").and_then(Value::as_str)).await {
+                    match channels::hand_over(k, sys, &mut tx, channel, &template, contact_id, view.get("phone").and_then(Value::as_str), None).await {
                         Ok(o) => {
                             sqlx::query("release savepoint campaigns_recipient").execute(&mut *tx).await?;
                             o
