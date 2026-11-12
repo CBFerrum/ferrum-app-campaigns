@@ -3,6 +3,7 @@
 //! writes anything, so neither locks the campaign or leaves an audit entry.
 
 use crate::campaign::{audience as audience_of, draft, extra, push_any, sample_contact, test_size};
+use crate::channels::Channel;
 use crate::contact::{EMAIL_PATTERN, MAILABLE};
 use crate::render;
 use crate::segment::{self, Rule, Segment};
@@ -41,14 +42,14 @@ async fn tally(tx: &mut Tx, ctx: &Ctx, reach: &Reach, groups: &[Uuid], include: 
     let (tenant, today, tz) = (ctx.tenant, ctx.today(), ctx.schema.timezone.clone());
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
         "with c_all as (select c.tenant_id, c.id, c.email, c.first_name, c.last_name, c.full_name, c.source, c.consent_status, c.record_entity, \
-         c.attributes, c.created_at, false as adopted from e_marketing_contact c where c.tenant_id = ",
+         c.record_id, c.phone, c.attributes, c.created_at, false as adopted from e_marketing_contact c where c.tenant_id = ",
     );
     qb.push_bind(tenant)
         .push(" union all select ")
         .push_bind(tenant)
         .push(
             ", gen_random_uuid(), x.email, nullif(split_part(x.name, ' ', 1), ''), nullif(btrim(substr(x.name, length(split_part(x.name, ' ', 1)) + 1)), ''), \
-             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, '{}'::jsonb, now(), true \
+             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, null::text, null::text, '{}'::jsonb, now(), true \
              from (select distinct on (lower(btrim(m.email))) lower(btrim(m.email)) as email, btrim(coalesce(m.member_name, '')) as name \
              from e_email_group_member m where m.tenant_id = ",
         )
@@ -110,7 +111,7 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
     let ctx = hc.ctx;
     let tenant = ctx.tenant;
     let engine = sys(ctx);
-    let reach = Reach::of(hc.tx, tenant, id(doc, "topic")).await?;
+    let reach = Reach::of(hc.tx, tenant, id(doc, "topic")).await?.on(Channel::of(doc));
     // One line per audience row, counted alone.
     let mut lines = Vec::new();
     for r in rows(doc, "audience") {
@@ -151,7 +152,8 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
         tracked: Some(HashMap::new()),
         postal_address: None,
     };
-    let mut versions = vec![None];
+    // A text or chat-app campaign has no email to show.
+    let mut versions = if reach.channel == Channel::Email { vec![None] } else { vec![] };
     if b(doc, "ab_test") {
         versions.extend(rows(doc, "variants").iter().filter_map(|r| s(r, "variant").map(|v| Some(v.to_string()))));
     }

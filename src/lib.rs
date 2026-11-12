@@ -7,6 +7,7 @@
 //! the package never runs them; the public endpoints are a `Site` (see packages/campaigns/README.md).
 
 mod campaign;
+mod channels;
 mod check;
 mod contact;
 mod delivery;
@@ -90,6 +91,7 @@ pub async fn maintenance(k: &Kernel) -> Result<()> {
         let bulk = || Trace::at_priority(PRIORITY_BULK);
         let steps = [
             ("delivery", delivery::sync(k, &sys).await),
+            ("messages", channels::sync(k, &sys).await.map(|n| n as usize)),
             ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
             ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
             ("purge", purge(k, tenant).await),

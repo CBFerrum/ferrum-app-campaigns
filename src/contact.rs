@@ -26,6 +26,13 @@ pub const MAILABLE: &str = "(c.consent_status = 'Subscribed' and c.email not lik
      and not exists (select 1 from contact_consent k where k.tenant_id = c.tenant_id and k.email = c.email::citext and k.purpose = 'marketing' \
      and k.channel = 'email' and not k.granted))";
 
+/// SQL condition on a contact row aliased `c`: promotional text and chat-app messages may go to its number (the
+/// number's own opt-out on each channel is the platform's to apply).
+pub const TEXTABLE: &str = "(c.consent_status = 'Subscribed' and coalesce(c.phone, '') <> '' and c.email not like '%@erased.invalid')";
+
+/// [`TEXTABLE`] for an operational topic: whatever the marketing choice.
+pub const TEXT_REACHABLE: &str = "(c.consent_status in ('Subscribed', 'Unsubscribed') and coalesce(c.phone, '') <> '' and c.email not like '%@erased.invalid')";
+
 /// SQL condition on a contact row aliased `c`: an operational topic's mail may reach it whatever its marketing choice
 /// (it unticks the topic to stop it), never when the address bounced, complained or is blocked, nor before it confirmed.
 pub const REACHABLE: &str = "(c.consent_status in ('Subscribed', 'Unsubscribed') and c.email not like '%@erased.invalid' \
@@ -358,8 +365,8 @@ pub fn template_view(doc: &Doc) -> Value {
 /// Contacts by id with what sending needs, and whether each may be sent to right now (`reach`).
 pub async fn load_for_sending(tx: &mut Tx, tenant: Uuid, ids: &[Uuid], reach: &crate::topics::Reach) -> Result<Vec<(Uuid, Value, bool)>> {
     let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
-        "select c.id, jsonb_build_object('id', c.id, 'email', c.email, 'first_name', c.first_name, 'last_name', c.last_name, 'full_name', c.full_name, \
-         'attributes', coalesce(c.attributes, '{}'::jsonb)), ",
+        "select c.id, jsonb_build_object('id', c.id, 'email', c.email, 'phone', c.phone, 'first_name', c.first_name, 'last_name', c.last_name, \
+         'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{}'::jsonb)), ",
     );
     reach.push(&mut qb);
     qb.push(" from e_marketing_contact c where c.tenant_id = ").push_bind(tenant).push(" and c.id = any(").push_bind(ids.to_vec()).push(")");

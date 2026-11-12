@@ -2,13 +2,15 @@
   label: Journey Step
   kind: child
   fields:
-    - {name: step_type, type: select, options: [Send Email, Wait, Branch, Update Attribute, Add To Group, Remove From Group, Exit], required: true, in_list: true}
+    - {name: step_type, type: select, options: [Send Email, Send Message, Wait, Branch, Update Attribute, Add To Group, Remove From Group, Exit], required: true, in_list: true}
     - {name: label, type: data, max_length: 100, in_list: true}
     - {name: subject, type: data, max_length: 998, description: "Send Email"}
     - {name: preheader, type: data, max_length: 250, description: "Send Email"}
     - {name: content, type: text, description: "Send Email: HTML, the same template values as campaigns"}
     - {name: email_template, type: link, to: EmailTemplate, description: "Send Email: fills a blank subject and content from a Mail email template"}
-    - {name: topic, type: link, to: MarketingTopic, description: "Send Email: only to people in this topic (the others go on to the next step)"}
+    - {name: topic, type: link, to: MarketingTopic, description: "Send Email, Send Message: only to people in this topic (the others go on to the next step)"}
+    - {name: channel, type: select, options: [Text Message, Chat App], description: "Send Message"}
+    - {name: message_template, type: data, max_length: 100, description: "Send Message: the key of a message template about a Marketing Contact"}
     - {name: wait_amount, type: int, min: 1, max: 10000, in_list: true, description: "Wait"}
     - {name: wait_unit, type: select, options: [Hours, Days], default: Days, in_list: true,
        description: "Wait: days keep the time of day in the workspace's time zone (across daylight saving changes)"}

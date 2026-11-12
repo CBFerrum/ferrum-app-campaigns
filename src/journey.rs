@@ -7,6 +7,7 @@
 //! the goal segment, hit an Exit step or run out of steps.
 
 use crate::campaign::{self, Handover};
+use crate::channels::{self, Channel};
 use crate::contact::{self, MAILABLE};
 use crate::import;
 use crate::segment::{self, Rule, Segment};
@@ -122,6 +123,14 @@ impl DocHook for JourneyHook {
                         }
                     }
                 }
+                "Send Message" => {
+                    if s(r, "channel").is_none() {
+                        err("channel", "choose text message or chat app");
+                    }
+                    if s(r, "message_template").is_none() {
+                        err("message_template", "enter the key of the message template");
+                    }
+                }
                 "Wait" if int(r, "wait_amount") < 1 => err("wait_amount", "enter how long to wait"),
                 "Branch" => match s(r, "branch_on") {
                     None => err("branch_on", "choose what to branch on"),
@@ -180,6 +189,10 @@ impl DocHook for JourneyHook {
                 if steps.iter().any(|r| s(r, "step_type") == Some("Send Email")) {
                     util::site_base(hc.tx, tenant).await?.ok_or_else(send::public_url_missing)?;
                     send::check_account(hc.kernel, hc.tx, tenant, id(doc, "email_account")).await?;
+                }
+                for r in steps.iter().filter(|r| s(r, "step_type") == Some("Send Message")) {
+                    let reach = Reach::of(hc.tx, tenant, id(r, "topic")).await?;
+                    channels::check_template(hc.tx, hc.ctx, s(r, "message_template").unwrap_or_default(), Channel::of(r), reach.operational).await?;
                 }
                 for seg in [id(doc, "trigger_segment"), id(doc, "goal_segment")].into_iter().flatten().chain(steps.iter().filter_map(|r| id(r, "segment"))) {
                     segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
@@ -577,8 +590,8 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
         State { status: "Active".into(), step: step.max(1) as usize, waiting, next_run_at: util::now(), last_recipient, steps_done, exit_reason: None };
     for _ in 0..STEPS_PER_RUN {
         let contact_row: Option<(Value, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "select jsonb_build_object('id', c.id, 'email', c.email, 'first_name', c.first_name, 'last_name', c.last_name, 'full_name', c.full_name, \
-             'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
+            "select jsonb_build_object('id', c.id, 'email', c.email, 'phone', c.phone, 'first_name', c.first_name, 'last_name', c.last_name, \
+             'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
         )))
         .bind(tenant)
         .bind(contact_id)
@@ -670,6 +683,56 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     }
                 }
                 st.last_recipient = Some(recipient);
+                st.step = next;
+            }
+            "Send Message" => {
+                let channel = Channel::of(r);
+                let reach = Reach::of(&mut tx, tenant, id(r, "topic")).await.unwrap_or_default().on(channel);
+                let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("select exists (select 1 from e_marketing_contact c where c.tenant_id = ");
+                qb.push_bind(tenant).push(" and c.id = ").push_bind(contact_id).push(" and ");
+                reach.push(&mut qb);
+                qb.push(")");
+                if !qb.build_query_scalar::<bool>().fetch_one(&mut *tx).await? {
+                    log(&mut tx, tenant, journey, enrollment, here, "no number, or not in the topic").await?;
+                    st.step = next;
+                    st.steps_done += 1;
+                    continue;
+                }
+                if channels::room(&mut tx, tenant).await? <= 0 {
+                    st.next_run_at = util::now() + Duration::minutes(5);
+                    break;
+                }
+                let recipient = Uuid::now_v7();
+                sqlx::query(
+                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, topic, channel, status, \
+                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Pending', 0, 0, 0, now(), now())",
+                )
+                .bind(tenant)
+                .bind(recipient)
+                .bind(journey)
+                .bind(here as i64)
+                .bind(enrollment)
+                .bind(contact_id)
+                .bind(&email)
+                .bind(reach.topic)
+                .bind(channel.label())
+                .execute(&mut *tx)
+                .await?;
+                let phone = view.get("phone").and_then(Value::as_str).map(str::to_string);
+                sqlx::query("savepoint campaigns_message").execute(&mut *tx).await?;
+                let outcome =
+                    match channels::hand_over(k, sys, &mut tx, channel, s(r, "message_template").unwrap_or_default(), contact_id, phone.as_deref()).await {
+                        Ok(o) => {
+                            sqlx::query("release savepoint campaigns_message").execute(&mut *tx).await?;
+                            o
+                        }
+                        Err(e) => {
+                            sqlx::query("rollback to savepoint campaigns_message").execute(&mut *tx).await?;
+                            (None, "Failed", Some(e.to_string()))
+                        }
+                    };
+                channels::record(&mut tx, tenant, recipient, channel, &outcome).await?;
+                log(&mut tx, tenant, journey, enrollment, here, &format!("message: {}", outcome.1.to_lowercase())).await?;
                 st.step = next;
             }
             "Wait" => {

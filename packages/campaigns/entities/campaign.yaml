@@ -26,12 +26,17 @@
   fields:
     - {name: campaign_name, type: data, required: true, in_list: true}
     - {name: status, type: select, options: [Draft, Scheduled, Sending, Sent, Cancelled], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
-    - {name: subject, type: data, required: true, max_length: 998, description: "{{ contact.first_name }} and the other contact values work here too"}
+    - {name: channel, type: select, options: [Email, Text Message, Chat App], default: Email, in_list: true, in_filter: true,
+       description: "Text and chat-app messages go through the platform's message templates and the workspace's channel connections: the number's own opt-out on that channel, quiet hours and hourly limits are the platform's"}
+    - {name: message_template, type: data, max_length: 100, visible_if: "doc.channel == 'Text Message' || doc.channel == 'Chat App'",
+       required_if: "doc.channel == 'Text Message' || doc.channel == 'Chat App'",
+       description: "The key of a promotional message template about a Marketing Contact (its text or chat body; an operational one only for an operational topic)"}
+    - {name: subject, type: data, max_length: 998, required_if: "doc.channel != 'Text Message' && doc.channel != 'Chat App'", description: "{{ contact.first_name }} and the other contact values work here too"}
     - {name: preheader, type: data, max_length: 250, description: "Preview text most inboxes show after the subject"}
     - {name: email_account, type: link, to: EmailAccount, label: From Account, in_filter: true, description: "Blank = the default outgoing account"}
     - {name: email_template, type: link, to: EmailTemplate, description: "Fills a blank subject and content from a Mail email template"}
     - {name: topic, type: link, to: MarketingTopic, in_filter: true, description: "Only people in this topic receive it; blank = everyone in the audience who takes marketing mail"}
-    - {name: content, type: text, required: true,
+    - {name: content, type: text, required_if: "doc.channel != 'Text Message' && doc.channel != 'Chat App'",
        description: "HTML (sandboxed template): {{ contact.first_name }}, {{ contact.last_name }}, {{ contact.email }}, {{ contact.attributes.<key> }}, {{ unsubscribe_url }}; values are HTML-escaped and missing ones render empty. A footer with the unsubscribe link and your postal address is added when the content has no {{ unsubscribe_url }}"}
     - {name: text_content, type: text, label: Plain Text, description: "The plain-text part; blank = derived from the HTML"}
     - {name: audience, type: table, of: CampaignAudience, required: true}
@@ -72,7 +77,7 @@
     - {name: audience_check, label: Check Audience, permission: read, read_only: true, hidden: true}
     - {name: timeline, label: Timeline, permission: read, read_only: true, hidden: true}
   form:
-    - {label: Campaign, fields: [campaign_name, status, email_account, topic, subject, preheader, email_template]}
+    - {label: Campaign, fields: [campaign_name, status, channel, message_template, email_account, topic, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}
     - {label: Audience, fields: [audience]}
     - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks]}
@@ -97,6 +102,9 @@
     - {name: email, type: data, read_only: true, in_list: true}
     - {name: variant, type: data, read_only: true, in_list: true, in_filter: true}
     - {name: topic, type: link, to: MarketingTopic, on_delete: set_null, read_only: true, description: "The topic the email was sent for"}
+    - {name: channel, type: select, options: [Email, Text Message, Chat App], read_only: true, in_filter: true, description: "Blank: Email"}
+    - {name: message_send, type: data, read_only: true, description: "A text or chat-app message: the platform's send, whose state is read back"}
+    - {name: delivered_at, type: datetime, read_only: true, description: "A text or chat-app message: when the provider reported it delivered"}
     - {name: status, type: select, options: [Pending, Held, Queued, Sent, Failed, Skipped, Cancelled], read_only: true, in_list: true, in_filter: true,
        description: "Pending: waiting for its batch; Held: waiting for the A/B winner; Queued: handed to the Mail app; Sent: accepted by the mail server"}
     - {name: skip_reason, type: data, read_only: true}
