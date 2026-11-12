@@ -106,8 +106,12 @@ impl T {
     }
 
     async fn list(&self, entity: &str, filters: Value) -> Vec<Doc> {
+        self.list_as(&self.admin, entity, filters).await
+    }
+
+    async fn list_as(&self, ctx: &Ctx, entity: &str, filters: Value) -> Vec<Doc> {
         let q = ListQuery { filters: ferrum_kernel::query::parse_filters(&filters).unwrap(), limit: Some(500), ..Default::default() };
-        self.k.list(&self.admin, entity, &q).await.unwrap().rows
+        self.k.list(ctx, entity, &q).await.unwrap().rows
     }
 
     async fn scalar<O: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>>(&self, sql: &str, id: Option<Uuid>) -> O {
@@ -270,7 +274,108 @@ async fn scenario() {
     topics(&t, &mgr, &admin, &audience, [asha, ben, cy, dee]).await;
     messages(&t, &mgr, &admin, &audience, [asha, ben]).await;
     let (admin, mgr) = journeys(&t, tenant, mgr_id, [asha, ben]).await;
-    let _ = (admin, mgr);
+    segments(&t, &admin, &mgr, ben).await;
+}
+
+/// Item 4: segments over the contact's records and over any data, worked out when used and on a schedule.
+async fn segments(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
+    let seg = |name: &str, rules: Value| json!({"segment_name": name, "match_type": "All", "rules": rules});
+    let count = |id: Uuid| async move {
+        let p = t.action(mgr, "MarketingSegment", id, "preview", json!({})).await;
+        let mut emails: Vec<String> = p["sample"].as_array().unwrap().iter().map(|c| c["email"].as_str().unwrap().to_string()).collect();
+        emails.sort();
+        (p["contact_count"].as_i64().unwrap(), p["mailable_count"].as_i64().unwrap(), emails)
+    };
+    // Orders in a period, summed, through the customer each contact came from.
+    let big = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            seg(
+                "Spent over 100 this month",
+                json!([{"rule_type": "Related Records", "entity_name": "SalesOrder", "link_field": "customer",
+            "aggregate": "Sum", "measure_field": "grand_total", "date_field": "posting_date", "within_days": 30, "operator": "Greater Than", "value": "100"}]),
+            ),
+        )
+        .await);
+    assert_eq!(count(big).await, (1, 1, vec!["ben@x.test".to_string()]));
+    let recent = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            seg(
+                "Bought lately",
+                json!([{"rule_type": "Related Records", "entity_name": "SalesOrder", "link_field": "customer",
+            "aggregate": "Latest", "measure_field": "posting_date", "operator": "Within Last Days", "value": "7"}]),
+            ),
+        )
+        .await);
+    assert_eq!(count(recent).await.0, 1);
+    // A count with a condition, through an email field of the workspace's own entity.
+    let open_carts = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            seg(
+                "Open carts",
+                json!([{"rule_type": "Related Records", "entity_name": "XCart", "link_field": "email",
+            "match_field": "status", "match_value": "Open", "operator": "Greater Than", "value": "0"}]),
+            ),
+        )
+        .await);
+    assert_eq!(count(open_carts).await.2, ["asha@x.test", "ben@x.test"]);
+    // A field of the record the contact came from, and one of the contact itself.
+    let named = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            seg(
+                "Named Ben",
+                json!([{"rule_type": "Record Field", "entity_name": "Customer", "field_name": "customer_name",
+            "operator": "Equals", "value": "ben ode"}, {"rule_type": "Record Field", "entity_name": "MarketingContact", "field_name": "phone",
+            "operator": "Starts With", "value": "+1555"}]),
+            ),
+        )
+        .await);
+    assert_eq!(count(named).await, (1, 1, vec!["ben@x.test".to_string()]));
+    for bad in [
+        json!([{"rule_type": "Record Field", "entity_name": "Customer", "field_name": "nope", "operator": "Equals", "value": "x"}]),
+        json!([{"rule_type": "Related Records", "entity_name": "SalesOrder", "link_field": "posting_date", "operator": "Greater Than", "value": "0"}]),
+        json!([{"rule_type": "Related Records", "entity_name": "SalesOrder", "link_field": "customer", "aggregate": "Sum", "measure_field": "customer",
+                "operator": "Greater Than", "value": "0"}]),
+        json!([{"rule_type": "Related Records", "entity_name": "SalesOrder", "link_field": "customer", "match_field": "status",
+                "match_value": "x'); drop table e_marketing_contact; --", "operator": "Greater Than", "value": "0"}]),
+    ] {
+        let r = t.k.insert(mgr, "MarketingSegment", obj(seg(&format!("Bad {}", Uuid::now_v7()), bad))).await;
+        if let Ok(d) = r {
+            assert_eq!(count(uid(&d)).await.0, 0, "a value is bound, never SQL");
+        }
+    }
+
+    // A saved query: its rows' email column names the people. Who saves it must be able to read those rows.
+    let query = json!({"segment_name": "Open carts (query)", "source": "Query", "query": {"entity": "XCart", "filters": {"status": "Open"}},
+                       "query_person_field": "email"});
+    refused(t.k.insert(mgr, "MarketingSegment", obj(query.clone())).await);
+    let mut grouped = query.clone();
+    grouped["query"]["group_by"] = json!([{"field": "status"}]);
+    refused(t.k.insert(admin, "MarketingSegment", obj(grouped)).await);
+    let q = uid(&t.insert(admin, "MarketingSegment", query).await);
+    assert_eq!(count(q).await, (2, 1, vec!["asha@x.test".to_string(), "ben@x.test".to_string()]), "Asha unsubscribed: counted, not mailable");
+    let changes = "select count(*) from campaigns_segment_change where tenant_id = $1 and segment_id = $2 and change = ";
+    assert_eq!(t.scalar::<i64>(&format!("{changes}'entered'"), Some(q)).await, 2);
+    // Ben orders his lamp: on the next scheduled refresh he has left, and that is recorded.
+    let lamp = uid(&t.list_as(admin, "XCart", json!({"title": "Lamp"})).await[0]);
+    t.update(admin, "XCart", lamp, json!({"status": "Ordered"})).await;
+    t.update(admin, "XCart", uid(&t.list_as(admin, "XCart", json!({"title": "Nothing"})).await[0]), json!({"status": "Ordered"})).await;
+    t.exec("update e_marketing_segment set refreshed_at = now() - interval '2 hours' where tenant_id = $1 and id = $2", Some(q)).await;
+    t.maint().await;
+    assert_eq!(t.scalar::<i64>(&format!("{changes}'left'"), Some(q)).await, 1);
+    assert_eq!(t.scalar::<i64>("select count(*) from campaigns_segment_member where tenant_id = $1 and segment_id = $2", Some(q)).await, 1);
+    // A campaign to it reads it again when it starts.
+    t.update(admin, "XCart", lamp, json!({"status": "Open"})).await;
+    let (_, to) = t.send(mgr, json!({"campaign_name": "Come back", "subject": "Hi", "content": "<p>Hi</p>", "audience": [{"segment": q.to_string()}]})).await;
+    assert_eq!(to, ["ben@x.test"]);
+    let _ = ben;
 }
 
 /// A sales order of ERP's for `customer`, submitted.
