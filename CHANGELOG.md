@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.9
+
+Works with Mail, Chat and Calendar 0.18 and 0.19 too. Comms 0.18 (Calendar: sharing with groups, CalDAV per calendar, subscriptions, rooms) only adds to what Campaigns uses, and the next release, the Mail composer on the shared editor, does not touch it either, so the requirement is now `>=0.13.1, <0.20`. Nothing else changes.
+
 ## 0.4.8
 
 Works with Mail, Chat and Calendar 0.17 too (several calendars and sharing). It only adds to what Campaigns uses, so the requirement is now `>=0.13.1, <0.18`. Nothing else changes.
