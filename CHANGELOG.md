@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6
+
+Works with Mail, Chat and Calendar 0.14 and 0.15 too. Both only add to what Campaigns uses (0.14: mail handled on the server with nobody's tab open; 0.15: meetings other apps can make), so the requirement is now `>=0.13.1, <0.16`. A build with Comms 0.15.0 compiles and the platform's check that compiled apps fit together passes; nothing else changes.
+
 ## 0.4.5
 
 Rebuilt with Ferrum-Frontend 45dad7f, the design system as tuned after the landed build was reviewed. The left menu's icons are chosen so that none repeats on more than three rows and each fits its row; their drawings load beside the first page instead of inside it, so the page starts lighter; a row that scrolls sideways fades at the edge where there is more, in every browser and with reduced motion; a printed record leaves out empty fields and keeps its totals with the table; menus and popovers sit inside the page's landmarks for assistive technology; a selection bar folds what does not fit into More on a narrow screen. Nothing else changes.
