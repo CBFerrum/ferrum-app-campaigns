@@ -44,7 +44,7 @@ pub async fn domain_of(tx: &mut Tx, tenant: Uuid, account: Option<Uuid>) -> Resu
 }
 
 /// How many more emails a campaign from `account` may hand over today under its domain's warm-up (`None`: no limit).
-/// Counted over every campaign sending from that domain today, in the workspace's day.
+/// Counted over every campaign and journey email sent from that domain today, in the workspace's day.
 pub async fn warmup_room(tx: &mut Tx, ctx: &Ctx, account: Option<Uuid>) -> Result<Option<i64>> {
     let Some(domain) = domain_of(tx, ctx.tenant, account).await? else { return Ok(None) };
     let row: Option<(Option<NaiveDate>, Option<i64>, Option<i64>, Option<i64>)> =
@@ -57,8 +57,9 @@ pub async fn warmup_room(tx: &mut Tx, ctx: &Ctx, account: Option<Uuid>) -> Resul
     let today = ctx.today();
     let Some(limit) = warmup_limit(start, first.unwrap_or(50), growth.unwrap_or(50), days.unwrap_or(30), today) else { return Ok(None) };
     let used: i64 = sqlx::query_scalar(
-        "select count(*) from e_campaign_recipient r join e_email_campaign c on c.tenant_id = r.tenant_id and c.id = r.campaign \
-         left join e_email_account a on a.tenant_id = c.tenant_id and a.id = c.email_account \
+        "select count(*) from e_campaign_recipient r left join e_email_campaign c on c.tenant_id = r.tenant_id and c.id = r.campaign \
+         left join e_marketing_journey j on j.tenant_id = r.tenant_id and j.id = r.journey \
+         left join e_email_account a on a.tenant_id = r.tenant_id and a.id = coalesce(c.email_account, j.email_account) \
          where r.tenant_id = $1 and r.communication is not null and (r.queued_at at time zone $3)::date = $4 \
          and lower(split_part(coalesce(a.email_address, (select d.email_address from e_email_account d where d.tenant_id = r.tenant_id and d.enable_outgoing \
              and d.default_outgoing and d.company is null order by d.created_at limit 1)), '@', 2)) = $2",
