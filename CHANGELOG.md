@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+Closes the marketing gap report's first tier for Campaigns (MK-47, 48, 50, 70, 71, 77, 78, 79, 81, 84, 85, 86 and their neighbours).
+
+* **Topics and a preference page.** A workspace defines topics (name, description, in by default or not, promotional or operational); a contact's own choice for one is a Topic Subscription with when, how and where it was made. The signed unsubscribe link opens the person's page (topics to tick and "stop everything") when the workspace has topics, saved without a sign-in; without topics it asks what it asked before. A campaign or a journey's email step may name a topic. "Stop everything" is the platform's marketing opt-out of the address, one fact every app reads: an opt-out recorded elsewhere in the workspace now counts here too, and a person who opts back in on their page is opted back in there. An operational topic's mail reaches people whatever their marketing choice, until they untick it; the one-click request stays "everything" and also leaves the operational topic it came from. A signup form may be for a topic: its confirmation is asked for that topic. Existing contacts keep their status and are in every topic that is in by default.
+* **Text and chat-app messages** from campaigns (channel) and journeys (Send Message), through the platform's message templates and channel connections: per-number opt-outs and stop words, quiet hours and hourly limits are the platform's; delivery states are read back from its log. Contacts have a phone number.
+* **Journeys on record events** of any entity (event rules: entity, event, condition in the platform's expressions with `old` and `links`, the field naming the person): Record Event trigger, Wait For Event, Branch on Event Happened or Record Condition, a goal event, waits in minutes, re-entry after a number of hours. Once per person, journey and entry rule; a person who opts out, or is erased, leaves every journey at once. Emails show the record that started the journey as `record`.
+* **Segments from any data**: a field of the contact or the record it came from; a count, sum or latest date of records that name the person (in a period, with a condition); a saved query whose column names the person. Worked out when used and on a schedule, with entries and exits recorded.
+* **Revenue**: submitted sales orders (or invoices, a setting) credited to the last click (or open, a setting) within a window, once per order; totals on campaigns and journeys and the Revenue From Email report by message and link. Campaigns may add tracking parameters to links; they are kept on the click.
+* **Deliverability**: Sending Domains with the Mail app's DNS check and alignment, a warm-up that limits a new domain's daily volume, a seed list, and the refusal of a promotional campaign from a domain that failed its check unless an administrator overrides it with a reason.
+
 ## 0.4.9
 
 Works with Mail, Chat and Calendar 0.18 and 0.19 too. Comms 0.18 (Calendar: sharing with groups, CalDAV per calendar, subscriptions, rooms) only adds to what Campaigns uses, and the next release, the Mail composer on the shared editor, does not touch it either, so the requirement is now `>=0.13.1, <0.20`. Nothing else changes.
