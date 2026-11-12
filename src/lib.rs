@@ -94,6 +94,7 @@ pub async fn maintenance(k: &Kernel) -> Result<()> {
         let steps = [
             ("delivery", delivery::sync(k, &sys).await),
             ("messages", channels::sync(k, &sys).await.map(|n| n as usize)),
+            ("segments", segment::run(k, &sys).await),
             ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
             ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
             ("purge", purge(k, tenant).await),

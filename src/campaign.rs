@@ -452,6 +452,15 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
         tx.rollback().await?;
         return Ok(());
     }
+    // Query segments are worked out again before they are used.
+    for r in rows(&doc, "audience") {
+        if let Some(seg) = id(&r, "segment")
+            && let Err(e) = segment::refresh_if_query(k, sys, &mut tx, seg).await
+        {
+            tx.rollback().await?;
+            return record_error(k, tenant, campaign, &e.to_string()).await;
+        }
+    }
     let (include, exclude, groups) = match audience(k, sys, &mut tx, &doc).await {
         Ok(a) => a,
         Err(e) => {

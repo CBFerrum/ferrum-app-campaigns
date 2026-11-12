@@ -105,7 +105,8 @@
   label: Segment Rule
   kind: child
   fields:
-    - {name: rule_type, type: select, options: [Contact Field, Attribute, Email Group, Engagement], default: Contact Field, required: true, in_list: true}
+    - {name: rule_type, type: select, options: [Contact Field, Attribute, Email Group, Engagement, Record Field, Related Records], default: Contact Field, required: true,
+       in_list: true, description: "Record Field: a field of the contact (fields added to it too) or of the record it came from; Related Records: a count, sum or latest date over records that name the person"}
     - {name: field, type: select, options: [Email, First Name, Last Name, Full Name, Source, Consent Status, Linked Entity, Created On], in_list: true,
        description: "Contact Field rules"}
     - {name: attribute, type: data, max_length: 40, in_list: true, description: "Attribute rules: the attribute key"}
@@ -120,6 +121,16 @@
     - {name: activity, type: select, options: [Opened, Clicked, Was Sent], in_list: true, description: "Engagement rules"}
     - {name: within_days, type: int, min: 1, max: 3650, in_list: true, description: "Engagement rules: in the last N days"}
     - {name: campaign, type: link, to: EmailCampaign, description: "Engagement rules: only this campaign (blank = any campaign or journey email)"}
+    - {name: entity_name, type: data, label: Entity, max_length: 100, in_list: true,
+       description: "Record Field: MarketingContact, or the entity contacts came from (Customer, Lead); Related Records: the records counted (SalesOrder, Issue)"}
+    - {name: field_name, type: data, label: Field, max_length: 100, in_list: true, description: "Record Field: the field compared"}
+    - {name: link_field, type: data, max_length: 100,
+       description: "Related Records: the field of those records that names the person: an email field, a link to a Marketing Contact, or a link to the record a contact came from"}
+    - {name: aggregate, type: select, options: [Count, Sum, Latest], default: Count, description: "Related Records: how many, the sum of a field, or the latest date of a field"}
+    - {name: measure_field, type: data, max_length: 100, description: "Related Records: the number field summed, or the date field whose latest value is compared"}
+    - {name: date_field, type: data, max_length: 100, description: "Related Records: only records whose date field is in the last Within Days days"}
+    - {name: match_field, type: data, max_length: 100, description: "Related Records: only records whose field equals Match Value (a status, say)"}
+    - {name: match_value, type: data, max_length: 200}
 
 - name: MarketingSegment
   label: Marketing Segment
@@ -129,6 +140,15 @@
   description: "A dynamic group of contacts defined by rules on their fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days). Evaluated whenever it is used; the Preview action counts it."
   fields:
     - {name: segment_name, type: data, required: true, unique: true, in_list: true}
+    - {name: source, type: select, options: [Rules, Query], default: Rules, in_list: true,
+       description: "Rules over contacts and their records, or the rows of a saved query (refreshed when used and on its schedule)"}
+    - {name: query, type: json, widget: studio_query, visible_if: "doc.source == 'Query'", required_if: "doc.source == 'Query'",
+       description: "A query of rows (its entity and filters; grouping and totals are refused)"}
+    - {name: query_person_field, type: data, max_length: 100, visible_if: "doc.source == 'Query'", label: Column Naming The Person,
+       description: "How a row maps to a contact: an email column (matched to the contact's address), a link to a Marketing Contact, or a link to the record a contact came from; blank = the rows are Marketing Contacts, or records contacts came from"}
+    - {name: refresh_minutes, type: int, default: 60, min: 0, max: 10080,
+       description: "How often its membership is worked out again and who entered or left it recorded (0 = only when used); a query's is what campaigns and journeys read"}
+    - {name: refreshed_at, type: datetime, read_only: true, no_copy: true}
     - {name: match_type, type: select, options: [All, Any], default: All, required: true, label: Match, description: "All rules must hold, or at least one"}
     - {name: rules, type: table, of: SegmentRule}
     - {name: description, type: text}
@@ -140,8 +160,9 @@
     # Counts rules that are being edited without saving them (the segment screen calls it after every change).
     - {name: count, label: Count Without Saving, permission: read, read_only: true, hidden: true}
   form:
-    - {label: Segment, fields: [segment_name, match_type, description]}
+    - {label: Segment, fields: [segment_name, source, match_type, description, refresh_minutes, refreshed_at]}
     - {label: Rules, fields: [rules]}
+    - {label: Query, fields: [query, query_person_field]}
     - {label: Last Preview, fields: [contact_count, mailable_count, counted_at]}
   list: {columns: [segment_name, contact_count, mailable_count], sort: segment_name asc}
 
