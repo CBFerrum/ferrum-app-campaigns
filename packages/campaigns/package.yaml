@@ -9,7 +9,7 @@ modules:
     label: Marketing
     icon: megaphone
     order: 42
-    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, AudienceImport, EmailSuppression, CampaignRecipient,
+    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, SendingDomain, AudienceImport, EmailSuppression, CampaignRecipient,
             JourneyEnrollment, CampaignSettings, report:email_campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
             report:audience_growth, report:revenue_attribution]
 
@@ -33,6 +33,7 @@ roles:
       - {entity: EmailSuppression, read: true, create: true}
       - {entity: AudienceImport, read: true, write: true, create: true, if_owner: true}
       - {entity: SubscriptionForm, read: true}
+      - {entity: SendingDomain, read: true}
       - {entity: EmailGroup, read: true}
       - {entity: EmailGroupMember, read: true, write: true, create: true}
       - {entity: EmailTemplate, read: true}
@@ -52,6 +53,7 @@ roles:
       - {entity: AudienceImport, read: true, write: true, create: true, delete: true}
       - {entity: SubscriptionForm, read: true, write: true, create: true, delete: true}
       - {entity: CampaignSettings, read: true, write: true, create: true}
+      - {entity: SendingDomain, read: true, write: true, create: true, delete: true}
       - {entity: EmailGroup, read: true, write: true, create: true}
       - {entity: EmailGroupMember, read: true, write: true, create: true, delete: true, export: true, import: true}
       - {entity: EmailTemplate, read: true, write: true, create: true}

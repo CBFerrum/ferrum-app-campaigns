@@ -279,6 +279,72 @@ async fn scenario() {
     let (admin, mgr) = journeys(&t, tenant, mgr_id, [asha, ben]).await;
     segments(&t, &admin, &mgr, ben).await;
     revenue(&t, &admin, &mgr, ben).await;
+    deliverability(&t, &admin, &mgr).await;
+}
+
+/// Item 6: warm-up, the domain check's verdict, the refusal and its override, the seed list.
+async fn deliverability(t: &T, admin: &Ctx, mgr: &Ctx) {
+    let five = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            json!({"segment_name": "Five", "rules": [{"rule_type": "Contact Field", "field": "Email", "operator": "Ends With", "value": "@five.test"}]}),
+        )
+        .await);
+    for n in 1..=5 {
+        t.insert(mgr, "MarketingContact", json!({"email": format!("p{n}@five.test")})).await;
+    }
+    let today = chrono::Utc::now().date_naive();
+    // A new domain, beside the one the workspace has sent from all along.
+    let marketing = &t.list("EmailAccount", json!({"account_name": "Marketing"})).await[0];
+    let fresh = uid(&t
+        .insert(
+            admin,
+            "EmailAccount",
+            json!({"account_name": "Fresh", "email_address": "hello@fresh.test", "smtp_host": "127.0.0.1", "smtp_port": marketing["smtp_port"],
+            "smtp_security": "None"}),
+        )
+        .await);
+    let domain = uid(&t
+        .insert(
+            mgr,
+            "SendingDomain",
+            json!({"domain": "@Fresh.test", "warmup_start": today.to_string(), "warmup_first_day": 3, "warmup_growth_percent": 100, "warmup_days": 10}),
+        )
+        .await);
+    assert_eq!(t.get("SendingDomain", domain).await["domain"], json!("fresh.test"));
+    // A new domain sends its first day's three; the rest waits for tomorrow.
+    let (c, to) = t
+        .send(mgr, json!({"campaign_name": "Warm", "subject": "Hi", "content": "<p>Hi</p>", "email_account": fresh.to_string(), "audience": [{"segment": five.to_string()}]}))
+        .await;
+    assert_eq!(to.len(), 3, "{to:?}");
+    assert_eq!(t.list("CampaignRecipient", json!({"campaign": c.to_string(), "status": "Pending"})).await.len(), 2);
+    // Checked through the Mail app: here it signs for no domain of its own, so nothing could be checked.
+    let checked = t.action(admin, "SendingDomain", domain, "check", json!({})).await;
+    assert_eq!(checked["check_status"], json!("Not Checked"), "{checked}");
+    // A domain whose check failed refuses promotional campaigns, unless an administrator overrides with a reason.
+    t.exec("update e_sending_domain set check_status = 'Failing', warmup_start = null where tenant_id = $1 and id = $2", Some(domain)).await;
+    let blocked = uid(&t
+        .insert(
+            mgr,
+            "EmailCampaign",
+            json!({"campaign_name": "Blocked", "subject": "Hi", "content": "<p>Hi</p>", "email_account": fresh.to_string(),
+        "audience": [{"segment": five.to_string()}]}),
+        )
+        .await);
+    refused(t.k.submit(mgr, "EmailCampaign", blocked, None).await);
+    refused(t.k.update(mgr, "EmailCampaign", blocked, obj(json!({"deliverability_override": true, "override_reason": "urgent recall"})), None).await);
+    t.update(admin, "EmailCampaign", blocked, json!({"deliverability_override": true, "override_reason": "urgent recall"})).await;
+    t.k.submit(mgr, "EmailCampaign", blocked, None).await.expect("sent on the administrator's word");
+    // The seed list gets the campaign as recipients do.
+    let settings = uid(&t.list("CampaignSettings", json!({})).await[0]);
+    t.update(mgr, "CampaignSettings", settings, json!({"seed_list": "seed1@inbox.test\nseed2@inbox.test"})).await;
+    let sent = t.action(mgr, "EmailCampaign", blocked, "send_seed", json!({})).await;
+    assert_eq!(sent["sent"], json!(2));
+    assert_eq!(
+        t.scalar::<i64>("select count(*) from e_communication where tenant_id = $1 and recipients like 'seed%@inbox.test' and subject = 'Hi' and headers ? 'List-Unsubscribe' and $2::uuid is null", None).await,
+        2
+    );
 }
 
 /// A recipient's signed click path for link `n` of their email.

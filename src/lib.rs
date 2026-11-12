@@ -11,6 +11,7 @@ mod campaign;
 mod channels;
 mod check;
 mod contact;
+mod deliverability;
 mod delivery;
 mod events;
 mod import;
@@ -62,6 +63,7 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("SubscriptionForm", Arc::new(public::FormHook))
         .register("CampaignSettings", Arc::new(public::SettingsHook))
         .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
+        .register("SendingDomain", Arc::new(deliverability::DomainHook))
         .add_event_sink(Arc::new(events::JourneySink))
         .add_site(util::PACKAGE, Arc::new(public::CampaignsSite));
     hooks.add_personal_held(Arc::new(topics::Erased));

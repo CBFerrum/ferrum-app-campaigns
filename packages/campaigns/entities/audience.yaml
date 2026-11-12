@@ -10,6 +10,7 @@
     - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
     - {name: webhook_secret, type: secret, description: "Signs bounce and complaint webhooks (HMAC-SHA256). Write-only; the New Webhook Secret action creates one"}
     - {name: signing_key, type: secret, read_only: true, hidden: true, description: "Signs tracking, unsubscribe and confirmation links; created automatically"}
+    - {name: seed_list, type: text, description: "Addresses at the mailbox providers you watch (one per line or comma-separated, at most 50): Send To Seed List sends them the campaign as recipients get it, to see where it lands"}
     - {name: attribution_document, type: select, options: [Sales Order, Sales Invoice], default: Sales Order,
        description: "What counts as a purchase when ERP is installed: a submitted sales order or sales invoice of a customer a contact came from, or whose email is the contact's"}
     - {name: attribution_days, type: int, default: 5, min: 1, max: 90, label: Attribution Window (Days),
@@ -23,6 +24,7 @@
     - {label: Deliverability, fields: [soft_bounce_limit, webhook_secret]}
     - {label: Links, fields: [link_expiry_days, confirmation_hours]}
     - {label: Attribution, fields: [attribution_document, attribution_days, attribution_touch]}
+    - {label: Seed List, fields: [seed_list]}
 
 - name: MarketingContact
   label: Marketing Contact
@@ -216,3 +218,30 @@
     - {name: submission_count, type: int, read_only: true, no_copy: true, in_list: true}
     - {name: confirmed_count, type: int, read_only: true, no_copy: true, in_list: true}
   list: {columns: [form_name, enabled, email_group, submission_count, confirmed_count], sort: form_name asc}
+
+- name: SendingDomain
+  label: Sending Domain
+  kind: master
+  module: marketing
+  title_field: domain
+  description: "A domain campaigns send from (the part after @ of a From account's address): what its DNS says (checked through the Mail app's domain check), whether the visible sender is the domain mail is signed for, and its warm-up. A promotional campaign from a domain whose check failed is refused unless an administrator overrides it with a reason."
+  fields:
+    - {name: domain, type: data, required: true, unique: true, in_list: true}
+    - {name: check_status, type: select, options: [Not Checked, Passing, Failing], default: Not Checked, read_only: true, no_copy: true, in_list: true, in_filter: true}
+    - {name: spf, type: data, label: SPF, read_only: true, no_copy: true}
+    - {name: dkim, type: data, label: DKIM, read_only: true, no_copy: true}
+    - {name: dmarc_policy, type: data, label: DMARC Policy, read_only: true, no_copy: true, description: "The published policy (none, quarantine or reject); blank = none published"}
+    - {name: aligned, type: check, read_only: true, no_copy: true, description: "The visible sender's domain is the domain its mail is signed for"}
+    - {name: checked_at, type: datetime, read_only: true, no_copy: true, in_list: true}
+    - {name: check_notes, type: text, read_only: true, no_copy: true}
+    - {name: warmup_start, type: date, label: Warm-up Started On, description: "A new domain sends a little more each day from this day; blank = no warm-up"}
+    - {name: warmup_first_day, type: int, default: 50, min: 1, max: 1000000, label: Emails On The First Day}
+    - {name: warmup_growth_percent, type: int, default: 50, min: 1, max: 400, label: Daily Growth (%)}
+    - {name: warmup_days, type: int, default: 30, min: 1, max: 365, label: Warm-up Days, description: "After these days the domain has no daily limit of its own"}
+  actions:
+    - {name: check, label: Check DNS, permission: write}
+  form:
+    - {label: Domain, fields: [domain, check_status, checked_at]}
+    - {label: Records, fields: [spf, dkim, dmarc_policy, aligned, check_notes]}
+    - {label: Warm-up, fields: [warmup_start, warmup_first_day, warmup_growth_percent, warmup_days]}
+  list: {columns: [domain, check_status, checked_at], sort: domain asc}
