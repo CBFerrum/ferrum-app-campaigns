@@ -192,6 +192,11 @@ async fn click(k: &Kernel, req: &SiteRequest, token: &str) -> Result<SiteRespons
         .fetch_optional(&mut *tx)
         .await?;
     let Some(url) = url else { return Ok(util::invalid_link()) };
+    // A campaign that adds tracking parameters sends the visit on with them, and keeps them on the click.
+    let utm = crate::attribution::utm_of(&mut tx, req.tenant, owner).await?;
+    let pairs: Vec<(&str, &str)> = utm.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let url = if utm.is_empty() { url } else { crate::attribution::tag(&url, &pairs) };
+    let utm = (!utm.is_empty()).then(|| Value::Object(utm.iter().map(|(k, v)| (k.to_string(), json!(v))).collect()));
     // A click proves the email was opened, even with images blocked.
     sqlx::query(
         "update e_campaign_recipient set click_count = click_count + 1, clicked_at = coalesce(clicked_at, now()), last_clicked_at = now(), \
@@ -202,11 +207,12 @@ async fn click(k: &Kernel, req: &SiteRequest, token: &str) -> Result<SiteRespons
     .bind(rid)
     .execute(&mut *tx)
     .await?;
-    sqlx::query("insert into campaigns_click (tenant_id, recipient_id, owner_id, link_no) values ($1, $2, $3, $4)")
+    sqlx::query("insert into campaigns_click (tenant_id, recipient_id, owner_id, link_no, utm) values ($1, $2, $3, $4, $5)")
         .bind(req.tenant)
         .bind(rid)
         .bind(owner)
         .bind(link)
+        .bind(utm)
         .execute(&mut *tx)
         .await?;
     delivery::engaged(&mut tx, req.tenant, contact).await?;
@@ -230,6 +236,11 @@ async fn unsubscribe(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool
     let Some((rid, contact, _, email, name)) = recipient(&mut tx, req.tenant, rid).await? else { return Ok(util::invalid_link()) };
     let what = name.map(|n| format!(" (you received “{}”)", html_escape(&n))).unwrap_or_default();
     if !confirmed {
+        // With topics, the link opens the person's preference page.
+        if let Some(prefs) = crate::topics::page(k, &mut tx, req.tenant, contact, &email, &what).await? {
+            tx.rollback().await?;
+            return Ok(prefs);
+        }
         tx.rollback().await?;
         return Ok(page(
             200,
@@ -240,11 +251,34 @@ async fn unsubscribe(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool
             ),
         ));
     }
+    let fields = form_fields(req).map(|(f, _)| f).unwrap_or_default();
+    if fields.contains_key("prefs") && contact_exists(&mut tx, req.tenant, contact).await? {
+        let sys = system(k, req.tenant).await?;
+        let from = name_suffix(&mut tx, req.tenant, rid).await?;
+        let done = crate::topics::save(k, &sys, &mut tx, contact, &email, &fields, &from, &util::ip_hash(&key, &req.client_ip)).await?;
+        tx.commit().await?;
+        return Ok(done);
+    }
     sqlx::query("update e_campaign_recipient set unsubscribed_at = coalesce(unsubscribed_at, now()), updated_at = now() where tenant_id = $1 and id = $2")
         .bind(req.tenant)
         .bind(rid)
         .execute(&mut *tx)
         .await?;
+    // The one-click request is "everything" (RFC 8058); an operational topic's mail is not stopped by that, so the
+    // topic it came for is left too.
+    let operational: Option<Uuid> = sqlx::query_scalar(
+        "select t.id from e_campaign_recipient r join e_marketing_topic t on t.tenant_id = r.tenant_id and t.id = r.topic \
+         where r.tenant_id = $1 and r.id = $2 and t.category = 'Operational'",
+    )
+    .bind(req.tenant)
+    .bind(rid)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let (Some(t), true) = (operational, contact_exists(&mut tx, req.tenant, contact).await?) {
+        let sys = system(k, req.tenant).await?;
+        let from = name_suffix(&mut tx, req.tenant, rid).await?;
+        crate::topics::choose(k, &sys, &mut tx, contact, t, "Unsubscribed", "Unsubscribe Link", &format!("unsubscribe link{from}")).await?;
+    }
     let consent: Option<String> = sqlx::query_scalar("select consent_status from e_marketing_contact where tenant_id = $1 and id = $2 for update")
         .bind(req.tenant)
         .bind(contact)
@@ -268,6 +302,14 @@ async fn unsubscribe(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool
     tx.commit().await?;
     tracing::info!(tenant = %req.tenant, recipient = %rid, "unsubscribed");
     Ok(page(200, "You are unsubscribed", &format!("<p><strong>{}</strong> will not receive our marketing emails any more.</p>", html_escape(&email))))
+}
+
+async fn contact_exists(tx: &mut Tx, tenant: Uuid, contact: Uuid) -> Result<bool> {
+    Ok(sqlx::query_scalar("select exists (select 1 from e_marketing_contact where tenant_id = $1 and id = $2)")
+        .bind(tenant)
+        .bind(contact)
+        .fetch_one(&mut **tx)
+        .await?)
 }
 
 async fn name_suffix(tx: &mut Tx, tenant: Uuid, rid: Uuid) -> Result<String> {
@@ -378,11 +420,16 @@ async fn subscribe(k: &Kernel, req: &SiteRequest, form: &str) -> Result<SiteResp
         }
         None => true,
     };
+    // A form for a topic asks the confirmation for that topic, also of someone who already gets other mail.
+    let in_topic = match (id(&f, "topic"), &known) {
+        (Some(t), Some((cid, ..))) => crate::topics::is_in(&mut tx, tenant, *cid, t).await?,
+        _ => true,
+    };
     let contact = match known {
         // Complaints, hard bounces and manual blocks get no mail from a form anyone can fill in.
         _ if blocked.is_some() => None,
         Some((_, consent, _)) if consent == "Complained" => None,
-        Some((_, consent, _)) if consent == "Subscribed" && in_group => None,
+        Some((_, consent, _)) if consent == "Subscribed" && in_group && in_topic => None,
         Some((_, _, Some(at))) if Utc::now() - at < chrono::Duration::minutes(CONFIRMATION_PAUSE_MINUTES) => None,
         // An existing contact is not changed by an unauthenticated request; confirming is what counts.
         Some((cid, ..)) => Some(cid),
@@ -427,7 +474,7 @@ async fn subscribe(k: &Kernel, req: &SiteRequest, form: &str) -> Result<SiteResp
             html,
             unsubscribe: None,
         };
-        send::queue(k, &sys, &mut tx, id(&f, "email_account"), &email, &composed, ("MarketingContact", cid), false).await?;
+        send::queue(k, &sys, &mut tx, id(&f, "email_account"), &email, &composed, ("MarketingContact", cid), send::Kind::Transactional).await?;
         k.set_values_tx(&sys, &mut tx, "MarketingContact", cid, values([("confirmation_sent_at", json!(util::ts(util::now())))])).await?;
     }
     sqlx::query("update e_subscription_form set submission_count = coalesce(submission_count, 0) + 1 where tenant_id = $1 and id = $2")
@@ -517,6 +564,11 @@ async fn confirm(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool) ->
                 changed = true;
             }
         }
+    }
+    if let Some(t) = id(&f, "topic")
+        && crate::topics::choose(k, &sys, &mut tx, cid, t, "Subscribed", "Confirmation", &format!("double opt-in: {form_name}")).await?
+    {
+        changed = true;
     }
     if changed {
         sqlx::query("update e_subscription_form set confirmed_count = coalesce(confirmed_count, 0) + 1 where tenant_id = $1 and id = $2")

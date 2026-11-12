@@ -17,9 +17,26 @@ use serde_json::{Map, Value, json};
 use std::sync::LazyLock;
 use uuid::Uuid;
 
-/// SQL condition on a contact row aliased `c`: campaigns and journeys may mail it.
-pub const MAILABLE: &str =
-    "(c.consent_status = 'Subscribed' and not exists (select 1 from e_email_suppression x where x.tenant_id = c.tenant_id and x.email = c.email))";
+/// SQL condition on a contact row aliased `c`: campaigns and journeys may send it promotional mail. "Stop everything"
+/// is one fact, the platform's marketing opt-out of the address (`contact_consent`, which every app's marketing asks):
+/// an opt-out recorded anywhere (another app, staff, the platform's own opt-out link) counts here too, and this app
+/// writes its own opt-outs there (`ContactHook`). An erased contact is never mailed.
+pub const MAILABLE: &str = "(c.consent_status = 'Subscribed' and c.email not like '%@erased.invalid' \
+     and not exists (select 1 from e_email_suppression x where x.tenant_id = c.tenant_id and x.email = c.email) \
+     and not exists (select 1 from contact_consent k where k.tenant_id = c.tenant_id and k.email = c.email::citext and k.purpose = 'marketing' \
+     and k.channel = 'email' and not k.granted))";
+
+/// SQL condition on a contact row aliased `c`: promotional text and chat-app messages may go to its number (the
+/// number's own opt-out on each channel is the platform's to apply).
+pub const TEXTABLE: &str = "(c.consent_status = 'Subscribed' and coalesce(c.phone, '') <> '' and c.email not like '%@erased.invalid')";
+
+/// [`TEXTABLE`] for an operational topic: whatever the marketing choice.
+pub const TEXT_REACHABLE: &str = "(c.consent_status in ('Subscribed', 'Unsubscribed') and coalesce(c.phone, '') <> '' and c.email not like '%@erased.invalid')";
+
+/// SQL condition on a contact row aliased `c`: an operational topic's mail may reach it whatever its marketing choice
+/// (it unticks the topic to stop it), never when the address bounced, complained or is blocked, nor before it confirmed.
+pub const REACHABLE: &str = "(c.consent_status in ('Subscribed', 'Unsubscribed') and c.email not like '%@erased.invalid' \
+     and not exists (select 1 from e_email_suppression x where x.tenant_id = c.tenant_id and x.email = c.email and x.reason <> 'Unsubscribed'))";
 
 /// Postgres pattern of an address worth importing (the kernel's email rule).
 pub const EMAIL_PATTERN: &str = "^[^@[:space:]]{1,64}@[^@[:space:]]+\\.[^@[:space:]]+$";
@@ -79,7 +96,7 @@ fn full_name(first: Option<&str>, last: Option<&str>) -> Option<String> {
 
 /// Consent changes a person may make through the records API (`old` → `new`). Opting back in is
 /// the contact's own act (a confirmed signup); bounces and complaints are recorded by the engine.
-fn user_may_set(old: Option<&str>, new: &str) -> bool {
+pub(crate) fn user_may_set(old: Option<&str>, new: &str) -> bool {
     match old {
         None => matches!(new, "Subscribed" | "Pending" | "Unsubscribed"),
         Some(o) if o == new => true,
@@ -147,6 +164,8 @@ impl DocHook for ContactHook {
             let granted = match (old_status, s(doc, "consent_status")) {
                 (_, Some("Unsubscribed" | "Complained")) => Some(false),
                 (Some("Pending"), Some("Subscribed")) => Some(true),
+                // The engine opts someone back in only on their own word: a confirmed form, their preference page.
+                (Some("Unsubscribed"), Some("Subscribed")) if hc.ctx.is_system => Some(true),
                 _ => None,
             };
             if let (Some(granted), Some(email)) = (granted, s(doc, "email").map(str::to_string)) {
@@ -230,6 +249,10 @@ impl DocHook for ContactHook {
                 flag_record(hc, doc).await?;
             }
         }
+        // Someone who may no longer be mailed leaves every journey at once, not at the next round.
+        if before == Some("Subscribed") && after != "Subscribed" {
+            exit_journeys(hc.tx, tenant, &[contact], "unsubscribed or suppressed").await?;
+        }
         // Attribute changes start journeys ("Attribute Changed").
         let empty = Map::new();
         let new_attrs = doc.get("attributes").and_then(Value::as_object).unwrap_or(&empty);
@@ -258,6 +281,20 @@ async fn flag_record(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<()> {
         Ok(()) | Err(Error::NotFound(_)) => Ok(()),
         Err(e) => Err(e),
     }
+}
+
+/// Takes `contacts` out of every journey they are in.
+pub async fn exit_journeys(tx: &mut Tx, tenant: Uuid, contacts: &[Uuid], why: &str) -> Result<u64> {
+    Ok(sqlx::query(
+        "update e_journey_enrollment set status = 'Exited', exit_reason = $3, finished_at = now(), waiting = false, version = version + 1, \
+         updated_at = now() where tenant_id = $1 and contact = any($2) and status = 'Active'",
+    )
+    .bind(tenant)
+    .bind(contacts)
+    .bind(why)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected())
 }
 
 /// Records a consent or attribute change (`field`: `consent_status` or `attr:<key>`).
@@ -325,17 +362,15 @@ pub fn template_view(doc: &Doc) -> Value {
     })
 }
 
-/// Contacts by id with what sending needs, and whether each is mailable right now.
-pub async fn load_for_sending(tx: &mut Tx, tenant: Uuid, ids: &[Uuid]) -> Result<Vec<(Uuid, Value, bool)>> {
-    let rows: Vec<(Uuid, Value, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "select c.id, jsonb_build_object('id', c.id, 'email', c.email, 'first_name', c.first_name, 'last_name', c.last_name, 'full_name', c.full_name, \
-         'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = any($2)"
-    )))
-    .bind(tenant)
-    .bind(ids)
-    .fetch_all(&mut **tx)
-    .await?;
-    Ok(rows)
+/// Contacts by id with what sending needs, and whether each may be sent to right now (`reach`).
+pub async fn load_for_sending(tx: &mut Tx, tenant: Uuid, ids: &[Uuid], reach: &crate::topics::Reach) -> Result<Vec<(Uuid, Value, bool)>> {
+    let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+        "select c.id, jsonb_build_object('id', c.id, 'email', c.email, 'phone', c.phone, 'first_name', c.first_name, 'last_name', c.last_name, \
+         'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{}'::jsonb)), ",
+    );
+    reach.push(&mut qb);
+    qb.push(" from e_marketing_contact c where c.tenant_id = ").push_bind(tenant).push(" and c.id = any(").push_bind(ids.to_vec()).push(")");
+    Ok(qb.build_query_as().fetch_all(&mut **tx).await?)
 }
 
 /// Suppression entries: people name themselves as the source.

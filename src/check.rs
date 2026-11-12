@@ -3,10 +3,12 @@
 //! writes anything, so neither locks the campaign or leaves an audit entry.
 
 use crate::campaign::{audience as audience_of, draft, extra, push_any, sample_contact, test_size};
+use crate::channels::Channel;
 use crate::contact::{EMAIL_PATTERN, MAILABLE};
 use crate::render;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Links};
+use crate::topics::{self, Reach};
 use crate::util::{self, b, id, int, rows, s, sys};
 use chrono::{Duration, NaiveDateTime};
 use ferrum_kernel::{Ctx, Doc, Error, HookCtx, Result, Tx};
@@ -29,23 +31,25 @@ pub struct Tally {
     pub suppressed: i64,
     /// Of `contacts`: members of the email groups who are not contacts yet; starting the campaign adds them.
     pub new_contacts: i64,
+    /// Would be mailed, but are not in the campaign's topic.
+    pub not_in_topic: i64,
 }
 
 /// Counts what `start` would find: the existing contacts, plus the members of `groups` who are not
 /// contacts yet (added as `Subscribed`, as `import::adopt_group_members` does when sending starts:
 /// keep the two in step), in `include` and not in `exclude`.
-async fn tally(tx: &mut Tx, ctx: &Ctx, groups: &[Uuid], include: &[Segment], exclude: &[Segment]) -> Result<Tally> {
+async fn tally(tx: &mut Tx, ctx: &Ctx, reach: &Reach, groups: &[Uuid], include: &[Segment], exclude: &[Segment]) -> Result<Tally> {
     let (tenant, today, tz) = (ctx.tenant, ctx.today(), ctx.schema.timezone.clone());
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
         "with c_all as (select c.tenant_id, c.id, c.email, c.first_name, c.last_name, c.full_name, c.source, c.consent_status, c.record_entity, \
-         c.attributes, c.created_at, false as adopted from e_marketing_contact c where c.tenant_id = ",
+         c.record_id, c.phone, c.attributes, c.created_at, false as adopted from e_marketing_contact c where c.tenant_id = ",
     );
     qb.push_bind(tenant)
         .push(" union all select ")
         .push_bind(tenant)
         .push(
             ", gen_random_uuid(), x.email, nullif(split_part(x.name, ' ', 1), ''), nullif(btrim(substr(x.name, length(split_part(x.name, ' ', 1)) + 1)), ''), \
-             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, '{}'::jsonb, now(), true \
+             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, null::text, null::text, '{}'::jsonb, now(), true \
              from (select distinct on (lower(btrim(m.email))) lower(btrim(m.email)) as email, btrim(coalesce(m.member_name, '')) as name \
              from e_email_group_member m where m.tenant_id = ",
         )
@@ -57,19 +61,40 @@ async fn tally(tx: &mut Tx, ctx: &Ctx, groups: &[Uuid], include: &[Segment], exc
         .push(" and not exists (select 1 from e_marketing_contact k where k.tenant_id = ")
         .push_bind(tenant)
         .push(" and k.email = x.email)) ");
+    qb.push("select count(*), count(*) filter (where ");
+    reach.push(&mut qb);
     qb.push(format!(
-        "select count(*), count(*) filter (where {MAILABLE}), count(*) filter (where c.consent_status = 'Pending'), \
+        "), count(*) filter (where c.consent_status = 'Pending'), \
          count(*) filter (where c.consent_status = 'Unsubscribed'), count(*) filter (where c.consent_status = 'Bounced'), \
          count(*) filter (where c.consent_status = 'Complained'), count(*) filter (where c.consent_status = 'Subscribed' and not {MAILABLE}), \
-         count(*) filter (where c.adopted) from c_all c where c.tenant_id = "
+         count(*) filter (where c.adopted), count(*) filter (where {MAILABLE} and not ("
     ));
+    Reach { topic: None, ..reach.clone() }.push(&mut qb);
+    qb.push(" and ");
+    match reach.topic {
+        Some(t) => topics::push_in_topic(&mut qb, t),
+        None => {
+            qb.push("true");
+        }
+    }
+    qb.push(")) from c_all c where c.tenant_id = ");
     qb.push_bind(tenant).push(" and (");
     push_any(&mut qb, include, today, &tz);
     qb.push(") and not (");
     push_any(&mut qb, exclude, today, &tz);
     qb.push(")");
-    let t: (i64, i64, i64, i64, i64, i64, i64, i64) = qb.build_query_as().fetch_one(&mut **tx).await?;
-    Ok(Tally { contacts: t.0, mailable: t.1, pending: t.2, unsubscribed: t.3, bounced: t.4, complained: t.5, suppressed: t.6, new_contacts: t.7 })
+    let t: (i64, i64, i64, i64, i64, i64, i64, i64, i64) = qb.build_query_as().fetch_one(&mut **tx).await?;
+    Ok(Tally {
+        contacts: t.0,
+        mailable: t.1,
+        pending: t.2,
+        unsubscribed: t.3,
+        bounced: t.4,
+        complained: t.5,
+        suppressed: t.6,
+        new_contacts: t.7,
+        not_in_topic: t.8,
+    })
 }
 
 /// The first message of an error, as a person reads it.
@@ -86,6 +111,7 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
     let ctx = hc.ctx;
     let tenant = ctx.tenant;
     let engine = sys(ctx);
+    let reach = Reach::of(hc.tx, tenant, id(doc, "topic")).await?.on(Channel::of(doc));
     // One line per audience row, counted alone.
     let mut lines = Vec::new();
     for r in rows(doc, "audience") {
@@ -105,12 +131,12 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
             }
             (None, None) => continue,
         };
-        let t = tally(hc.tx, ctx, &groups, &[seg], &[]).await?;
+        let t = tally(hc.tx, ctx, &reach, &groups, &[seg], &[]).await?;
         lines.push(json!({"kind": kind, "id": row_id, "name": name, "exclude": exclude, "contacts": t.contacts, "mailable": t.mailable}));
     }
     let (include, exclude, groups) = audience_of(hc.kernel, &engine, hc.tx, doc).await?;
-    let all = tally(hc.tx, ctx, &groups, &include, &exclude).await?;
-    let before = tally(hc.tx, ctx, &groups, &include, &[]).await?;
+    let all = tally(hc.tx, ctx, &reach, &groups, &include, &exclude).await?;
+    let before = tally(hc.tx, ctx, &reach, &groups, &include, &[]).await?;
 
     // Whether it could go out now, and what each version of the email will be.
     let base = util::site_base(hc.tx, tenant).await?;
@@ -126,7 +152,8 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
         tracked: Some(HashMap::new()),
         postal_address: None,
     };
-    let mut versions = vec![None];
+    // A text or chat-app campaign has no email to show.
+    let mut versions = if reach.channel == Channel::Email { vec![None] } else { vec![] };
     if b(doc, "ab_test") {
         versions.extend(rows(doc, "variants").iter().filter_map(|r| s(r, "variant").map(|v| Some(v.to_string()))));
     }
@@ -158,7 +185,8 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
         "checked_at": util::ts(util::now()),
         "contacts": all.contacts,
         "mailable": all.mailable,
-        "left_out": {"pending": all.pending, "unsubscribed": all.unsubscribed, "bounced": all.bounced, "complained": all.complained, "suppressed": all.suppressed},
+        "left_out": {"pending": all.pending, "unsubscribed": all.unsubscribed, "bounced": all.bounced, "complained": all.complained, "suppressed": all.suppressed,
+                     "not_in_topic": all.not_in_topic},
         "excluded": before.contacts - all.contacts,
         "new_contacts": all.new_contacts,
         "rows": lines,

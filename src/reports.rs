@@ -101,6 +101,8 @@ impl ReportSource for CampaignReports {
                    "params": [link("journey", "Journey", "MarketingJourney")]}),
             json!({"name": "audience_growth", "label": "Audience Growth", "module": "marketing", "entity": "MarketingContact",
                    "params": [date("from_date", "From Date"), date("to_date", "To Date")]}),
+            json!({"name": "revenue_attribution", "label": "Revenue From Email", "module": "marketing", "entity": "EmailCampaign",
+                   "params": [link("campaign", "Campaign", "EmailCampaign"), link("journey", "Journey", "MarketingJourney")]}),
         ]
     }
 
@@ -112,6 +114,7 @@ impl ReportSource for CampaignReports {
             "link_clicks" => link_clicks(k, ctx, &p).await,
             "journey_funnel" => funnel(k, ctx, &p).await,
             "audience_growth" => growth(k, ctx, &p).await,
+            "revenue_attribution" => revenue(k, ctx, &p).await,
             _ => Err(Error::NotFound(format!("report {name}"))),
         }
     }
@@ -256,6 +259,46 @@ async fn link_clicks(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
         "columns": [col("link_no", "#", "int"), col("url", "Link", "data"), col("unique_clicks", "Unique Clicks", "int"), col("total_clicks", "Total Clicks", "int")],
         "rows": data.iter().map(|(n, url, u, t)| json!({"link_no": n, "url": url, "unique_clicks": u, "total_clicks": t})).collect::<Vec<_>>(),
         "totals": {"unique_clicks": data.iter().map(|d| d.2).sum::<i64>(), "total_clicks": data.iter().map(|d| d.3).sum::<i64>()},
+    }))
+}
+
+/// Orders and revenue credited to a campaign or a journey (Campaign Settings: Attribution), by message (an A/B
+/// variant, a journey step) and link (blank: an open). Each order is credited to one email, so the rows add up.
+async fn revenue(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
+    let owner = match (p.uuid("campaign")?, p.uuid("journey")?) {
+        (Some(c), _) => {
+            k.get(ctx, "EmailCampaign", c, false).await?;
+            c
+        }
+        (None, Some(j)) => {
+            ctx.require("MarketingJourney", Action::Read)?;
+            k.get(ctx, "MarketingJourney", j, false).await?;
+            j
+        }
+        _ => return Err(Error::field("campaign", "choose a campaign or a journey")),
+    };
+    let mut tx = read_tx(k, ctx).await?;
+    let data: Vec<(Option<String>, Option<i32>, Option<String>, i64, String)> = sqlx::query_as(
+        "select coalesce(r.variant, 'step ' || r.journey_step::text), a.link_no, l.url, count(*), trim_scale(sum(a.amount))::text from campaigns_attribution a \
+         join e_campaign_recipient r on r.tenant_id = a.tenant_id and r.id = a.recipient_id \
+         left join campaigns_link l on l.tenant_id = a.tenant_id and l.owner_id = a.owner_id and l.link_no = a.link_no \
+         where a.tenant_id = $1 and a.owner_id = $2 group by 1, 2, 3 order by 5 desc, 1, 2",
+    )
+    .bind(ctx.tenant)
+    .bind(owner)
+    .fetch_all(&mut *tx)
+    .await?;
+    let total: Option<String> = sqlx::query_scalar("select trim_scale(sum(amount))::text from campaigns_attribution where tenant_id = $1 and owner_id = $2")
+        .bind(ctx.tenant)
+        .bind(owner)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.rollback().await?;
+    Ok(json!({
+        "columns": [col("message", "Message", "data"), col("link_no", "#", "int"), col("url", "Link", "data"), col("orders", "Orders", "int"),
+                    col("revenue", "Revenue", "decimal")],
+        "rows": data.iter().map(|(m, n, url, o, r)| json!({"message": m, "link_no": n, "url": url, "orders": o, "revenue": r})).collect::<Vec<_>>(),
+        "totals": {"orders": data.iter().map(|d| d.3).sum::<i64>(), "revenue": total.unwrap_or_else(|| "0".into())},
     }))
 }
 

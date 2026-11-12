@@ -6,10 +6,14 @@
 //! with its accounts, retries and limits. Hooks are registered per entity, so a tenant without
 //! the package never runs them; the public endpoints are a `Site` (see packages/campaigns/README.md).
 
+mod attribution;
 mod campaign;
+mod channels;
 mod check;
 mod contact;
+mod deliverability;
 mod delivery;
+mod events;
 mod import;
 mod journey;
 mod public;
@@ -17,6 +21,7 @@ mod render;
 mod reports;
 mod segment;
 mod send;
+mod topics;
 mod util;
 
 pub use public::machine_open;
@@ -57,7 +62,11 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("JourneyEnrollment", Arc::new(journey::EnrollmentHook))
         .register("SubscriptionForm", Arc::new(public::FormHook))
         .register("CampaignSettings", Arc::new(public::SettingsHook))
+        .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
+        .register("SendingDomain", Arc::new(deliverability::DomainHook))
+        .add_event_sink(Arc::new(events::JourneySink))
         .add_site(util::PACKAGE, Arc::new(public::CampaignsSite));
+    hooks.add_personal_held(Arc::new(topics::Erased));
 }
 
 /// This app's reports.
@@ -87,8 +96,11 @@ pub async fn maintenance(k: &Kernel) -> Result<()> {
         let bulk = || Trace::at_priority(PRIORITY_BULK);
         let steps = [
             ("delivery", delivery::sync(k, &sys).await),
+            ("messages", channels::sync(k, &sys).await.map(|n| n as usize)),
+            ("segments", segment::run(k, &sys).await),
             ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
             ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
+            ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
             ("purge", purge(k, tenant).await),
         ];
         for (step, outcome) in steps {
@@ -114,8 +126,17 @@ async fn purge(k: &Kernel, tenant: Uuid) -> Result<usize> {
         .execute(&mut *tx)
         .await?
         .rows_affected();
+    // Events matter while their person is in the journey.
+    let c = sqlx::query(
+        "delete from campaigns_journey_event v where tenant_id = $1 and not exists (select 1 from e_journey_enrollment e where e.tenant_id = v.tenant_id \
+         and e.journey = v.journey_id and e.contact = v.contact_id and e.status = 'Active')",
+    )
+    .bind(tenant)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
     tx.commit().await?;
-    Ok((a + b) as usize)
+    Ok((a + b + c) as usize)
 }
 
 #[cfg(test)]
