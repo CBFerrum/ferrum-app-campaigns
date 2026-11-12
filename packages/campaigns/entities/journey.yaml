@@ -1,8 +1,21 @@
+- name: JourneyEventRule
+  label: Journey Event Rule
+  kind: child
+  description: "Something that happens to a record of any entity the workspace has (a form response, an order, a deal, a ticket, a booking): numbered by its row, used by the trigger, the goal and the Wait For Event and Branch steps"
+  fields:
+    - {name: label, type: data, max_length: 100, in_list: true}
+    - {name: entity_name, type: data, label: Entity, required: true, max_length: 100, in_list: true, description: "The entity, by its name (SalesOrder, FormResponse, Deal)"}
+    - {name: event, type: select, options: [Created, Updated, Submitted, Cancelled, Any Change], default: Created, required: true, in_list: true}
+    - {name: condition, type: text, description: "Optional: an expression over the record (doc), what it was before the change (old) and the records its links name (links.<field>), as in rules"}
+    - {name: person_field, type: data, max_length: 100, in_list: true,
+       description: "The field that names the person: an email field, a link to a Marketing Contact, or a link to a record a contact came from (a customer, a lead) or whose email field names them; blank = the record itself is where a contact came from, or its email field"}
+
 - name: JourneyStep
   label: Journey Step
   kind: child
   fields:
-    - {name: step_type, type: select, options: [Send Email, Send Message, Wait, Branch, Update Attribute, Add To Group, Remove From Group, Exit], required: true, in_list: true}
+    - {name: step_type, type: select, options: [Send Email, Send Message, Wait, Wait For Event, Branch, Update Attribute, Add To Group, Remove From Group, Exit], required: true,
+       in_list: true}
     - {name: label, type: data, max_length: 100, in_list: true}
     - {name: subject, type: data, max_length: 998, description: "Send Email"}
     - {name: preheader, type: data, max_length: 250, description: "Send Email"}
@@ -11,16 +24,19 @@
     - {name: topic, type: link, to: MarketingTopic, description: "Send Email, Send Message: only to people in this topic (the others go on to the next step)"}
     - {name: channel, type: select, options: [Text Message, Chat App], description: "Send Message"}
     - {name: message_template, type: data, max_length: 100, description: "Send Message: the key of a message template about a Marketing Contact"}
-    - {name: wait_amount, type: int, min: 1, max: 10000, in_list: true, description: "Wait"}
-    - {name: wait_unit, type: select, options: [Hours, Days], default: Days, in_list: true,
+    - {name: wait_amount, type: int, min: 1, max: 10000, in_list: true, description: "Wait; Wait For Event: how long at most"}
+    - {name: wait_unit, type: select, options: [Minutes, Hours, Days], default: Days, in_list: true,
        description: "Wait: days keep the time of day in the workspace's time zone (across daylight saving changes)"}
-    - {name: branch_on, type: select, options: [Opened Last Email, Clicked Last Email, Attribute Equals, In Segment], in_list: true, description: "Branch"}
+    - {name: branch_on, type: select, options: [Opened Last Email, Clicked Last Email, Attribute Equals, In Segment, Event Happened, Record Condition], in_list: true,
+       description: "Branch. Event Happened: the event rule's event happened to the person since they entered; Record Condition: the condition holds for the record that started the journey, as it is now"}
+    - {name: event_rule, type: int, min: 1, max: 20, description: "Wait For Event, Branch on Event Happened: the number of the journey's event rule"}
+    - {name: condition, type: text, description: "Branch on Record Condition: an expression over the record that started the journey (doc) and its linked records (links.<field>)"}
     - {name: attribute, type: data, max_length: 40, description: "Branch on Attribute Equals, Update Attribute: the attribute key"}
     - {name: value, type: data, max_length: 200, description: "Branch on Attribute Equals, Update Attribute (blank removes the attribute)"}
     - {name: segment, type: link, to: MarketingSegment, description: "Branch on In Segment"}
     - {name: email_group, type: link, to: EmailGroup, description: "Add To Group, Remove From Group"}
-    - {name: next_step, type: int, min: 1, max: 100, in_list: true, description: "Step to go to next (blank = the following step); for Branch: when the condition holds"}
-    - {name: else_step, type: int, min: 1, max: 100, in_list: true, description: "Branch: step to go to when the condition does not hold (blank = the journey ends)"}
+    - {name: next_step, type: int, min: 1, max: 100, in_list: true, description: "Step to go to next (blank = the following step); for Branch: when the condition holds; for Wait For Event: when it happened"}
+    - {name: else_step, type: int, min: 1, max: 100, in_list: true, description: "Branch: step to go to when the condition does not hold; Wait For Event: when the time ran out (blank = the journey ends)"}
 
 - name: MarketingJourney
   label: Marketing Journey
@@ -31,7 +47,8 @@
   fields:
     - {name: journey_name, type: data, required: true, unique: true, in_list: true}
     - {name: status, type: select, options: [Draft, Active, Paused, Stopped], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
-    - {name: trigger_type, type: select, options: [Joined Email Group, Entered Segment, Attribute Changed, Date Anniversary], required: true, in_list: true}
+    - {name: trigger_type, type: select, options: [Joined Email Group, Entered Segment, Attribute Changed, Date Anniversary, Record Event], required: true, in_list: true}
+    - {name: trigger_rule, type: int, default: 1, min: 1, max: 20, visible_if: "doc.trigger_type == 'Record Event'", description: "Record Event: the number of the event rule that starts the journey"}
     - {name: trigger_group, type: link, to: EmailGroup, visible_if: "doc.trigger_type == 'Joined Email Group'", required_if: "doc.trigger_type == 'Joined Email Group'"}
     - {name: trigger_segment, type: link, to: MarketingSegment, visible_if: "doc.trigger_type == 'Entered Segment'", required_if: "doc.trigger_type == 'Entered Segment'"}
     - {name: trigger_attribute, type: data, max_length: 40, visible_if: "doc.trigger_type == 'Attribute Changed' || doc.trigger_type == 'Date Anniversary'",
@@ -41,11 +58,15 @@
     - {name: anniversary_offset_days, type: int, default: 0, min: -60, max: 60, visible_if: "doc.trigger_type == 'Date Anniversary'",
        description: "Days after (positive) or before (negative) the anniversary, in the workspace's time zone"}
     - {name: include_existing, type: check, description: "Joined Email Group and Entered Segment: also enroll those already in it when the journey is activated"}
-    - {name: allow_reentry, type: check, description: "Contacts who left the group or segment (or finished the journey after an attribute change) can enter again"}
+    - {name: allow_reentry, type: check, description: "Contacts who left the group or segment (or finished the journey after an attribute change, or whose event happens again) can enter again"}
+    - {name: reentry_hours, type: int, default: 0, min: 0, max: 87600, label: Re-entry After Hours, visible_if: "doc.allow_reentry",
+       description: "Record Event: hours after their last entry before the same person may enter again (0 = as soon as their previous run ended)"}
     - {name: email_account, type: link, to: EmailAccount, label: From Account, description: "Blank = the default outgoing account"}
     - {name: track_opens, type: check, default: true}
     - {name: track_clicks, type: check, default: true}
     - {name: goal_segment, type: link, to: MarketingSegment, description: "Contacts who enter this segment have reached the goal and leave the journey"}
+    - {name: goal_rule, type: int, min: 1, max: 20, description: "The number of the event rule that is the goal: when it happens to someone in the journey, they have reached it and leave"}
+    - {name: event_rules, type: table, of: JourneyEventRule}
     - {name: steps, type: table, of: JourneyStep, required: true}
     - {name: activated_at, type: datetime, read_only: true, no_copy: true}
     - {name: trigger_cursor, type: int, read_only: true, hidden: true, no_copy: true}
@@ -62,9 +83,11 @@
        confirm: "Contacts still in the journey leave it and it cannot be restarted. Continue?"}
   form:
     - {label: Journey, fields: [journey_name, status, email_account, track_opens, track_clicks]}
-    - {label: Trigger, fields: [trigger_type, trigger_group, trigger_segment, trigger_attribute, trigger_value, anniversary_offset_days, include_existing, allow_reentry]}
+    - {label: Trigger, fields: [trigger_type, trigger_rule, trigger_group, trigger_segment, trigger_attribute, trigger_value, anniversary_offset_days, include_existing, allow_reentry,
+                                reentry_hours]}
+    - {label: Events, fields: [event_rules]}
     - {label: Steps, fields: [steps]}
-    - {label: Goal, fields: [goal_segment]}
+    - {label: Goal, fields: [goal_segment, goal_rule]}
     - {label: Results, fields: [activated_at, enrolled_count, active_count, completed_count, goal_count, exited_count]}
   list: {columns: [journey_name, status, trigger_type, enrolled_count, active_count, goal_count], sort: journey_name asc}
 
@@ -89,6 +112,9 @@
     - {name: last_recipient, type: link, to: CampaignRecipient, on_delete: set_null, read_only: true, description: "The last email this journey sent the contact (for branches on opens and clicks)"}
     - {name: steps_done, type: int, read_only: true}
     - {name: trigger_key, type: data, read_only: true, hidden: true}
+    - {name: trigger_entity, type: data, read_only: true, description: "Record Event: the record that started it"}
+    - {name: trigger_record, type: data, read_only: true}
+    - {name: step_started_at, type: datetime, read_only: true, hidden: true}
   unique: [[journey, contact, trigger_key]]
   indexes: [[status, next_run_at]]
   actions:
