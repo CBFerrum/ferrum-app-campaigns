@@ -159,20 +159,28 @@ pub struct Settings {
     pub soft_bounce_limit: i64,
     pub link_expiry_days: i64,
     pub confirmation_hours: i64,
+    pub double_opt_in: bool,
+    pub reconfirm_subject: Option<String>,
+    pub reconfirm_content: Option<String>,
 }
 
 pub async fn settings(tx: &mut Tx, tenant: Uuid) -> Result<Settings> {
-    let row: Option<(Option<String>, Option<i64>, Option<i64>, Option<i64>)> =
-        sqlx::query_as("select postal_address, soft_bounce_limit, link_expiry_days, confirmation_hours from e_campaign_settings where tenant_id = $1 limit 1")
-            .bind(tenant)
-            .fetch_optional(&mut **tx)
-            .await?;
-    let (postal, soft, expiry, confirm) = row.unwrap_or_default();
+    let row: Option<(Option<String>, Option<i64>, Option<i64>, Option<i64>, Option<bool>, Option<String>, Option<String>)> = sqlx::query_as(
+        "select postal_address, soft_bounce_limit, link_expiry_days, confirmation_hours, double_opt_in, reconfirm_subject, reconfirm_content \
+             from e_campaign_settings where tenant_id = $1 limit 1",
+    )
+    .bind(tenant)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let (postal, soft, expiry, confirm, double, subject, content) = row.unwrap_or_default();
     Ok(Settings {
         postal_address: postal.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
         soft_bounce_limit: soft.unwrap_or(3).clamp(1, 20),
         link_expiry_days: expiry.unwrap_or(365).clamp(30, 3650),
         confirmation_hours: confirm.unwrap_or(72).clamp(1, 720),
+        double_opt_in: double.unwrap_or(false),
+        reconfirm_subject: subject.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()),
+        reconfirm_content: content.filter(|v| !v.trim().is_empty()),
     })
 }
 

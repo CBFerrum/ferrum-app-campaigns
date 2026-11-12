@@ -9,7 +9,6 @@
 //! enrollment it made; a setting allows re-entry after a time); the goal rule ends their run; any rule is kept for the
 //! Wait For Event and Branch steps, and wakes a person waiting on it.
 
-use crate::contact::MAILABLE;
 use crate::util::{id, rows, s};
 use async_trait::async_trait;
 use ferrum_kernel::outbox::Event;
@@ -298,12 +297,13 @@ async fn take(k: &Kernel, sys: &Ctx, ev: &Event, journey: Uuid, ent: &EffEntity,
 #[allow(clippy::too_many_arguments)]
 async fn enroll(tx: &mut Tx, tenant: Uuid, doc: &Doc, journey: Uuid, n: i64, event: i64, people: &[Uuid], entity: &str, record: Uuid) -> Result<()> {
     let reentry = crate::util::b(doc, "allow_reentry");
+    let gate = crate::journey::gate(doc);
     let key = if reentry { format!("event:{n}:{event}") } else { format!("event:{n}") };
     let q = format!(
         "insert into e_journey_enrollment (tenant_id, id, journey, contact, email, status, current_step, waiting, next_run_at, entered_at, steps_done, \
          trigger_key, trigger_entity, trigger_record, created_at, updated_at) \
          select $1, gen_random_uuid(), $2, c.id, c.email, 'Active', 1, false, now(), now(), 0, $4, $5, $6, now(), now() \
-         from e_marketing_contact c where c.tenant_id = $1 and c.id = any($3) and {MAILABLE} \
+         from e_marketing_contact c where c.tenant_id = $1 and c.id = any($3) and {gate} \
          and ($7::int is null or not exists (select 1 from e_journey_enrollment p where p.tenant_id = c.tenant_id and p.journey = $2 and p.contact = c.id \
          and p.entered_at > now() - make_interval(hours => $7::int))) on conflict do nothing"
     );
