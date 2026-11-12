@@ -57,7 +57,7 @@ pub async fn sync(k: &Kernel, sys: &Ctx) -> Result<usize> {
     .await?;
     sqlx::query(
         "update e_campaign_recipient set status = 'Failed', error = 'the email was deleted before it was sent', version = version + 1, updated_at = now() \
-         where tenant_id = $1 and status = 'Queued' and communication is null and queued_at < now() - interval '1 day'",
+         where tenant_id = $1 and status = 'Queued' and communication is null and message_send is null and queued_at < now() - interval '1 day'",
     )
     .bind(tenant)
     .execute(&mut *tx)

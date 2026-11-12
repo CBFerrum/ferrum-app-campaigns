@@ -7,10 +7,13 @@
 //! the goal segment, hit an Exit step or run out of steps.
 
 use crate::campaign::{self, Handover};
+use crate::channels::{self, Channel};
 use crate::contact::{self, MAILABLE};
+use crate::events;
 use crate::import;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Draft, Links};
+use crate::topics::{self, Reach};
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, TimeZone, Utc};
@@ -27,14 +30,27 @@ const STEPS_PER_RUN: usize = 25;
 /// Enrollments advanced per run at most.
 const DUE_PER_RUN: i64 = 500;
 /// Fields fixed once a journey was activated: in-flight enrollments point at step numbers.
-const FROZEN: [&str; 7] = ["steps", "trigger_type", "trigger_group", "trigger_segment", "trigger_attribute", "trigger_value", "anniversary_offset_days"];
+const FROZEN: [&str; 10] = [
+    "steps",
+    "trigger_type",
+    "trigger_group",
+    "trigger_segment",
+    "trigger_attribute",
+    "trigger_value",
+    "anniversary_offset_days",
+    "event_rules",
+    "trigger_rule",
+    "goal_rule",
+];
 
 /// When a wait of `amount` hours or days started at `from` ends. Days keep the wall-clock time
 /// in the workspace's zone across daylight-saving changes (a day can be 23 or 25 hours); a time
 /// that does not exist that day (skipped by the change) moves forward by the gap.
 pub fn wait_until(from: DateTime<Utc>, amount: i64, unit: &str, tz: &str) -> DateTime<Utc> {
-    if unit == "Hours" {
-        return from + Duration::hours(amount);
+    match unit {
+        "Hours" => return from + Duration::hours(amount),
+        "Minutes" => return from + Duration::minutes(amount),
+        _ => {}
     }
     let Ok(zone) = tz.parse::<chrono_tz::Tz>() else { return from + Duration::days(amount) };
     let local = from.with_timezone(&zone).naive_local() + Duration::days(amount);
@@ -92,8 +108,8 @@ impl DocHook for JourneyHook {
         Ok(())
     }
 
-    async fn validate(&self, _hc: &mut HookCtx<'_>, doc: &Doc) -> Result<()> {
-        let mut errors = Vec::new();
+    async fn validate(&self, hc: &mut HookCtx<'_>, doc: &Doc) -> Result<()> {
+        let mut errors = events::problems(&hc.ctx.schema, doc);
         let steps = rows(doc, "steps");
         if steps.is_empty() || steps.len() > MAX_STEPS {
             errors.push(FieldError::new("steps", format!("a journey has 1 to {MAX_STEPS} steps")));
@@ -121,7 +137,15 @@ impl DocHook for JourneyHook {
                         }
                     }
                 }
-                "Wait" if int(r, "wait_amount") < 1 => err("wait_amount", "enter how long to wait"),
+                "Send Message" => {
+                    if s(r, "channel").is_none() {
+                        err("channel", "choose text message or chat app");
+                    }
+                    if s(r, "message_template").is_none() {
+                        err("message_template", "enter the key of the message template");
+                    }
+                }
+                "Wait" | "Wait For Event" if int(r, "wait_amount") < 1 => err("wait_amount", "enter how long to wait"),
                 "Branch" => match s(r, "branch_on") {
                     None => err("branch_on", "choose what to branch on"),
                     Some("Attribute Equals") if !s(r, "attribute").is_some_and(contact::valid_key) => err("attribute", "enter an attribute key"),
@@ -179,6 +203,10 @@ impl DocHook for JourneyHook {
                 if steps.iter().any(|r| s(r, "step_type") == Some("Send Email")) {
                     util::site_base(hc.tx, tenant).await?.ok_or_else(send::public_url_missing)?;
                     send::check_account(hc.kernel, hc.tx, tenant, id(doc, "email_account")).await?;
+                }
+                for r in steps.iter().filter(|r| s(r, "step_type") == Some("Send Message")) {
+                    let reach = Reach::of(hc.tx, tenant, id(r, "topic")).await?;
+                    channels::check_template(hc.tx, hc.ctx, s(r, "message_template").unwrap_or_default(), Channel::of(r), reach.operational).await?;
                 }
                 for seg in [id(doc, "trigger_segment"), id(doc, "goal_segment")].into_iter().flatten().chain(steps.iter().filter_map(|r| id(r, "segment"))) {
                     segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
@@ -530,6 +558,7 @@ struct State {
     last_recipient: Option<Uuid>,
     steps_done: i64,
     exit_reason: Option<String>,
+    step_started_at: Option<DateTime<Utc>>,
 }
 
 async fn log(tx: &mut Tx, tenant: Uuid, journey: Uuid, enrollment: Uuid, step: usize, outcome: &str) -> Result<()> {
@@ -557,27 +586,38 @@ async fn in_segment(k: &Kernel, sys: &Ctx, tx: &mut Tx, seg: Uuid, contact: Uuid
 async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Result<bool> {
     let tenant = sys.tenant;
     let mut tx = k.db.tenant_tx(tenant).await?;
-    let row: Option<(Uuid, Uuid, String, i64, bool, Option<Uuid>, i64)> = sqlx::query_as(
-        "select journey, contact, email, coalesce(current_step, 1), waiting, last_recipient, coalesce(steps_done, 0) from e_journey_enrollment \
+    let row: Option<(Uuid, Uuid, String, i64, bool, Option<Uuid>, i64, DateTime<Utc>, Option<DateTime<Utc>>, Option<String>, Option<String>)> = sqlx::query_as(
+        "select journey, contact, email, coalesce(current_step, 1), waiting, last_recipient, coalesce(steps_done, 0), coalesce(entered_at, created_at), \
+         step_started_at, trigger_entity, trigger_record from e_journey_enrollment \
          where tenant_id = $1 and id = $2 and status = 'Active' and next_run_at <= now() for update skip locked",
     )
     .bind(tenant)
     .bind(enrollment)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((journey, contact_id, email, step, waiting, last_recipient, steps_done)) = row else {
+    let Some((journey, contact_id, email, step, waiting, last_recipient, steps_done, entered_at, step_started_at, trigger_entity, trigger_record)) = row else {
         tx.rollback().await?;
         return Ok(false);
     };
     let entry = journey_of(k, sys, cache, journey).await?;
     let (jdoc, links) = (&entry.0, entry.1.as_ref());
     let steps = rows(jdoc, "steps");
-    let mut st =
-        State { status: "Active".into(), step: step.max(1) as usize, waiting, next_run_at: util::now(), last_recipient, steps_done, exit_reason: None };
+    // The record that started it, as it is now: emails show it as `record`, record conditions read it.
+    let started_by = events::trigger_record(k, sys, &mut tx, trigger_entity.as_deref(), trigger_record.as_deref()).await?;
+    let mut st = State {
+        status: "Active".into(),
+        step: step.max(1) as usize,
+        waiting,
+        next_run_at: util::now(),
+        last_recipient,
+        steps_done,
+        exit_reason: None,
+        step_started_at,
+    };
     for _ in 0..STEPS_PER_RUN {
         let contact_row: Option<(Value, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "select jsonb_build_object('id', c.id, 'email', c.email, 'first_name', c.first_name, 'last_name', c.last_name, 'full_name', c.full_name, \
-             'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
+            "select jsonb_build_object('id', c.id, 'email', c.email, 'phone', c.phone, 'first_name', c.first_name, 'last_name', c.last_name, \
+             'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
         )))
         .bind(tenant)
         .bind(contact_id)
@@ -608,6 +648,16 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     st.next_run_at = util::now() + Duration::minutes(10);
                     break;
                 };
+                // A step for a topic skips who is not in it (a topic turned off since: as if it had none).
+                let reach = Reach::of(&mut tx, tenant, id(r, "topic")).await.unwrap_or_default();
+                if let Some(t) = reach.topic
+                    && !topics::is_in(&mut tx, tenant, contact_id, t).await?
+                {
+                    log(&mut tx, tenant, journey, enrollment, here, "not in the topic").await?;
+                    st.step = next;
+                    st.steps_done += 1;
+                    continue;
+                }
                 send::lock_budget(&mut tx, tenant).await?;
                 if send::hourly_room(&mut tx, tenant).await? <= 0 {
                     st.next_run_at = util::now() + Duration::minutes(5);
@@ -615,8 +665,8 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                 }
                 let recipient = Uuid::now_v7();
                 sqlx::query(
-                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, status, queued_at, \
-                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, 'Queued', now(), 0, 0, 0, now(), now())",
+                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, topic, status, queued_at, \
+                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, 'Queued', now(), 0, 0, 0, now(), now())",
                 )
                 .bind(tenant)
                 .bind(recipient)
@@ -625,6 +675,7 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                 .bind(enrollment)
                 .bind(contact_id)
                 .bind(&email)
+                .bind(reach.topic)
                 .execute(&mut *tx)
                 .await?;
                 let d = Draft {
@@ -633,8 +684,13 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     html: s(r, "content").unwrap_or_default().to_string(),
                     text: None,
                 };
-                let extra: Map<String, Value> = values([("journey", json!({"name": s(jdoc, "journey_name")}))]);
-                match campaign::hand_over(k, sys, &mut tx, id(jdoc, "email_account"), &email, &d, &view, &extra, recipient, links, contact_id).await {
+                let mut extra: Map<String, Value> = values([("journey", json!({"name": s(jdoc, "journey_name")}))]);
+                if let Some((_, raw)) = &started_by {
+                    extra.insert("record".into(), raw.clone());
+                }
+                match campaign::hand_over(k, sys, &mut tx, id(jdoc, "email_account"), &email, &d, &view, &extra, recipient, links, contact_id, reach.purpose())
+                    .await
+                {
                     Ok(Handover::Queued(comm)) => {
                         sqlx::query("update e_campaign_recipient set communication = $3 where tenant_id = $1 and id = $2")
                             .bind(tenant)
@@ -658,6 +714,57 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                 st.last_recipient = Some(recipient);
                 st.step = next;
             }
+            "Send Message" => {
+                let channel = Channel::of(r);
+                let reach = Reach::of(&mut tx, tenant, id(r, "topic")).await.unwrap_or_default().on(channel);
+                let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("select exists (select 1 from e_marketing_contact c where c.tenant_id = ");
+                qb.push_bind(tenant).push(" and c.id = ").push_bind(contact_id).push(" and ");
+                reach.push(&mut qb);
+                qb.push(")");
+                if !qb.build_query_scalar::<bool>().fetch_one(&mut *tx).await? {
+                    log(&mut tx, tenant, journey, enrollment, here, "no number, or not in the topic").await?;
+                    st.step = next;
+                    st.steps_done += 1;
+                    continue;
+                }
+                if channels::room(&mut tx, tenant).await? <= 0 {
+                    st.next_run_at = util::now() + Duration::minutes(5);
+                    break;
+                }
+                let recipient = Uuid::now_v7();
+                sqlx::query(
+                    "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, topic, channel, status, \
+                     open_count, machine_open_count, click_count, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Pending', 0, 0, 0, now(), now())",
+                )
+                .bind(tenant)
+                .bind(recipient)
+                .bind(journey)
+                .bind(here as i64)
+                .bind(enrollment)
+                .bind(contact_id)
+                .bind(&email)
+                .bind(reach.topic)
+                .bind(channel.label())
+                .execute(&mut *tx)
+                .await?;
+                let phone = view.get("phone").and_then(Value::as_str).map(str::to_string);
+                sqlx::query("savepoint campaigns_message").execute(&mut *tx).await?;
+                let record = started_by.as_ref().map(|(_, raw)| raw.clone());
+                let template = s(r, "message_template").unwrap_or_default();
+                let outcome = match channels::hand_over(k, sys, &mut tx, channel, template, contact_id, phone.as_deref(), record).await {
+                    Ok(o) => {
+                        sqlx::query("release savepoint campaigns_message").execute(&mut *tx).await?;
+                        o
+                    }
+                    Err(e) => {
+                        sqlx::query("rollback to savepoint campaigns_message").execute(&mut *tx).await?;
+                        (None, "Failed", Some(e.to_string()))
+                    }
+                };
+                channels::record(&mut tx, tenant, recipient, channel, &outcome).await?;
+                log(&mut tx, tenant, journey, enrollment, here, &format!("message: {}", outcome.1.to_lowercase())).await?;
+                st.step = next;
+            }
             "Wait" => {
                 if st.waiting {
                     st.waiting = false;
@@ -665,14 +772,46 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     st.step = next;
                 } else {
                     st.waiting = true;
+                    st.step_started_at = Some(util::now());
                     st.next_run_at = wait_until(util::now(), int(r, "wait_amount").max(1), s(r, "wait_unit").unwrap_or("Days"), &sys.schema.timezone);
                     log(&mut tx, tenant, journey, enrollment, here, "waiting").await?;
                     st.steps_done += 1;
                     break;
                 }
             }
+            "Wait For Event" => {
+                let rule = int(r, "event_rule");
+                let since = st.step_started_at.filter(|_| st.waiting).unwrap_or_else(util::now);
+                let until = wait_until(since, int(r, "wait_amount").max(1), s(r, "wait_unit").unwrap_or("Days"), &sys.schema.timezone);
+                if st.waiting && events::happened(&mut tx, tenant, journey, rule, contact_id, since).await? {
+                    st.waiting = false;
+                    log(&mut tx, tenant, journey, enrollment, here, "it happened").await?;
+                    st.step = next;
+                } else if st.waiting && util::now() >= until {
+                    st.waiting = false;
+                    log(&mut tx, tenant, journey, enrollment, here, "time ran out").await?;
+                    st.step = step_no(r, "else_step").unwrap_or(steps.len() + 1);
+                } else {
+                    if !st.waiting {
+                        log(&mut tx, tenant, journey, enrollment, here, "waiting for the event").await?;
+                        st.steps_done += 1;
+                    }
+                    st.waiting = true;
+                    st.step_started_at = Some(since);
+                    st.next_run_at = until;
+                    break;
+                }
+            }
             "Branch" => {
                 let holds = match s(r, "branch_on").unwrap_or_default() {
+                    "Event Happened" => events::happened(&mut tx, tenant, journey, int(r, "event_rule"), contact_id, entered_at).await?,
+                    "Record Condition" => match (&started_by, s(r, "condition")) {
+                        (Some((ent, raw)), Some(src)) => {
+                            let e = events::check_condition(&sys.schema, ent, src).map_err(Error::invalid)?;
+                            events::holds(k, sys, &mut tx, ent, &e, raw, None).await?
+                        }
+                        _ => false,
+                    },
                     "Opened Last Email" | "Clicked Last Email" => match st.last_recipient {
                         Some(lr) => {
                             let (opened, clicked): (bool, bool) = sqlx::query_as(
@@ -761,8 +900,8 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
     let finished = st.status != "Active";
     sqlx::query(
         "update e_journey_enrollment set status = $3, current_step = $4, waiting = $5, next_run_at = $6, last_recipient = $7, steps_done = $8, \
-         exit_reason = coalesce($9, exit_reason), finished_at = case when $3 <> 'Active' then now() end, version = version + 1, updated_at = now() \
-         where tenant_id = $1 and id = $2",
+         exit_reason = coalesce($9, exit_reason), finished_at = case when $3 <> 'Active' then now() end, step_started_at = $10, \
+         version = version + 1, updated_at = now() where tenant_id = $1 and id = $2",
     )
     .bind(tenant)
     .bind(enrollment)
@@ -773,6 +912,7 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
     .bind(st.last_recipient)
     .bind(st.steps_done)
     .bind(&st.exit_reason)
+    .bind(st.step_started_at)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;

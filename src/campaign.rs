@@ -7,11 +7,14 @@
 //! per recipient — so an email is handed to the Mail app exactly when its claim commits, and
 //! concurrent maintenance runs can never claim (or mail) a recipient twice.
 
+use crate::channels::{self, Channel};
 use crate::check;
-use crate::contact::{self, MAILABLE};
+use crate::contact;
+use crate::deliverability;
 use crate::import;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Composed, Draft, Links};
+use crate::topics::Reach;
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use ferrum_domain::util::elevated;
@@ -172,17 +175,37 @@ impl DocHook for CampaignHook {
         } else if !variants.is_empty() {
             errors.push(FieldError::new("variants", "turn on the A/B test or remove the variants"));
         }
+        if Channel::of(doc) != Channel::Email && b(doc, "ab_test") {
+            errors.push(FieldError::new("ab_test", "A/B tests compare emails; a text or chat-app campaign sends one message"));
+        }
         if errors.is_empty() { Ok(()) } else { Err(Error::Validation(errors)) }
+    }
+
+    async fn validate_change(&self, hc: &mut HookCtx<'_>, old: Option<&Doc>, doc: &Doc) -> Result<()> {
+        deliverability::override_allowed(hc.ctx, old, doc)
     }
 
     async fn before_submit(&self, hc: &mut HookCtx<'_>, doc: &mut Doc) -> Result<()> {
         let tenant = hc.ctx.tenant;
+        let channel = Channel::of(doc);
+        if channel != Channel::Email {
+            for r in rows(doc, "audience") {
+                if let Some(seg) = id(&r, "segment") {
+                    segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
+                }
+            }
+            let reach = Reach::of(hc.tx, tenant, id(doc, "topic")).await?;
+            return channels::check_template(hc.tx, hc.ctx, s(doc, "message_template").unwrap_or_default(), channel, reach.operational).await;
+        }
         let base = util::site_base(hc.tx, tenant).await?.ok_or_else(send::public_url_missing)?;
         send::check_account(hc.kernel, hc.tx, tenant, id(doc, "email_account")).await?;
         for r in rows(doc, "audience") {
             if let Some(seg) = id(&r, "segment") {
                 segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
             }
+        }
+        if !Reach::of(hc.tx, tenant, id(doc, "topic")).await?.operational {
+            deliverability::gate(hc.tx, tenant, doc).await?;
         }
         // Every variant must render for a stand-in contact (runtime errors, fuel).
         let links = Links { base, key: vec![0; 32], track_opens: true, tracked: Some(HashMap::new()), postal_address: None };
@@ -255,6 +278,19 @@ impl DocHook for CampaignHook {
                 Ok(Some(json!({"subject": c.subject, "html": c.html, "text": c.text, "variant": variant})))
             }
             "send_test" => Ok(Some(send_test(hc, doc, params).await?)),
+            // The campaign as recipients get it (no "[Test]"), to the workspace's seed addresses, to see where it lands.
+            "send_seed" => {
+                let list: Option<String> = sqlx::query_scalar("select seed_list from e_campaign_settings where tenant_id = $1 limit 1")
+                    .bind(hc.ctx.tenant)
+                    .fetch_optional(&mut **hc.tx)
+                    .await?
+                    .flatten();
+                let emails: Vec<String> = list.unwrap_or_default().split([',', ';', '\n']).map(|e| e.trim().to_lowercase()).filter(|e| !e.is_empty()).collect();
+                if emails.is_empty() || emails.len() > 50 {
+                    return Err(Error::field("seed_list", "enter 1 to 50 seed addresses in Campaign Settings"));
+                }
+                Ok(Some(send_copies(hc, doc, params, &emails, false).await?))
+            }
             "audience_check" => Ok(Some(check::audience(hc, doc).await?)),
             "timeline" => Ok(Some(check::timeline(hc, doc, params).await?)),
             _ => Ok(None),
@@ -291,6 +327,12 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
     if addresses.is_empty() || addresses.len() > 10 {
         return Err(Error::field("emails", "send a test to 1 to 10 addresses"));
     }
+    send_copies(hc, doc, params, &addresses, true).await
+}
+
+/// Copies of the campaign (or a variant) to `addresses`, untracked: tests say so in the subject, seed copies look as
+/// recipients' do.
+async fn send_copies(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value, addresses: &[String], test: bool) -> Result<Value> {
     if let Some(bad) = addresses.iter().find(|e| !e.contains('@') || e.contains(char::is_whitespace) || e.len() > 254) {
         return Err(Error::field("emails", format!("{bad} is not a valid email address")));
     }
@@ -309,14 +351,18 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
         postal_address: util::settings(hc.tx, tenant).await?.postal_address,
     };
     let mut d = draft(doc, variant.as_deref());
-    d.subject = format!("[Test] {}", d.subject);
+    if test {
+        d.subject = format!("[Test] {}", d.subject);
+    }
     let campaign = util::doc_id(doc)?;
     // As the person asking (named as the author, told if it fails), with the engine's rights.
     let author = elevated(hc.ctx);
     let mut sent = Vec::new();
-    for to in &addresses {
+    // A seed copy goes as the campaign's mail goes, its unsubscribe headers too.
+    let kind = if test { send::Kind::Transactional } else { send::Kind::Bulk(Purpose::Marketing) };
+    for to in addresses {
         let c = send::compose(&d, &contact, &extra(doc), Uuid::now_v7(), &links)?;
-        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), false).await?);
+        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), kind).await?);
     }
     Ok(json!({"sent": sent.len(), "communications": sent}))
 }
@@ -354,18 +400,22 @@ pub async fn run(k: &Kernel, sys: &Ctx, budget: Duration) -> Result<usize> {
     let mut queued = 0;
     'campaigns: for c in sending {
         let doc = k.get(sys, "EmailCampaign", c, false).await?;
-        let links = match send::links_for(k, tenant, c, b(&doc, "track_opens"), b(&doc, "track_clicks")).await {
-            Ok(l) => l,
-            Err(e) => {
-                record_error(k, tenant, c, &e.to_string()).await?;
-                continue;
+        let links = if Channel::of(&doc) != Channel::Email {
+            None
+        } else {
+            match send::links_for(k, tenant, c, b(&doc, "track_opens"), b(&doc, "track_clicks")).await {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    record_error(k, tenant, c, &e.to_string()).await?;
+                    continue;
+                }
             }
         };
         loop {
             if started.elapsed() > budget {
                 break 'campaigns;
             }
-            let n = send_batch(k, sys, c, &links).await?;
+            let n = send_batch(k, sys, c, links.as_ref()).await?;
             queued += n;
             if n == 0 {
                 break;
@@ -432,8 +482,24 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
         tx.rollback().await?;
         return Ok(());
     }
+    // Query segments are worked out again before they are used.
+    for r in rows(&doc, "audience") {
+        if let Some(seg) = id(&r, "segment")
+            && let Err(e) = segment::refresh_if_query(k, sys, &mut tx, seg).await
+        {
+            tx.rollback().await?;
+            return record_error(k, tenant, campaign, &e.to_string()).await;
+        }
+    }
     let (include, exclude, groups) = match audience(k, sys, &mut tx, &doc).await {
         Ok(a) => a,
+        Err(e) => {
+            tx.rollback().await?;
+            return record_error(k, tenant, campaign, &e.to_string()).await;
+        }
+    };
+    let reach = match Reach::of(&mut tx, tenant, id(&doc, "topic")).await {
+        Ok(r) => r.on(Channel::of(&doc)),
         Err(e) => {
             tx.rollback().await?;
             return record_error(k, tenant, campaign, &e.to_string()).await;
@@ -442,7 +508,9 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
     import::adopt_group_members(&mut tx, tenant, &groups).await?;
     let (today, tz) = (sys.today(), sys.schema.timezone.clone());
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("with audience as (select c.id, c.email from e_marketing_contact c where c.tenant_id = ");
-    qb.push_bind(tenant).push(format!(" and {MAILABLE} and ("));
+    qb.push_bind(tenant).push(" and ");
+    reach.push(&mut qb);
+    qb.push(" and (");
     push_any(&mut qb, &include, today, &tz);
     qb.push(") and not (");
     push_any(&mut qb, &exclude, today, &tz);
@@ -451,12 +519,16 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
         .push_bind(campaign.to_string())
         .push(" || a.id::text, 'UTF8')), a.id) as rn, count(*) over () as n from audience a) ")
         .push(
-            "insert into e_campaign_recipient (tenant_id, id, campaign, contact, email, variant, status, open_count, machine_open_count, click_count, \
+            "insert into e_campaign_recipient (tenant_id, id, campaign, topic, channel, contact, email, variant, status, open_count, machine_open_count, click_count, \
              created_at, updated_at) select ",
         )
         .push_bind(tenant)
         .push(", gen_random_uuid(), ")
         .push_bind(campaign)
+        .push(", ")
+        .push_bind(reach.topic)
+        .push(", ")
+        .push_bind(reach.channel.label())
         .push(", r.id, r.email, ");
     let labels: Vec<String> = rows(&doc, "variants").iter().filter_map(|r| s(r, "variant").map(str::to_string)).collect();
     if b(&doc, "ab_test") && labels.len() >= 2 {
@@ -490,8 +562,9 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// One batch of a sending campaign; returns how many emails were handed to the Mail app.
-pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) -> Result<usize> {
+/// One batch of a sending campaign; returns how many emails (or messages) were handed over. `links`: an email
+/// campaign's.
+pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: Option<&Links>) -> Result<usize> {
     let tenant = sys.tenant;
     let mut tx = k.db.tenant_tx(tenant).await?;
     send::lock_budget(&mut tx, tenant).await?;
@@ -501,11 +574,19 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) ->
         tx.rollback().await?;
         return Ok(0);
     }
-    let mut room = send::hourly_room(&mut tx, tenant).await?.min(BATCH);
+    let channel = Channel::of(&doc);
+    let mut room = if channel == Channel::Email { send::hourly_room(&mut tx, tenant).await? } else { channels::room(&mut tx, tenant).await? }.min(BATCH);
+    // A new sending domain warms up: what is left of its day.
+    if channel == Channel::Email
+        && let Some(left) = deliverability::warmup_room(&mut tx, sys, id(&doc, "email_account")).await?
+    {
+        room = room.min(left);
+    }
     let own_limit = int(&doc, "hourly_limit");
     if own_limit > 0 {
         let used: i64 = sqlx::query_scalar(
-            "select count(*) from e_campaign_recipient where tenant_id = $1 and campaign = $2 and communication is not null and queued_at > now() - interval '1 hour'",
+            "select count(*) from e_campaign_recipient where tenant_id = $1 and campaign = $2 and (communication is not null or message_send is not null) \
+             and queued_at > now() - interval '1 hour'",
         )
         .bind(tenant)
         .bind(campaign)
@@ -535,7 +616,40 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) ->
         return Ok(0);
     }
     let ids: Vec<Uuid> = claimed.iter().map(|c| c.1).collect();
-    let contacts: HashMap<Uuid, (Value, bool)> = contact::load_for_sending(&mut tx, tenant, &ids).await?.into_iter().map(|(i, v, m)| (i, (v, m))).collect();
+    // A topic turned off since the campaign started: what is left is sent to whom it reached then.
+    let reach = Reach::of(&mut tx, tenant, id(&doc, "topic")).await.unwrap_or_default().on(channel);
+    let contacts: HashMap<Uuid, (Value, bool)> =
+        contact::load_for_sending(&mut tx, tenant, &ids, &reach).await?.into_iter().map(|(i, v, m)| (i, (v, m))).collect();
+    let Some(links) = links.filter(|_| channel == Channel::Email) else {
+        // Text and chat-app messages: the platform's template about the contact, to their number.
+        let template = s(&doc, "message_template").unwrap_or_default().to_string();
+        let mut queued = 0;
+        for (recipient, contact_id, _, _) in claimed {
+            let outcome = match contacts.get(&contact_id) {
+                Some((view, true)) => {
+                    sqlx::query("savepoint campaigns_recipient").execute(&mut *tx).await?;
+                    match channels::hand_over(k, sys, &mut tx, channel, &template, contact_id, view.get("phone").and_then(Value::as_str), None).await {
+                        Ok(o) => {
+                            sqlx::query("release savepoint campaigns_recipient").execute(&mut *tx).await?;
+                            o
+                        }
+                        Err(e) => {
+                            sqlx::query("rollback to savepoint campaigns_recipient").execute(&mut *tx).await?;
+                            (None, "Failed", Some(e.to_string()))
+                        }
+                    }
+                }
+                Some((_, false)) => (None, "Skipped", Some("unsubscribed, without a number or out of the topic since the campaign started".into())),
+                None => (None, "Skipped", Some("the contact was deleted".into())),
+            };
+            if outcome.1 == "Queued" {
+                queued += 1;
+            }
+            channels::record(&mut tx, tenant, recipient, channel, &outcome).await?;
+        }
+        tx.commit().await?;
+        return Ok(queued);
+    };
     let account = id(&doc, "email_account");
     let extra = extra(&doc);
     let mut drafts: HashMap<Option<String>, Draft> = HashMap::new();
@@ -543,8 +657,8 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: &Links) ->
     for (recipient, contact_id, email, variant) in claimed {
         let d = drafts.entry(variant.clone()).or_insert_with(|| draft(&doc, variant.as_deref())).clone();
         let outcome = match contacts.get(&contact_id) {
-            Some((view, true)) => hand_over(k, sys, &mut tx, account, &email, &d, view, &extra, recipient, links, contact_id).await,
-            Some((_, false)) => Ok(Handover::Skipped("unsubscribed or suppressed since the campaign started")),
+            Some((view, true)) => hand_over(k, sys, &mut tx, account, &email, &d, view, &extra, recipient, links, contact_id, reach.purpose()).await,
+            Some((_, false)) => Ok(Handover::Skipped("unsubscribed, suppressed or out of the topic since the campaign started")),
             None => Ok(Handover::Skipped("the contact was deleted")),
         };
         match outcome {
@@ -584,15 +698,16 @@ pub async fn hand_over(
     recipient: Uuid,
     links: &Links,
     contact_id: Uuid,
+    purpose: Purpose,
 ) -> Result<Handover> {
     // A person whose data may not be processed, or who withdrew their consent to marketing in any app,
     // gets nothing, whatever list they are on (FEO-015); the Mail app asks again as it sends.
-    if !k.may_contact_for(tx, sys.tenant, email, Purpose::Marketing).await? {
+    if !k.may_contact_for(tx, sys.tenant, email, purpose).await? {
         return Ok(Handover::Skipped("this person may not be sent marketing (consent withdrawn, or processing restricted)"));
     }
     let composed: Composed = send::compose(d, contact, extra, recipient, links)?;
     sqlx::query("savepoint campaigns_recipient").execute(&mut **tx).await?;
-    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id), true).await {
+    match send::queue(k, sys, tx, account, email, &composed, ("MarketingContact", contact_id), send::Kind::Bulk(purpose)).await {
         Ok(comm) => {
             sqlx::query("release savepoint campaigns_recipient").execute(&mut **tx).await?;
             Ok(Handover::Queued(comm))
