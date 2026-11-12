@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.7
+
+Works with Mail, Chat and Calendar 0.16 too (Calendar's release: repeating events right across daylight saving, more views, working hours). It only adds to what Campaigns uses, so the requirement is now `>=0.13.1, <0.17`. Nothing else changes.
+
 ## 0.4.6
 
 Works with Mail, Chat and Calendar 0.14 and 0.15 too. Both only add to what Campaigns uses (0.14: mail handled on the server with nobody's tab open; 0.15: meetings other apps can make), so the requirement is now `>=0.13.1, <0.16`. A build with Comms 0.15.0 compiles and the platform's check that compiled apps fit together passes; nothing else changes.
