@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.4.9** | Works with Mail, Chat and Calendar 0.18 and 0.19 too. |
 | **0.4.8** | Works with Mail, Chat and Calendar 0.17 too. |
 | **0.4.7** | Works with Mail, Chat and Calendar 0.16 too. |
 | **0.4.6** | Works with Mail, Chat and Calendar 0.14 and 0.15 too. |
