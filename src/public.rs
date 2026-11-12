@@ -36,7 +36,7 @@ const GIF: [u8; 43] = [
 const WEBHOOK_TOLERANCE_SECS: i64 = 300;
 const MAX_WEBHOOK_EVENTS: usize = 1000;
 /// Confirmation emails per address at most once in this many minutes.
-const CONFIRMATION_PAUSE_MINUTES: i64 = 10;
+pub(crate) const CONFIRMATION_PAUSE_MINUTES: i64 = 10;
 static EMAIL: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$").expect("email pattern"));
 
 /// User agents of tools, scanners and link checkers (case-insensitive substrings). Mail
@@ -99,6 +99,8 @@ impl Site for CampaignsSite {
             ("POST", ["subscribe", form]) => subscribe(k, &req, form).await,
             ("GET", ["confirm", token]) => confirm(k, &req, token, false).await,
             ("POST", ["confirm", token]) => confirm(k, &req, token, true).await,
+            ("GET", ["reconfirm", token]) => reconfirm(k, &req, token, false).await,
+            ("POST", ["reconfirm", token]) => reconfirm(k, &req, token, true).await,
             ("POST", ["webhooks", "bounces"]) => webhook(k, &req).await,
             _ => Err(Error::NotFound("page".into())),
         }
@@ -255,7 +257,7 @@ async fn unsubscribe(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool
     if fields.contains_key("prefs") && contact_exists(&mut tx, req.tenant, contact).await? {
         let sys = system(k, req.tenant).await?;
         let from = name_suffix(&mut tx, req.tenant, rid).await?;
-        let done = crate::topics::save(k, &sys, &mut tx, contact, &email, &fields, &from, &util::ip_hash(&key, &req.client_ip)).await?;
+        let done = crate::topics::save(k, &sys, &mut tx, contact, &email, &fields, &from, &util::ip_hash(&key, &req.client_ip), &key).await?;
         tx.commit().await?;
         return Ok(done);
     }
@@ -588,6 +590,55 @@ async fn confirm(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool) ->
             &format!("<p>Thank you: <strong>{}</strong> is subscribed to {}.</p>", html_escape(&email), html_escape(&form_name)),
         ),
     })
+}
+
+/// The link a re-subscribing person confirms from their mail: only now does the status change.
+async fn reconfirm(k: &Kernel, req: &SiteRequest, token: &str, confirmed: bool) -> Result<SiteResponse> {
+    let tenant = req.tenant;
+    let key = util::signing_key(k, tenant).await?;
+    let parsed = util::open_token(&key, token, 2, |p| Some(crate::topics::reconfirm_message(parse_uuid(p[0])?, p[1].parse().ok()?)));
+    let Some((cid, expires)) = parsed.and_then(|p| Some((parse_uuid(p[0])?, p[1].parse::<i64>().ok()?))) else { return Ok(util::invalid_link()) };
+    if expires < Utc::now().timestamp() {
+        return Ok(util::invalid_link());
+    }
+    let mut tx = k.db.tenant_tx(tenant).await?;
+    let found: Option<(String, String)> = sqlx::query_as("select email, consent_status from e_marketing_contact where tenant_id = $1 and id = $2 for update")
+        .bind(tenant)
+        .bind(cid)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some((email, consent)) = found else { return Ok(util::invalid_link()) };
+    if !confirmed {
+        tx.rollback().await?;
+        return Ok(page(
+            200,
+            "Confirm your subscription",
+            &format!(
+                "<p>Take marketing emails at <strong>{}</strong> again?</p><form method=\"post\"><button type=\"submit\">Yes, subscribe me</button></form>",
+                html_escape(&email)
+            ),
+        ));
+    }
+    let sys = system(k, tenant).await?;
+    let source = "double opt-in: preference page";
+    if consent == "Unsubscribed" {
+        let patch = values([
+            ("consent_status", json!("Subscribed")),
+            ("consent_source", json!(source)),
+            ("consent_ip_hash", json!(util::ip_hash(&key, &req.client_ip))),
+        ]);
+        k.update_tx(&sys, &mut tx, "MarketingContact", cid, patch, None).await?;
+        sqlx::query("delete from e_email_suppression where tenant_id = $1 and email = $2 and reason = 'Unsubscribed'")
+            .bind(tenant)
+            .bind(&email)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if consent != "Complained" && !k.may_contact_for(&mut tx, tenant, &email, ferrum_kernel::retention::Purpose::Marketing).await? {
+        k.record_consent_tx(&mut tx, &sys, &email, ferrum_kernel::retention::Purpose::Marketing, true, &format!("Campaigns: {source}")).await?;
+    }
+    tx.commit().await?;
+    Ok(page(200, "You are subscribed", &format!("<p>Thank you: <strong>{}</strong> takes our emails again.</p>", html_escape(&email))))
 }
 
 // ───────────────────────────── bounce webhook ─────────────────────────────

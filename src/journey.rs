@@ -8,7 +8,7 @@
 
 use crate::campaign::{self, Handover};
 use crate::channels::{self, Channel};
-use crate::contact::{self, MAILABLE};
+use crate::contact::{self, MAILABLE, TEXTABLE};
 use crate::events;
 use crate::import;
 use crate::segment::{self, Rule, Segment};
@@ -342,6 +342,19 @@ impl DocHook for EnrollmentHook {
     }
 }
 
+/// SQL condition on a contact row `c`: whoever the journey may still reach on the channels its steps use (an email
+/// step needs the address's marketing consent, a text or chat-app step the number's; one step of each, either).
+pub(crate) fn gate(doc: &Doc) -> String {
+    let steps = rows(doc, "steps");
+    let has = |kind: &str| steps.iter().any(|r| s(r, "step_type") == Some(kind));
+    let (email, message) = (has("Send Email") || !has("Send Message"), has("Send Message"));
+    match (email, message) {
+        (true, false) => MAILABLE.into(),
+        (false, true) => TEXTABLE.into(),
+        _ => format!("({MAILABLE} or {TEXTABLE})"),
+    }
+}
+
 // ───────────────────────────── maintenance ─────────────────────────────
 
 /// One round for a tenant's journeys: enroll from the triggers, apply goals and exits, advance
@@ -426,6 +439,7 @@ async fn enroll(k: &Kernel, sys: &Ctx, journey: Uuid) -> Result<()> {
     }
     let (today, tz) = (sys.today(), sys.schema.timezone.clone());
     let reentry = b(&doc, "allow_reentry");
+    let gate = gate(&doc);
     match s(&doc, "trigger_type").unwrap_or_default() {
         "Joined Email Group" | "Entered Segment" => {
             let Some(members) = membership(k, sys, &mut tx, &doc).await? else {
@@ -452,7 +466,7 @@ async fn enroll(k: &Kernel, sys: &Ctx, journey: Uuid) -> Result<()> {
                  join e_marketing_contact c on c.tenant_id = ",
             )
             .push_bind(tenant)
-            .push(format!(" and c.id = x.contact_id where {MAILABLE} on conflict do nothing"));
+            .push(format!(" and c.id = x.contact_id where {gate} on conflict do nothing"));
             qb.build().execute(&mut *tx).await?;
         }
         "Attribute Changed" => {
@@ -481,7 +495,7 @@ async fn enroll(k: &Kernel, sys: &Ctx, journey: Uuid) -> Result<()> {
                 if let Some(value) = s(&doc, "trigger_value") {
                     qb.push(" and lower(new_value) = lower(").push_bind(value.to_string()).push(")");
                 }
-                qb.push(") x join e_marketing_contact c on c.tenant_id = ").push_bind(tenant).push(format!(" and c.id = x.contact_id where {MAILABLE}"));
+                qb.push(") x join e_marketing_contact c on c.tenant_id = ").push_bind(tenant).push(format!(" and c.id = x.contact_id where {gate}"));
                 if !reentry {
                     qb.push(" and not exists (select 1 from e_journey_enrollment p where p.tenant_id = c.tenant_id and p.journey = ")
                         .push_bind(journey)
@@ -500,7 +514,7 @@ async fn enroll(k: &Kernel, sys: &Ctx, journey: Uuid) -> Result<()> {
                 .push_bind(format!("date:{}", target.year()))
                 .push("::text as trigger_key) x cross join e_marketing_contact c where c.tenant_id = ")
                 .push_bind(tenant);
-            qb.push(format!(" and {MAILABLE} and coalesce(c.attributes ->> "))
+            qb.push(format!(" and {gate} and coalesce(c.attributes ->> "))
                 .push_bind(s(&doc, "trigger_attribute").unwrap_or_default().to_string())
                 .push(", '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' and substring(c.attributes ->> ")
                 .push_bind(s(&doc, "trigger_attribute").unwrap_or_default().to_string())
@@ -537,14 +551,23 @@ async fn leave(k: &Kernel, sys: &Ctx) -> Result<()> {
         goal.push(&mut qb, sys.today(), &sys.schema.timezone);
         qb.build().execute(&mut *tx).await?;
     }
-    sqlx::query(sqlx::AssertSqlSafe(format!(
-        "update e_journey_enrollment e set status = 'Exited', exit_reason = 'unsubscribed or suppressed', finished_at = now(), waiting = false, \
-         version = e.version + 1, updated_at = now() where e.tenant_id = $1 and e.status = 'Active' \
-         and not exists (select 1 from e_marketing_contact c where c.tenant_id = e.tenant_id and c.id = e.contact and {MAILABLE})"
-    )))
-    .bind(tenant)
-    .execute(&mut *tx)
-    .await?;
+    let live: Vec<Uuid> = sqlx::query_scalar("select distinct journey from e_journey_enrollment where tenant_id = $1 and status = 'Active'")
+        .bind(tenant)
+        .fetch_all(&mut *tx)
+        .await?;
+    for journey in live {
+        let Ok(doc) = k.get_tx(sys, &mut tx, "MarketingJourney", journey, false).await else { continue };
+        let gate = gate(&doc);
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "update e_journey_enrollment e set status = 'Exited', exit_reason = 'unsubscribed or suppressed', finished_at = now(), waiting = false, \
+             version = e.version + 1, updated_at = now() where e.tenant_id = $1 and e.journey = $2 and e.status = 'Active' \
+             and not exists (select 1 from e_marketing_contact c where c.tenant_id = e.tenant_id and c.id = e.contact and {gate})"
+        )))
+        .bind(tenant)
+        .bind(journey)
+        .execute(&mut *tx)
+        .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -602,6 +625,7 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
     let entry = journey_of(k, sys, cache, journey).await?;
     let (jdoc, links) = (&entry.0, entry.1.as_ref());
     let steps = rows(jdoc, "steps");
+    let gate = gate(jdoc);
     // The record that started it, as it is now: emails show it as `record`, record conditions read it.
     let started_by = events::trigger_record(k, sys, &mut tx, trigger_entity.as_deref(), trigger_record.as_deref()).await?;
     let mut st = State {
@@ -615,16 +639,16 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
         step_started_at,
     };
     for _ in 0..STEPS_PER_RUN {
-        let contact_row: Option<(Value, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        let contact_row: Option<(Value, bool, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "select jsonb_build_object('id', c.id, 'email', c.email, 'phone', c.phone, 'first_name', c.first_name, 'last_name', c.last_name, \
-             'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
+             'full_name', c.full_name, 'attributes', coalesce(c.attributes, '{{}}'::jsonb)), {gate}, {MAILABLE} from e_marketing_contact c where c.tenant_id = $1 and c.id = $2"
         )))
         .bind(tenant)
         .bind(contact_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let Some((view, mailable)) = contact_row else { break };
-        if !mailable {
+        let Some((view, reachable, mailable)) = contact_row else { break };
+        if !reachable {
             st.status = "Exited".into();
             st.exit_reason = Some("unsubscribed or suppressed".into());
             break;
@@ -648,6 +672,13 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     st.next_run_at = util::now() + Duration::minutes(10);
                     break;
                 };
+                // Only the email's own consent counts for an email: a journey kept for a number skips it.
+                if !mailable {
+                    log(&mut tx, tenant, journey, enrollment, here, "not mailable").await?;
+                    st.step = next;
+                    st.steps_done += 1;
+                    continue;
+                }
                 // A step for a topic skips who is not in it (a topic turned off since: as if it had none).
                 let reach = Reach::of(&mut tx, tenant, id(r, "topic")).await.unwrap_or_default();
                 if let Some(t) = reach.topic

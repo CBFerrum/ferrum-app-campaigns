@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.5.0
+version: 0.5.1
 publisher: cbferrum
 summary: "Email, text and chat-app marketing: topics and a preference page, segments over any data, campaigns with A/B tests, journeys on record events, revenue attribution, deliverability and consent"
 description: README.md

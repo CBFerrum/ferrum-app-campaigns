@@ -280,6 +280,7 @@ async fn scenario() {
     segments(&t, &admin, &mgr, ben).await;
     revenue(&t, &admin, &mgr, ben).await;
     deliverability(&t, &admin, &mgr).await;
+    followups(&t, &admin, &mgr, &audience).await;
 }
 
 /// Item 6: warm-up, the domain check's verdict, the refusal and its override, the seed list.
@@ -833,4 +834,164 @@ async fn topics(t: &T, mgr: &Ctx, admin: &Ctx, audience: &Value, [asha, ben, cy,
         1,
         "Dee is subscribed but not to Offers: she is asked"
     );
+}
+
+/// The confirmation link a mail to `to` with `subject` carries, as a path of the site.
+async fn mailed_link(t: &T, to: &str, subject: &str, marker: &str) -> Vec<String> {
+    let texts: Vec<String> = {
+        let mut tx = t.k.db.tenant_tx(t.tenant).await.unwrap();
+        let rows = sqlx::query_scalar("select text_content from e_communication where tenant_id = $1 and recipients = $2 and subject = $3 order by created_at")
+            .bind(t.tenant)
+            .bind(to)
+            .bind(subject)
+            .fetch_all(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        rows
+    };
+    texts
+        .iter()
+        .map(|x| x.split_whitespace().find(|w| w.contains(marker)).map(|w| w[w.find(marker).unwrap()..].trim_end_matches(')').to_string()).expect("a link"))
+        .collect()
+}
+
+/// Follow-ups: re-subscribing from a preference page follows the workspace's opt-in rule; a journey needs the consent of the
+/// channels its steps use; the warm-up counts journey emails.
+async fn followups(t: &T, admin: &Ctx, mgr: &Ctx, audience: &Value) {
+    let settings = uid(&t.list("CampaignSettings", json!({})).await[0]);
+    let subject = "Please confirm you want our emails again";
+    for (email, first) in [("fay@x.test", "Fay"), ("gus@x.test", "Gus")] {
+        t.insert(mgr, "MarketingContact", json!({"email": email, "first_name": first})).await;
+    }
+    let (fay, gus) = (uid(&t.contact("fay@x.test").await), uid(&t.contact("gus@x.test").await));
+    let (mail, _) = t.send(mgr, json!({"campaign_name": "Follow-up", "subject": "Hi", "content": "<p>Hi</p>", "audience": audience})).await;
+    let fay_link = t.unsubscribe_path(t.recipient_of(mail, "fay@x.test").await).await;
+    let gus_link = t.unsubscribe_path(t.recipient_of(mail, "gus@x.test").await).await;
+    t.site("POST", &fay_link, "List-Unsubscribe=One-Click").await;
+    assert_eq!(t.get("MarketingContact", fay).await["consent_status"], json!("Unsubscribed"));
+    let granted = "select granted from contact_consent where tenant_id = $1 and email = 'fay@x.test' and channel = 'email' and purpose = 'marketing' and $2::uuid is null";
+
+    // Off (the default): saving the page is the word, recorded as a re-subscription from the preference page.
+    t.site("POST", &fay_link, "prefs=1").await;
+    let c = t.get("MarketingContact", fay).await;
+    assert_eq!(c["consent_status"], json!("Subscribed"));
+    assert!(c["consent_source"].as_str().unwrap().starts_with("re-subscription from the preference page: "), "{}", c["consent_source"]);
+
+    // On: the page sends a confirmation and changes nothing until it is confirmed.
+    t.update(mgr, "CampaignSettings", settings, json!({"double_opt_in": true})).await;
+    t.site("POST", &fay_link, "prefs=1&stop_all=on").await;
+    assert_eq!(t.get("MarketingContact", fay).await["consent_status"], json!("Unsubscribed"), "unsubscribing stays immediate");
+    assert!(mailed_link_count(t, "fay@x.test", subject).await == 0, "leaving sends nothing");
+    let page = body(&t.site("POST", &fay_link, "prefs=1").await);
+    assert!(page.contains("Check your inbox"), "{page}");
+    assert_eq!(t.get("MarketingContact", fay).await["consent_status"], json!("Unsubscribed"), "not until confirmed");
+    t.site("POST", &fay_link, "prefs=1").await;
+    let links = mailed_link(t, "fay@x.test", subject, "/reconfirm/").await;
+    assert_eq!(links.len(), 1, "saving again at once sends no second mail");
+    let link = links[0].clone();
+    assert_eq!(t.site("GET", &link, "").await.status, 200);
+    assert_eq!(t.get("MarketingContact", fay).await["consent_status"], json!("Unsubscribed"), "opening the link (a scanner) changes nothing");
+    let forged = format!("{}0", link);
+    assert_eq!(t.site("POST", &forged, "").await.status, 404);
+    assert_eq!(t.site("POST", &link, "").await.status, 200);
+    let c = t.get("MarketingContact", fay).await;
+    assert_eq!((c["consent_status"].clone(), c["consent_source"].clone()), (json!("Subscribed"), json!("double opt-in: preference page")));
+    assert!(t.scalar::<bool>(granted, None).await, "the platform's record says granted");
+    // Narrowing topics stays immediate, and a contact who never left is not asked.
+    t.site("POST", &gus_link, "prefs=1").await;
+    assert_eq!(t.get("MarketingContact", gus).await["consent_status"], json!("Subscribed"));
+    assert_eq!(mailed_link_count(t, "gus@x.test", subject).await, 0);
+    // An opt-out recorded elsewhere is lifted only by the confirmation too.
+    t.k.set_message_opt_out(admin, "gus@x.test", "email", true).await.unwrap();
+    t.site("POST", &gus_link, "prefs=1").await;
+    assert_eq!(mailed_link_count(t, "gus@x.test", subject).await, 1);
+    assert!(!may(t, "gus@x.test").await, "still opted out");
+    let link = mailed_link(t, "gus@x.test", subject, "/reconfirm/").await.remove(0);
+    t.site("POST", &link, "").await;
+    assert!(may(t, "gus@x.test").await, "confirmed");
+    t.update(mgr, "CampaignSettings", settings, json!({"double_opt_in": false})).await;
+
+    // A journey that only sends a text needs the number's consent, not the address's.
+    t.update(mgr, "MarketingContact", gus, json!({"phone": "+15550199"})).await;
+    t.k.set_message_opt_out(admin, "gus@x.test", "email", true).await.unwrap();
+    let text_only = json!({"journey_name": "Text only", "trigger_type": "Record Event", "trigger_rule": 1,
+        "event_rules": [{"label": "Cart", "entity_name": "XCart", "event": "Created", "person_field": "email"}],
+        "steps": [{"step_type": "Send Message", "channel": "Text Message", "message_template": "shop.flash_sale"}]});
+    let j = uid(&t.insert(mgr, "MarketingJourney", text_only).await);
+    t.action(mgr, "MarketingJourney", j, "activate", json!({})).await;
+    t.insert(admin, "XCart", json!({"title": "Hat", "email": "gus@x.test", "total": 5})).await;
+    t.drain().await;
+    t.maint().await;
+    while t.k.run_jobs_once(4).await.unwrap() > 0 {}
+    t.maint().await;
+    let e = t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await;
+    assert_eq!((e.len(), e[0]["status"].clone()), (1, json!("Completed")), "email opted out, number not: {e:?}");
+    let sent = t.list("CampaignRecipient", json!({"journey": j.to_string()})).await;
+    assert_eq!((sent.len(), sent[0]["channel"].clone()), (1, json!("Text Message")));
+    assert_ne!(sent[0]["status"], json!("Skipped"), "{sent:?}");
+    // The same journey with an email step still ends for the email's opt-out.
+    let mailing = json!({"journey_name": "Email only", "trigger_type": "Record Event", "trigger_rule": 1,
+        "event_rules": [{"label": "Cart", "entity_name": "XCart", "event": "Created", "person_field": "email"}],
+        "steps": [{"step_type": "Send Email", "subject": "Hi", "content": "<p>Hi</p>"}]});
+    let m = uid(&t.insert(mgr, "MarketingJourney", mailing).await);
+    t.action(mgr, "MarketingJourney", m, "activate", json!({})).await;
+    t.insert(admin, "XCart", json!({"title": "Cap", "email": "gus@x.test", "total": 5})).await;
+    t.drain().await;
+    t.maint().await;
+    assert!(t.list("JourneyEnrollment", json!({"journey": m.to_string(), "status": "Completed"})).await.is_empty(), "an email step needs the address");
+
+    // Journey emails count against a new domain's day.
+    let marketing = &t.list("EmailAccount", json!({"account_name": "Marketing"})).await[0];
+    let account = uid(&t
+        .insert(
+            admin,
+            "EmailAccount",
+            json!({"account_name": "Warm", "email_address": "hello@warm.test", "smtp_host": "127.0.0.1", "smtp_port": marketing["smtp_port"], "smtp_security": "None"}),
+        )
+        .await);
+    t.insert(mgr, "SendingDomain", json!({"domain": "warm.test", "warmup_start": chrono::Utc::now().date_naive().to_string(), "warmup_first_day": 4, "warmup_growth_percent": 100, "warmup_days": 10})).await;
+    for n in 1..=2 {
+        t.insert(mgr, "MarketingContact", json!({"email": format!("j{n}@jy.test")})).await;
+    }
+    for n in 1..=5 {
+        t.insert(mgr, "MarketingContact", json!({"email": format!("s{n}@six.test")})).await;
+    }
+    let six = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            json!({"segment_name": "Six", "rules": [{"rule_type": "Contact Field", "field": "Email", "operator": "Ends With", "value": "@six.test"}]}),
+        )
+        .await);
+    let warm = json!({"journey_name": "Warm journey", "trigger_type": "Record Event", "trigger_rule": 1, "email_account": account.to_string(),
+        "event_rules": [{"label": "Cart", "entity_name": "XCart", "event": "Created", "person_field": "email"}],
+        "steps": [{"step_type": "Send Email", "subject": "Hi", "content": "<p>Hi</p>"}]});
+    let w = uid(&t.insert(mgr, "MarketingJourney", warm).await);
+    t.action(mgr, "MarketingJourney", w, "activate", json!({})).await;
+    for n in 1..=2 {
+        t.insert(admin, "XCart", json!({"title": format!("W{n}"), "email": format!("j{n}@jy.test"), "total": 5})).await;
+    }
+    t.drain().await;
+    t.maint().await;
+    assert_eq!(t.list("CampaignRecipient", json!({"journey": w.to_string()})).await.len(), 2);
+    let (_, to) = t
+        .send(mgr, json!({"campaign_name": "After the journey", "subject": "Hi", "content": "<p>Hi</p>", "email_account": account.to_string(), "audience": [{"segment": six.to_string()}]}))
+        .await;
+    assert_eq!(to.len(), 2, "four on the first day, two went in the journey: {to:?}");
+}
+
+async fn mailed_link_count(t: &T, to: &str, subject: &str) -> i64 {
+    t.scalar::<i64>(
+        &format!("select count(*) from e_communication where tenant_id = $1 and recipients = '{to}' and subject = '{subject}' and $2::uuid is null"),
+        None,
+    )
+    .await
+}
+
+async fn may(t: &T, email: &str) -> bool {
+    let mut tx = t.k.db.tenant_tx(t.tenant).await.unwrap();
+    let ok = t.k.may_contact_for(&mut tx, t.tenant, email, ferrum_kernel::retention::Purpose::Marketing).await.unwrap();
+    tx.commit().await.unwrap();
+    ok
 }
