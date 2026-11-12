@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.8
+
+Works with Mail, Chat and Calendar 0.17 too (several calendars and sharing). It only adds to what Campaigns uses, so the requirement is now `>=0.13.1, <0.18`. Nothing else changes.
+
 ## 0.4.7
 
 Works with Mail, Chat and Calendar 0.16 too (Calendar's release: repeating events right across daylight saving, more views, working hours). It only adds to what Campaigns uses, so the requirement is now `>=0.13.1, <0.17`. Nothing else changes.
