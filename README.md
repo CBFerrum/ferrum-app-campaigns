@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.5.1** | Re-subscribing from the preference page can ask for an email confirmation; journeys need the consent of the channels their steps use; the warm-up counts journey emails. |
 | **0.5.0** | Topics and a preference page, text and chat-app messages, journeys on record events, segments from any data, revenue attribution and sending-domain checks. |
 | **0.4.9** | Works with Mail, Chat and Calendar 0.18 and 0.19 too. |
 | **0.4.8** | Works with Mail, Chat and Calendar 0.17 too. |

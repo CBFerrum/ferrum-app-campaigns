@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+* **Re-subscribing from the preference page follows the workspace's opt-in rule.** New setting Confirm Re-subscribing By Email (Campaign Settings, off by default, so nothing changes until an administrator turns it on). On: a person who left and saves their page as "subscribe again" is sent a confirmation email (subject and body are settings with built-in defaults) and becomes subscribed only when they confirm it, because a signed link in a forwarded mail would otherwise let someone else do it; an opt-out recorded in another app is lifted on the same confirmation; at most one such email in ten minutes. Off: as before, recorded as `re-subscription from the preference page`. Unsubscribing and narrowing topics are immediate either way.
+* **A journey needs the consent of the channels its steps use**: a journey with only text or chat-app steps no longer needs the address's email consent (the number's own opt-out is the platform's); a journey with both enrolls whoever can be reached on either and skips the step of a channel they cannot be reached on. Email-only journeys behave as before.
+* **The sending-domain warm-up counts journey emails** as well as campaign emails sent that day from the domain. (Journeys themselves are not held back by the warm-up.)
+
 ## 0.5.0
 
 Closes the marketing gap report's first tier for Campaigns (MK-47, 48, 50, 70, 71, 77, 78, 79, 81, 84, 85, 86 and their neighbours).

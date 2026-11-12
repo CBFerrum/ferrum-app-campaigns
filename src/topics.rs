@@ -216,6 +216,7 @@ pub async fn save(
     fields: &Map<String, Value>,
     from: &str,
     ip_hash: &str,
+    key: &[u8],
 ) -> Result<SiteResponse> {
     let tenant = sys.tenant;
     let source = util::cut(&format!("preference page{from}"), 200);
@@ -237,9 +238,18 @@ pub async fn save(
             k.update_tx(sys, tx, "MarketingContact", contact, patch, None).await?;
         }
         (true, _) => {}
-        // Their own word, on the page their signed link opened: they take marketing mail again.
+        // Their own word, on the page their signed link opened: they take marketing mail again. A link in a forwarded
+        // mail would let someone else say it, so where the workspace confirms re-subscribing, the status changes only
+        // when the person confirms the mail this sends.
         (false, Some("Unsubscribed")) => {
-            let patch = values([("consent_status", json!("Subscribed")), ("consent_source", json!(source)), ("consent_ip_hash", json!(ip_hash))]);
+            if util::settings(tx, tenant).await?.double_opt_in {
+                return ask_again(k, sys, tx, contact, email, key).await;
+            }
+            let patch = values([
+                ("consent_status", json!("Subscribed")),
+                ("consent_source", json!(format!("re-subscription from the {source}"))),
+                ("consent_ip_hash", json!(ip_hash)),
+            ]);
             k.update_tx(sys, tx, "MarketingContact", contact, patch, None).await?;
             sqlx::query("delete from e_email_suppression where tenant_id = $1 and email = $2 and reason = 'Unsubscribed'")
                 .bind(tenant)
@@ -249,11 +259,56 @@ pub async fn save(
         }
         // Opted out elsewhere (another app, staff): the one fact is the platform's, so it is changed there.
         (false, Some("Subscribed")) if !k.may_contact_for(tx, tenant, email, Purpose::Marketing).await? => {
-            k.record_consent_tx(tx, sys, email, Purpose::Marketing, true, &util::cut(&format!("Campaigns: {source}"), 200)).await?;
+            if util::settings(tx, tenant).await?.double_opt_in {
+                return ask_again(k, sys, tx, contact, email, key).await;
+            }
+            k.record_consent_tx(tx, sys, email, Purpose::Marketing, true, &util::cut(&format!("Campaigns: re-subscription from the {source}"), 200)).await?;
         }
         _ => {}
     }
     Ok(util::page(200, "Your preferences are saved", &format!("<p>Thank you: we keep to what you chose for <strong>{}</strong>.</p>", html_escape(email))))
+}
+
+/// The message a re-subscribing confirmation link signs.
+pub fn reconfirm_message(contact: Uuid, expires: i64) -> String {
+    format!("reconfirm:{contact}:{expires}")
+}
+
+/// Mails the person a link to confirm taking marketing mail again (at most one in a few minutes), and answers the page.
+async fn ask_again(k: &Kernel, sys: &Ctx, tx: &mut Tx, contact: Uuid, email: &str, key: &[u8]) -> Result<SiteResponse> {
+    let tenant = sys.tenant;
+    let sent: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select confirmation_sent_at from e_marketing_contact where tenant_id = $1 and id = $2")
+            .bind(tenant)
+            .bind(contact)
+            .fetch_one(&mut **tx)
+            .await?;
+    if sent.is_none_or(|at| chrono::Utc::now() - at >= chrono::Duration::minutes(crate::public::CONFIRMATION_PAUSE_MINUTES)) {
+        let base = util::site_base(tx, tenant).await?.ok_or_else(|| Error::Unavailable("confirmation mail cannot be sent yet".into()))?;
+        let settings = util::settings(tx, tenant).await?;
+        let expires = (chrono::Utc::now() + chrono::Duration::hours(settings.confirmation_hours)).timestamp();
+        let url = format!("{base}/reconfirm/{}.{expires}.{}", simple(contact), util::sign(key, &reconfirm_message(contact, expires)));
+        let view: Value = sqlx::query_scalar(
+            "select jsonb_build_object('email', email, 'first_name', first_name, 'last_name', last_name, 'full_name', full_name) \
+             from e_marketing_contact where tenant_id = $1 and id = $2",
+        )
+        .bind(tenant)
+        .bind(contact)
+        .fetch_one(&mut **tx)
+        .await?;
+        let ctx = json!({"contact": view, "doc": view, "confirm_url": url});
+        let content = settings.reconfirm_content.unwrap_or_else(|| {
+            "<p>Hello{% if contact.first_name %} {{ contact.first_name }}{% endif %},</p><p>Please confirm that you want our emails again:</p>\
+             <p><a href=\"{{ confirm_url }}\">Yes, subscribe me</a></p><p>If this was not you, ignore this email: nothing changes without your confirmation.</p>"
+                .to_string()
+        });
+        let html = crate::render::render_html(&content, &ctx)?;
+        let subject = crate::render::render_line(settings.reconfirm_subject.as_deref().unwrap_or("Please confirm you want our emails again"), &ctx)?;
+        let composed = crate::send::Composed { subject, text: format!("{}\n\nConfirm: {url}\n", crate::send::html_text(&html)), html, unsubscribe: None };
+        crate::send::queue(k, sys, tx, None, email, &composed, ("MarketingContact", contact), crate::send::Kind::Transactional).await?;
+        k.set_values_tx(sys, tx, "MarketingContact", contact, values([("confirmation_sent_at", json!(util::ts(util::now())))])).await?;
+    }
+    Ok(util::page(200, "Check your inbox", "<p>We sent you an email: you take our emails again when you confirm it. Until then nothing changes.</p>"))
 }
 
 // ───────────────────────────── erasure ─────────────────────────────

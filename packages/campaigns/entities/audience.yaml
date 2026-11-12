@@ -8,6 +8,10 @@
     - {name: soft_bounce_limit, type: int, default: 3, min: 1, max: 20, description: "Soft bounces in a row after which an address is suppressed (an open or click resets the count)"}
     - {name: link_expiry_days, type: int, default: 365, min: 30, max: 3650, description: "Days the tracking and unsubscribe links of a sent email keep working"}
     - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
+    - {name: double_opt_in, type: check, default: false, label: Confirm Re-subscribing By Email,
+       description: "Someone who left and ticks their way back on their preference page is sent a confirmation email and is subscribed only when they confirm (their signed link may have been forwarded). Off: saving the page is enough, recorded as a re-subscription from the preference page"}
+    - {name: reconfirm_subject, type: data, default: "Please confirm you want our emails again", max_length: 998}
+    - {name: reconfirm_content, type: text, description: "HTML with {{ confirm_url }} and {{ contact.first_name }}; blank = a built-in message"}
     - {name: webhook_secret, type: secret, description: "Signs bounce and complaint webhooks (HMAC-SHA256). Write-only; the New Webhook Secret action creates one"}
     - {name: signing_key, type: secret, read_only: true, hidden: true, description: "Signs tracking, unsubscribe and confirmation links; created automatically"}
     - {name: seed_list, type: text, description: "Addresses at the mailbox providers you watch (one per line or comma-separated, at most 50): Send To Seed List sends them the campaign as recipients get it, to see where it lands"}
@@ -23,6 +27,7 @@
     - {label: Compliance, fields: [postal_address]}
     - {label: Deliverability, fields: [soft_bounce_limit, webhook_secret]}
     - {label: Links, fields: [link_expiry_days, confirmation_hours]}
+    - {label: Re-subscribing, fields: [double_opt_in, reconfirm_subject, reconfirm_content]}
     - {label: Attribution, fields: [attribution_document, attribution_days, attribution_touch]}
     - {label: Seed List, fields: [seed_list]}
 
