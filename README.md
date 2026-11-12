@@ -282,6 +282,7 @@ CHANGELOG.md  what changed in each version
 
 | Version | Highlights |
 |---|---|
+| **0.4.6** | Works with Mail, Chat and Calendar 0.14 and 0.15 too. |
 | **0.4.5** | Rebuilt on the tuned design system: better menu icons, a lighter first page, a visible scroll cue, cleaner print. |
 | **0.4.4** | One-click unsubscribe headers on every campaign and journey email. |
 | **0.4.3** | The redesigned interface: the upgraded design system, shaped loading, told-apart states. |
