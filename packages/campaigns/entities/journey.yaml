@@ -76,6 +76,8 @@
     - {name: completed_count, type: int, label: Completed, read_only: true, no_copy: true}
     - {name: goal_count, type: int, label: Reached Goal, read_only: true, no_copy: true, in_list: true}
     - {name: exited_count, type: int, label: Exited, read_only: true, no_copy: true}
+    - {name: attributed_orders, type: int, read_only: true, no_copy: true, description: "Purchases whose last touch was one of this journey's emails"}
+    - {name: attributed_revenue, type: decimal, read_only: true, no_copy: true}
   actions:
     - {name: activate, label: Activate, permission: write, condition: "doc.status == 'Draft' || doc.status == 'Paused'"}
     - {name: pause, label: Pause, permission: write, condition: "doc.status == 'Active'"}
@@ -88,7 +90,7 @@
     - {label: Events, fields: [event_rules]}
     - {label: Steps, fields: [steps]}
     - {label: Goal, fields: [goal_segment, goal_rule]}
-    - {label: Results, fields: [activated_at, enrolled_count, active_count, completed_count, goal_count, exited_count]}
+    - {label: Results, fields: [activated_at, enrolled_count, active_count, completed_count, goal_count, exited_count, attributed_orders, attributed_revenue]}
   list: {columns: [journey_name, status, trigger_type, enrolled_count, active_count, goal_count], sort: journey_name asc}
 
 - name: JourneyEnrollment

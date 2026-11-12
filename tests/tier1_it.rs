@@ -231,6 +231,9 @@ async fn scenario() {
     ferrum_app_erp::register(&mut hooks);
     ferrum_app_crm::register(&mut hooks);
     ferrum_app_campaigns::register(&mut hooks);
+    for source in ferrum_app_campaigns::reports() {
+        ferrum_domain::reports::add_source(source);
+    }
     let settings = KernelSettings { secret_key: Some(ferrum_kernel::secret::SecretKey::new([9u8; 32])), ..Default::default() };
     let k = Kernel::boot(db, catalog, hooks, settings, None).await.expect("boot");
     ferrum_domain::maintenance(&k).await.expect("partitions");
@@ -275,6 +278,77 @@ async fn scenario() {
     messages(&t, &mgr, &admin, &audience, [asha, ben]).await;
     let (admin, mgr) = journeys(&t, tenant, mgr_id, [asha, ben]).await;
     segments(&t, &admin, &mgr, ben).await;
+    revenue(&t, &admin, &mgr, ben).await;
+}
+
+/// A recipient's signed click path for link `n` of their email.
+async fn click_path(t: &T, recipient: Uuid, n: i32) -> String {
+    let key = t.key().await;
+    let mut mac = Hmac::<Sha256>::new_from_slice(&key).unwrap();
+    mac.update(format!("click:{recipient}:{n}").as_bytes());
+    format!("/c/{}.{n}.{}", recipient.simple(), hex::encode(&mac.finalize().into_bytes()[..16]))
+}
+
+/// Item 5: orders credited to the last email touch within the window, once; tracking parameters on links.
+async fn revenue(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
+    let ben_doc = t.get("MarketingContact", ben).await;
+    let customer: Uuid = ben_doc["record_id"].as_str().unwrap().parse().unwrap();
+    let only_ben = uid(&t
+        .insert(
+            mgr,
+            "MarketingSegment",
+            json!({"segment_name": "Ben", "rules": [{"rule_type": "Contact Field", "field": "Email", "operator": "Equals", "value": "ben@x.test"}]}),
+        )
+        .await);
+    let campaign = |name: &str| {
+        json!({"campaign_name": name, "subject": "Sale", "content": "<p><a href=\"https://shop.test/sale?ref=1#top\">Shop</a></p>",
+               "audience": [{"segment": only_ben.to_string()}], "utm_tags": true})
+    };
+    let (first, _) = t.send(mgr, campaign("Spring sale")).await;
+    let (second, _) = t.send(mgr, campaign("Last chance")).await;
+    let r1 = t.recipient_of(first, "ben@x.test").await;
+    let go = t.site("GET", &click_path(t, r1, 1).await, "").await;
+    let location = go.headers.iter().find(|(k, _)| k == "location").unwrap().1.clone();
+    assert_eq!(location, "https://shop.test/sale?ref=1&utm_campaign=Spring+sale&utm_source=newsletter&utm_medium=email#top");
+    assert_eq!(
+        t.scalar::<Value>("select utm from campaigns_click where tenant_id = $1 and recipient_id = $2", Some(r1)).await,
+        json!({"utm_campaign": "Spring sale", "utm_source": "newsletter", "utm_medium": "email"}),
+        "kept on the click"
+    );
+    let r2 = t.recipient_of(second, "ben@x.test").await;
+    t.site("GET", &click_path(t, r2, 1).await, "").await;
+    // Ben buys: the last touch before it takes the order, once; the earlier campaign gets nothing.
+    let so = sales_order(t, admin, customer, "200").await;
+    t.maint().await;
+    t.maint().await;
+    let credit = |c: Uuid| async move {
+        let d = t.get("EmailCampaign", c).await;
+        (
+            d["attributed_orders"].as_i64().unwrap_or(0),
+            t.scalar::<String>("select coalesce(trim_scale(sum(amount)), 0)::text from campaigns_attribution where tenant_id = $1 and owner_id = $2", Some(c))
+                .await,
+        )
+    };
+    assert_eq!(credit(second).await, (1, "150".to_string()), "the order's total as ERP priced it");
+    assert_eq!(credit(first).await, (0, "0".to_string()), "no double counting");
+    assert_eq!(
+        t.scalar::<i64>("select count(*) from campaigns_attribution where tenant_id = $1 and $2::uuid is null", None).await,
+        1,
+        "his earlier order came before any touch"
+    );
+    let report =
+        ferrum_domain::reports::run(&t.k, mgr, "revenue_attribution", &[("campaign".to_string(), second.to_string())].into_iter().collect()).await.unwrap();
+    assert_eq!(
+        (report["rows"][0]["link_no"].clone(), report["rows"][0]["orders"].clone(), report["totals"]["revenue"].clone()),
+        (json!(1), json!(1), json!("150"))
+    );
+    // Outside the window, nothing is credited.
+    t.update(mgr, "CampaignSettings", uid(&t.list("CampaignSettings", json!({})).await[0]), json!({"attribution_days": 1})).await;
+    t.exec("update campaigns_click set clicked_at = now() - interval '3 days' where tenant_id = $1 and recipient_id = $2", Some(r2)).await;
+    t.exec("delete from campaigns_attribution where tenant_id = $1 and $2::uuid is null", None).await;
+    t.maint().await;
+    assert_eq!(credit(second).await.0, 0);
+    let _ = so;
 }
 
 /// Item 4: segments over the contact's records and over any data, worked out when used and on a schedule.

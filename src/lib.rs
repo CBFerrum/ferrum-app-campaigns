@@ -6,6 +6,7 @@
 //! with its accounts, retries and limits. Hooks are registered per entity, so a tenant without
 //! the package never runs them; the public endpoints are a `Site` (see packages/campaigns/README.md).
 
+mod attribution;
 mod campaign;
 mod channels;
 mod check;
@@ -97,6 +98,7 @@ pub async fn maintenance(k: &Kernel) -> Result<()> {
             ("segments", segment::run(k, &sys).await),
             ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
             ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
+            ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
             ("purge", purge(k, tenant).await),
         ];
         for (step, outcome) in steps {
