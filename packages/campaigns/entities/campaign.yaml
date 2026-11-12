@@ -50,6 +50,9 @@
     - {name: utm_campaign, type: data, max_length: 100, visible_if: "doc.utm_tags", description: "Blank = the campaign's name"}
     - {name: utm_source, type: data, max_length: 100, default: newsletter, visible_if: "doc.utm_tags"}
     - {name: utm_medium, type: data, max_length: 100, default: email, visible_if: "doc.utm_tags"}
+    - {name: deliverability_override, type: check, label: Send Despite Failing Domain Checks, no_copy: true,
+       description: "An administrator's decision to send a promotional campaign from a sending domain whose DNS check failed"}
+    - {name: override_reason, type: text, no_copy: true, visible_if: "doc.deliverability_override", required_if: "doc.deliverability_override"}
     - {name: ab_test, type: check, label: A/B Test}
     - {name: variants, type: table, of: CampaignVariant, visible_if: "doc.ab_test", description: "2 to 5 variants (A, B, ...): a subject each and, optionally, their own content"}
     - {name: test_percent, type: int, label: Test Share (%), default: 20, min: 1, max: 90, visible_if: "doc.ab_test", description: "Share of the audience that receives the variants; the rest receives the winner"}
@@ -77,6 +80,7 @@
   actions:
     # The campaign page shows a preview itself; the records form would only throw its answer away.
     - {name: preview, label: Preview, permission: read, read_only: true, hidden: true}
+    - {name: send_seed, label: Send To Seed List, permission: write, docstatus: [0, 1]}
     - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1],
        params: [{name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}]}
     # For the campaign screens (they call these, nobody clicks them): who it would reach if it started now, and what
@@ -87,7 +91,8 @@
     - {label: Campaign, fields: [campaign_name, status, channel, message_template, email_account, topic, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}
     - {label: Audience, fields: [audience]}
-    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks, utm_tags, utm_campaign, utm_source, utm_medium]}
+    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks, utm_tags, utm_campaign, utm_source, utm_medium, deliverability_override,
+                                override_reason]}
     - {label: A/B Test, collapsible: true, fields: [ab_test, variants, test_percent, winner_metric, winner_after_hours, winner_variant, test_sent_at, winner_chosen_at]}
     - {label: Results, fields: [total_recipients, sent_count, failed_count, skipped_count, unique_opens, total_opens, unique_clicks, total_clicks, unsubscribe_count,
                                 bounce_count, complaint_count, attributed_orders, attributed_revenue, started_at, finished_at, last_error]}

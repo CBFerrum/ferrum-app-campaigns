@@ -10,6 +10,7 @@
 use crate::channels::{self, Channel};
 use crate::check;
 use crate::contact;
+use crate::deliverability;
 use crate::import;
 use crate::segment::{self, Rule, Segment};
 use crate::send::{self, Composed, Draft, Links};
@@ -180,6 +181,10 @@ impl DocHook for CampaignHook {
         if errors.is_empty() { Ok(()) } else { Err(Error::Validation(errors)) }
     }
 
+    async fn validate_change(&self, hc: &mut HookCtx<'_>, old: Option<&Doc>, doc: &Doc) -> Result<()> {
+        deliverability::override_allowed(hc.ctx, old, doc)
+    }
+
     async fn before_submit(&self, hc: &mut HookCtx<'_>, doc: &mut Doc) -> Result<()> {
         let tenant = hc.ctx.tenant;
         let channel = Channel::of(doc);
@@ -199,7 +204,9 @@ impl DocHook for CampaignHook {
                 segment::load(hc.kernel, hc.ctx, hc.tx, seg).await?;
             }
         }
-        Reach::of(hc.tx, tenant, id(doc, "topic")).await?;
+        if !Reach::of(hc.tx, tenant, id(doc, "topic")).await?.operational {
+            deliverability::gate(hc.tx, tenant, doc).await?;
+        }
         // Every variant must render for a stand-in contact (runtime errors, fuel).
         let links = Links { base, key: vec![0; 32], track_opens: true, tracked: Some(HashMap::new()), postal_address: None };
         let mut versions = vec![None];
@@ -271,6 +278,19 @@ impl DocHook for CampaignHook {
                 Ok(Some(json!({"subject": c.subject, "html": c.html, "text": c.text, "variant": variant})))
             }
             "send_test" => Ok(Some(send_test(hc, doc, params).await?)),
+            // The campaign as recipients get it (no "[Test]"), to the workspace's seed addresses, to see where it lands.
+            "send_seed" => {
+                let list: Option<String> = sqlx::query_scalar("select seed_list from e_campaign_settings where tenant_id = $1 limit 1")
+                    .bind(hc.ctx.tenant)
+                    .fetch_optional(&mut **hc.tx)
+                    .await?
+                    .flatten();
+                let emails: Vec<String> = list.unwrap_or_default().split([',', ';', '\n']).map(|e| e.trim().to_lowercase()).filter(|e| !e.is_empty()).collect();
+                if emails.is_empty() || emails.len() > 50 {
+                    return Err(Error::field("seed_list", "enter 1 to 50 seed addresses in Campaign Settings"));
+                }
+                Ok(Some(send_copies(hc, doc, params, &emails, false).await?))
+            }
             "audience_check" => Ok(Some(check::audience(hc, doc).await?)),
             "timeline" => Ok(Some(check::timeline(hc, doc, params).await?)),
             _ => Ok(None),
@@ -307,6 +327,12 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
     if addresses.is_empty() || addresses.len() > 10 {
         return Err(Error::field("emails", "send a test to 1 to 10 addresses"));
     }
+    send_copies(hc, doc, params, &addresses, true).await
+}
+
+/// Copies of the campaign (or a variant) to `addresses`, untracked: tests say so in the subject, seed copies look as
+/// recipients' do.
+async fn send_copies(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value, addresses: &[String], test: bool) -> Result<Value> {
     if let Some(bad) = addresses.iter().find(|e| !e.contains('@') || e.contains(char::is_whitespace) || e.len() > 254) {
         return Err(Error::field("emails", format!("{bad} is not a valid email address")));
     }
@@ -325,14 +351,18 @@ async fn send_test(hc: &mut HookCtx<'_>, doc: &Doc, params: &Value) -> Result<Va
         postal_address: util::settings(hc.tx, tenant).await?.postal_address,
     };
     let mut d = draft(doc, variant.as_deref());
-    d.subject = format!("[Test] {}", d.subject);
+    if test {
+        d.subject = format!("[Test] {}", d.subject);
+    }
     let campaign = util::doc_id(doc)?;
     // As the person asking (named as the author, told if it fails), with the engine's rights.
     let author = elevated(hc.ctx);
     let mut sent = Vec::new();
-    for to in &addresses {
+    // A seed copy goes as the campaign's mail goes, its unsubscribe headers too.
+    let kind = if test { send::Kind::Transactional } else { send::Kind::Bulk(Purpose::Marketing) };
+    for to in addresses {
         let c = send::compose(&d, &contact, &extra(doc), Uuid::now_v7(), &links)?;
-        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), send::Kind::Transactional).await?);
+        sent.push(send::queue(hc.kernel, &author, hc.tx, id(doc, "email_account"), to, &c, ("EmailCampaign", campaign), kind).await?);
     }
     Ok(json!({"sent": sent.len(), "communications": sent}))
 }
@@ -546,6 +576,12 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: Option<&Li
     }
     let channel = Channel::of(&doc);
     let mut room = if channel == Channel::Email { send::hourly_room(&mut tx, tenant).await? } else { channels::room(&mut tx, tenant).await? }.min(BATCH);
+    // A new sending domain warms up: what is left of its day.
+    if channel == Channel::Email
+        && let Some(left) = deliverability::warmup_room(&mut tx, sys, id(&doc, "email_account")).await?
+    {
+        room = room.min(left);
+    }
     let own_limit = int(&doc, "hourly_limit");
     if own_limit > 0 {
         let used: i64 = sqlx::query_scalar(
