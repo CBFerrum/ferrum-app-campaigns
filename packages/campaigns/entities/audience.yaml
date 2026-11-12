@@ -29,6 +29,7 @@
     - {name: first_name, type: data, max_length: 100}
     - {name: last_name, type: data, max_length: 100}
     - {name: full_name, type: data, read_only: true, in_list: true}
+    - {name: phone, type: phone, description: "For text and chat-app messages, in international form (+ and the country code) or completed with the workspace's calling code. Whether the number takes promotional messages is the platform's record, per channel (a reply with a stop word, the link in a message, staff)"}
     - {name: consent_status, type: select, options: [Subscribed, Pending, Unsubscribed, Bounced, Complained], default: Subscribed, required: true, in_list: true, in_filter: true,
        description: "Campaigns and journeys mail Subscribed contacts only. Pending: waiting for a double opt-in confirmation"}
     - {name: consent_at, type: datetime, label: Consent Changed At, read_only: true, no_copy: true}
@@ -42,7 +43,7 @@
     - {name: confirmation_sent_at, type: datetime, read_only: true, hidden: true, no_copy: true}
   indexes: [[record_entity, record_id]]
   form:
-    - {label: Contact, fields: [email, first_name, last_name, full_name, source]}
+    - {label: Contact, fields: [email, phone, first_name, last_name, full_name, source]}
     - {label: Consent, fields: [consent_status, consent_at, consent_source, consent_ip_hash, soft_bounce_count]}
     - {label: Attributes, fields: [attributes]}
     - {label: Linked Record, collapsible: true, fields: [record_entity, record_id]}

@@ -7,7 +7,8 @@
 //! unsubscribe link opens the preference page when the workspace has topics; the one-click request mail clients send
 //! (RFC 8058) stays "everything" for this sender.
 
-use crate::contact::{self, MAILABLE, REACHABLE};
+use crate::channels::Channel;
+use crate::contact::{self, MAILABLE, REACHABLE, TEXT_REACHABLE, TEXTABLE};
 use crate::util::{self, html_escape, id, s, simple, values};
 use async_trait::async_trait;
 use ferrum_kernel::retention::Purpose;
@@ -21,6 +22,7 @@ use uuid::Uuid;
 pub struct Reach {
     pub topic: Option<Uuid>,
     pub operational: bool,
+    pub channel: Channel,
 }
 
 impl Reach {
@@ -34,15 +36,25 @@ impl Reach {
             .fetch_optional(&mut **tx)
             .await?;
         match found {
-            Some((category, true)) => Ok(Reach { topic: Some(t), operational: category == "Operational" }),
+            Some((category, true)) => Ok(Reach { topic: Some(t), operational: category == "Operational", channel: Channel::Email }),
             Some(_) => Err(Error::field("topic", "this topic is turned off")),
             None => Err(Error::field("topic", "this topic does not exist")),
         }
     }
 
+    /// The same, on another channel.
+    pub fn on(self, channel: Channel) -> Reach {
+        Reach { channel, ..self }
+    }
+
     /// The condition on a contact row `c`.
     pub fn push(&self, qb: &mut QueryBuilder<Postgres>) {
-        qb.push(if self.operational { REACHABLE } else { MAILABLE });
+        qb.push(match (self.channel, self.operational) {
+            (Channel::Email, false) => MAILABLE,
+            (Channel::Email, true) => REACHABLE,
+            (_, false) => TEXTABLE,
+            (_, true) => TEXT_REACHABLE,
+        });
         if let Some(t) = self.topic {
             qb.push(" and ");
             push_in_topic(qb, t);

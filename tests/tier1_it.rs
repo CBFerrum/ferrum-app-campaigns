@@ -268,6 +268,57 @@ async fn scenario() {
     let audience = json!([{"segment": everyone.to_string()}]);
 
     topics(&t, &mgr, &admin, &audience, [asha, ben, cy, dee]).await;
+    messages(&t, &mgr, &admin, &audience, [asha, ben]).await;
+}
+
+/// Item 2: text and chat-app messages through the platform's templates and channels.
+async fn messages(t: &T, mgr: &Ctx, admin: &Ctx, audience: &Value, [asha, ben]: [Uuid; 2]) {
+    t.update(mgr, "MarketingContact", asha, json!({"phone": "+15550101"})).await;
+    t.update(mgr, "MarketingContact", ben, json!({"phone": "+15550102"})).await;
+    let template = |key: &str, category: &str| -> ferrum_meta::MessageDef {
+        serde_json::from_value(json!({"key": key, "entity": "MarketingContact", "category": category,
+            "languages": {"en": {"text": {"text": "Hi {{ doc.first_name }}, 20% off today"}, "chat": {"text": "Hi {{ doc.first_name }}"}}}}))
+        .unwrap()
+    };
+    t.k.save_message_template(admin, &template("shop.flash_sale", "promotional")).await.expect("a promotional template");
+    t.k.save_message_template(admin, &template("shop.notice", "operational")).await.expect("an operational template");
+    let channel: ferrum_kernel::messages::ChannelInput = serde_json::from_value(json!({"kind": "text", "name": "Test", "secrets": {"hook": "h00k"},
+        "description": {"test": true, "inbound": {"auth": "token", "secret": "hook", "from_at": "/from", "text_at": "/text", "stop": ["STOP"], "start": ["START"]}}}))
+    .unwrap();
+    let channel = t.k.save_message_channel(admin, None, &channel).await.expect("the test channel");
+    // Marketing goes out on promotional templates only: an operational one would pass every opt-out.
+    let wrong = uid(&t
+        .insert(mgr, "EmailCampaign", json!({"campaign_name": "Wrong", "channel": "Text Message", "message_template": "shop.notice", "audience": audience}))
+        .await);
+    refused(t.k.submit(mgr, "EmailCampaign", wrong, None).await);
+    let missing = uid(&t
+        .insert(mgr, "EmailCampaign", json!({"campaign_name": "Missing", "channel": "Text Message", "message_template": "shop.nope", "audience": audience}))
+        .await);
+    refused(t.k.submit(mgr, "EmailCampaign", missing, None).await);
+    refused(t.k.insert(mgr, "EmailCampaign", obj(json!({"campaign_name": "No template", "channel": "Chat App", "audience": audience}))).await);
+
+    let (sale, to) =
+        t.send(mgr, json!({"campaign_name": "Flash", "channel": "Text Message", "message_template": "shop.flash_sale", "audience": audience})).await;
+    assert_eq!(to, ["asha@x.test", "ben@x.test"], "the subscribed contacts with a number");
+    while t.k.run_jobs_once(4).await.unwrap() > 0 {}
+    t.maint().await;
+    let rows = t.list("CampaignRecipient", json!({"campaign": sale.to_string(), "status": "Sent"})).await;
+    assert_eq!(rows.len(), 2, "read back from the platform's delivery log");
+    assert!(rows.iter().all(|r| r["channel"] == json!("Text Message") && r["delivered_at"].is_string() && r["message_send"].is_string()), "{rows:?}");
+    let said: String =
+        t.scalar("select content->'message'->>'text' from message_send where tenant_id = $1 and recipient = '+15550101' and $2::uuid is null", None).await;
+    assert_eq!(said, "Hi Asha, 20% off today");
+    // Ben replies STOP: the platform records his number's opt-out on that channel, and the next campaign skips him.
+    let none = std::collections::BTreeMap::new();
+    let query = std::collections::BTreeMap::from([("token".to_string(), "h00k".to_string())]);
+    t.k.message_inbound(channel, &none, &query, br#"{"from": "+15550102", "text": "stop"}"#).await.expect("a reply");
+    let (again, to) =
+        t.send(mgr, json!({"campaign_name": "Flash 2", "channel": "Text Message", "message_template": "shop.flash_sale", "audience": audience})).await;
+    assert_eq!(to, ["asha@x.test"]);
+    let ben_row = t.list("CampaignRecipient", json!({"campaign": again.to_string(), "email": "ben@x.test"})).await;
+    assert_eq!((ben_row[0]["status"].clone(), ben_row[0]["skip_reason"].clone()), (json!("Skipped"), json!("opted out")));
+    // Email is another channel: his email marketing is untouched.
+    assert_eq!(t.get("MarketingContact", ben).await["consent_status"], json!("Subscribed"));
 }
 
 /// Item 1: topics a workspace defines, the preference page, "stop everything" as the platform's one fact.
