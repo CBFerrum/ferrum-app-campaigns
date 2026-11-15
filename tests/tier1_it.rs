@@ -217,8 +217,9 @@ fn leaders_gap_items() {
 async fn scenario() {
     #[rustfmt::skip]
     let url = std::env::var("FERRUM_CAMPAIGNS_TIER1_TEST_DATABASE_URL").unwrap_or_else(|_| "postgres://ferrum:ferrum@localhost:5432/ferrum_campaigns_tier1_test".into());
-    let db = Db::connect(DbConfig { url, max_connections: 20, ..Default::default() }).await.expect("connect");
-    sqlx::raw_sql("drop schema if exists public cascade; create schema public;").execute(&db.pool).await.expect("reset");
+    let db = Db::connect(DbConfig { url: url.clone(), max_connections: 20, ..Default::default() }).await.expect("connect");
+    sqlx::raw_sql("drop schema if exists vault cascade; drop schema if exists public cascade; create schema public;").execute(&db.pool).await.expect("reset");
+    ferrum_kernel::vault::open(&db, opener(&url), false).await.expect("the vault");
     let mut packages = ferrum_domain::packages().expect("platform packages");
     packages.extend(ferrum_app_comms::packages().expect("mail packages"));
     packages.extend(ferrum_app_erp::packages().expect("ERP's packages"));
@@ -227,7 +228,7 @@ async fn scenario() {
     let catalog = Catalog::from_packages(packages).expect("catalog");
     let mut hooks = HookRegistry::default();
     ferrum_domain::register(&mut hooks);
-    ferrum_app_comms::register(&mut hooks);
+    hooks.app("comms", &[], ferrum_app_comms::register);
     ferrum_app_erp::register(&mut hooks);
     ferrum_app_crm::register(&mut hooks);
     ferrum_app_campaigns::register(&mut hooks);
@@ -994,4 +995,14 @@ async fn may(t: &T, email: &str) -> bool {
     let ok = t.k.may_contact_for(&mut tx, t.tenant, email, ferrum_kernel::retention::Purpose::Marketing).await.unwrap();
     tx.commit().await.unwrap();
     ok
+}
+
+/// What opens the test's vault: the database password of `url`, with Argon2id kept cheap for tests.
+fn opener(url: &str) -> ferrum_kernel::vault::Opener {
+    ferrum_kernel::vault::Opener {
+        database_url: url.to_string(),
+        file: "/nonexistent/root.key".into(),
+        kdf: ferrum_kernel::vault::Kdf { m_kib: 64, t: 1, p: 1 },
+        ..Default::default()
+    }
 }
