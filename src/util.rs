@@ -87,10 +87,10 @@ pub async fn signing_key(k: &Kernel, tenant: Uuid) -> Result<Vec<u8>> {
         let settings: Option<Uuid> =
             sqlx::query_scalar("select id from e_campaign_settings where tenant_id = $1 limit 1 for update").bind(tenant).fetch_optional(&mut *tx).await?;
         if let Some(id) = settings
-            && let Some(key) = k.secret(&mut tx, tenant, "CampaignSettings", id, "signing_key").await?
+            && let Some(key) = crate::keys::field(k, &mut tx, tenant, "CampaignSettings", id, "signing_key").await?
         {
             tx.commit().await?;
-            return hex::decode(key).map_err(Error::internal);
+            return hex::decode(key.as_str()).map_err(Error::internal);
         }
         let fresh = hex::encode(rand::random::<[u8; 32]>());
         let patch = values([("signing_key", json!(fresh))]);

@@ -160,6 +160,8 @@ fn links(text: &str, kind: &str) -> Vec<String> {
 
 struct T {
     k: Arc<Kernel>,
+    /// Campaigns\' own handle on the vault, as its registration was given it: what reads its secret fields.
+    campaigns: ferrum_kernel::vault::Vault,
     tenant: Uuid,
     admin: Ctx,
     smtp: Smtp,
@@ -263,9 +265,9 @@ impl T {
     async fn signing_key(&self) -> Vec<u8> {
         let mut tx = self.k.db.tenant_tx(self.tenant).await.unwrap();
         let sid: Uuid = sqlx::query_scalar("select id from e_campaign_settings where tenant_id = $1").bind(self.tenant).fetch_one(&mut *tx).await.unwrap();
-        let key = self.k.secret(&mut tx, self.tenant, "CampaignSettings", sid, "signing_key").await.unwrap().expect("signing key");
+        let key = self.campaigns.field(&self.k, &mut tx, self.tenant, "CampaignSettings", sid, "signing_key").await.unwrap().expect("signing key");
         tx.commit().await.unwrap();
-        hex::decode(key).unwrap()
+        hex::decode(key.as_str()).unwrap()
     }
 
     /// Mails received for one subject (in arrival order).
@@ -333,8 +335,16 @@ async fn scenario() {
     let mut hooks = HookRegistry::default();
     ferrum_domain::register(&mut hooks);
     hooks.app("comms", &[], ferrum_app_comms::register);
+    let comms_packages: Vec<String> = ferrum_app_comms::packages().unwrap().iter().map(|p| p.name().to_string()).collect();
+    hooks.own("comms", &comms_packages);
     ferrum_app_crm::register(&mut hooks);
-    ferrum_app_campaigns::register(&mut hooks);
+    let campaigns_packages: Vec<String> = ferrum_app_campaigns::packages().unwrap().iter().map(|p| p.name().to_string()).collect();
+    let mut campaigns = None;
+    hooks.app("campaigns", &campaigns_packages, |h| {
+        ferrum_app_campaigns::register(h);
+        campaigns = Some(h.vault());
+    });
+    hooks.own("campaigns", &campaigns_packages);
     for source in ferrum_app_campaigns::reports().into_iter().chain(ferrum_app_crm::reports()) {
         ferrum_domain::reports::add_source(source);
     }
@@ -369,7 +379,7 @@ async fn scenario() {
     let (mgr, uma, ola, sam) = (&users["mgr"], &users["uma"], &users["ola"], &users["sam"]);
     let smtp = Smtp::default();
     let port = smtp.start().await;
-    let t = T { k: k.clone(), tenant, admin: admin.clone(), smtp: smtp.clone() };
+    let t = T { k: k.clone(), campaigns: campaigns.expect("Campaigns' handle"), tenant, admin: admin.clone(), smtp: smtp.clone() };
 
     // ───────────── Mail setup: an account, settings without a public URL yet ─────────────
     let comms_settings = uid(&t.insert(&admin, "CommsSettings", json!({"newsletter_hourly_limit": 1000})).await);
@@ -1509,6 +1519,13 @@ async fn scenario() {
     let subscribed_now: i64 = t.scalar("select count(*) from e_marketing_contact where tenant_id = $1 and consent_status = 'Subscribed'", None).await;
     assert_eq!(int(&g["net_change"]), subscribed_now, "today's net change is today's subscribed audience");
     assert_eq!(int(&growth["meta"]["subscribed_now"]), subscribed_now);
+    // Every secret field Campaigns read it read with its own handle: none of its code read past the vault, which the
+    // platform notes by caller (`ferrum task legacy_key`) in the background. (The apps it is built with here come from
+    // their own main, and answer for their own reads.)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let past: Vec<_> =
+        t.k.legacy_key(vec![]).await.unwrap().uses.into_iter().filter(|u| u.0.starts_with("reader:") && u.1.starts_with("src/")).map(|u| u.1).collect();
+    assert!(past.is_empty(), "read past the vault: {past:?}");
 }
 
 /// What opens the test's vault: the database password of `url`, with Argon2id kept cheap for tests.
