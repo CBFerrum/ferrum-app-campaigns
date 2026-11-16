@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+* **Works with Mail 0.22.** The range of Mail versions Campaigns accepts now includes 0.22 (Mail declares the settings it reads and keeps the meeting and mail servers' secrets in its own vault), which the Mail app already is; nothing in Campaigns changes for it.
+
 ## 0.5.3
 
 * **Campaigns reads its secret fields with its own handle on the vault** (Campaign Settings' link signing key and its delivery webhook's secret), in the same transaction as before, instead of the platform's reader that any app could use, which is deprecated. It registers as itself (`hooks.app("campaigns", …)`) to be given that handle. Needs a platform with the vault's field reader (0.3.8 on the platform's main from cdec881). Links, unsubscribes and webhooks work as before; while the vault is closed they refuse plainly. No database or interface change.
