@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+Needs Mail 0.25 (comms `>=0.25.0, <0.26`) and the same platform as 0.6.1. Interface unchanged. Database change: the
+package's SQL is one baseline, `001_campaigns.sql` (the journey events, segment members and attribution tables, and the
+click's `utm` column, made where they belong; no installation was ever made from the old files: a development database
+that applied them needs resetting). The suites run on today's Comms.
+
 ## 0.6.1
 
 Needs the same platform as 0.6.0. No database change. Interface only, `ui/dist` rebuilt with Ferrum-Frontend `06bd1a2`.
