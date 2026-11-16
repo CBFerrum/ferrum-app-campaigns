@@ -14,8 +14,8 @@ provider's bounce webhook. Times are RFC 3339 UTC with milliseconds. Errors use 
 **Sending.** Every email is an outgoing `Communication` of the Mail app, created in the same
 transaction that claims its recipient and delivered by the Mail app after commit (its accounts,
 retries with backoff and failure handling apply). Emails appear on the contact's timeline
-(`reference_entity: MarketingContact`). Campaigns, journeys and the Mail app's newsletters share the
-workspace's hourly limit (`CommsSettings.newsletter_hourly_limit`).
+(`reference_entity: MarketingContact`). Campaigns and journeys share the workspace's hourly limit
+(`CampaignSettings.hourly_limit`).
 
 ## Roles
 
@@ -32,8 +32,7 @@ only through the journey or the Take Out Of Journey action.
 
 1. **Communication Settings** (Mail app): `public_url` (e.g. `https://erp.example.com`) — campaigns
    cannot be scheduled (nor journeys with emails activated) until it is set, because tracking,
-   unsubscribe and confirmation links must reach the server; `newsletter_hourly_limit` — the
-   workspace's emails per hour for campaigns, journeys and newsletters together.
+   unsubscribe and confirmation links must reach the server.
 2. **Email Account** (Mail app): an outgoing account; the default outgoing account (company empty)
    is used when a campaign, journey or form names none.
 3. **Campaign Settings** (`CampaignSettings`, one per workspace):
@@ -41,6 +40,7 @@ only through the journey or the Take Out Of Journey action.
 | Field | Default | Meaning |
 |---|---|---|
 | `postal_address` | — | printed in every footer the app adds (CAN-SPAM and similar laws require it) |
+| `hourly_limit` | 500 | emails campaigns and journeys hand to the Mail app per hour at most, together (a campaign's own limit can only slow it) |
 | `soft_bounce_limit` | 3 | soft bounces in a row after which the address is suppressed (a human open or click resets the count) |
 | `link_expiry_days` | 365 | days an email's open, click and unsubscribe links keep working |
 | `confirmation_hours` | 72 | lifetime of a double opt-in confirmation link |
@@ -72,7 +72,7 @@ or `Unsubscribed`; anyone with write access may unsubscribe a contact; `Bounced`
 growth, journey triggers) and:
 
 - `Unsubscribed` and `Complained` add the address to the suppression list, mark it unsubscribed in
-  every Mail email group (so newsletters honour it) and set the linked record's own `unsubscribed`
+  every Mail email group (so its mailing list honours it) and set the linked record's own `unsubscribed`
   flag when it has one (CRM contacts and leads);
 - `Bounced` adds it to the suppression list (`Hard Bounce` or `Soft Bounces`).
 

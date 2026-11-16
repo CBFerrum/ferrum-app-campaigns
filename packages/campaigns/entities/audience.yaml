@@ -2,9 +2,11 @@
   label: Campaign Settings
   kind: settings
   module: marketing
-  description: "Email marketing settings. The public URL (for tracking, unsubscribe and confirmation links), the hourly sending limit and the email accounts come from the Mail app's Communication Settings."
+  description: "Email marketing settings. The public URL (for tracking, unsubscribe and confirmation links) and the email accounts come from the Mail app's Communication Settings."
   fields:
     - {name: postal_address, type: text, description: "Your organization's postal address, printed in every campaign footer (anti-spam laws such as CAN-SPAM require one)"}
+    - {name: hourly_limit, type: int, label: Emails Per Hour, default: 500, min: 1, max: 1000000,
+       description: "Emails campaigns and journeys send per hour at most, together (respect your provider's sending limits); a campaign can go slower with its own limit"}
     - {name: soft_bounce_limit, type: int, default: 3, min: 1, max: 20, description: "Soft bounces in a row after which an address is suppressed (an open or click resets the count)"}
     - {name: link_expiry_days, type: int, default: 365, min: 30, max: 3650, description: "Days the tracking and unsubscribe links of a sent email keep working"}
     - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
@@ -25,7 +27,7 @@
     - {name: rotate_webhook_secret, label: New Webhook Secret, permission: write, confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"}
   form:
     - {label: Compliance, fields: [postal_address]}
-    - {label: Deliverability, fields: [soft_bounce_limit, webhook_secret]}
+    - {label: Deliverability, fields: [hourly_limit, soft_bounce_limit, webhook_secret]}
     - {label: Links, fields: [link_expiry_days, confirmation_hours]}
     - {label: Re-subscribing, fields: [double_opt_in, reconfirm_subject, reconfirm_content]}
     - {label: Attribution, fields: [attribution_document, attribution_days, attribution_touch]}

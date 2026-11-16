@@ -42,7 +42,7 @@
     - {name: audience, type: table, of: CampaignAudience, required: true}
     - {name: schedule_at, type: datetime, in_list: true, description: "Blank = as soon as it is submitted"}
     - {name: hourly_limit, type: int, label: Emails Per Hour, default: 0, min: 0, max: 1000000,
-       description: "This campaign's own sending rate; 0 = only the workspace limit (Communication Settings, shared with newsletters and journeys)"}
+       description: "This campaign's own sending rate; 0 = only the workspace limit (Campaign Settings, shared with journeys)"}
     - {name: track_opens, type: check, default: true}
     - {name: track_clicks, type: check, default: true}
     - {name: utm_tags, type: check, label: Add Tracking Parameters,

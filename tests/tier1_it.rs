@@ -269,7 +269,7 @@ async fn scenario() {
     let t = T { k: k.clone(), campaigns: campaigns.expect("Campaigns' handle"), tenant, admin: admin.clone() };
     let smtp = Smtp::default();
     let port = smtp.start().await;
-    t.insert(&admin, "CommsSettings", json!({"newsletter_hourly_limit": 10000, "public_url": "https://erp.acme.test/"})).await;
+    t.insert(&admin, "CommsSettings", json!({"public_url": "https://erp.acme.test/"})).await;
     t.insert(
         &admin,
         "EmailAccount",
@@ -277,7 +277,7 @@ async fn scenario() {
                "smtp_security": "None"}),
     )
     .await;
-    t.insert(&mgr, "CampaignSettings", json!({"postal_address": "Acme Ltd, 1 Main Street"})).await;
+    t.insert(&mgr, "CampaignSettings", json!({"postal_address": "Acme Ltd, 1 Main Street", "hourly_limit": 10000})).await;
     // Contacts from before topics existed.
     for (email, first) in [("asha@x.test", "Asha"), ("ben@x.test", "Ben"), ("cy@x.test", "Cy"), ("dee@x.test", "Dee")] {
         t.insert(&mgr, "MarketingContact", json!({"email": email, "first_name": first})).await;

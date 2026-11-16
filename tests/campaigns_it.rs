@@ -382,7 +382,7 @@ async fn scenario() {
     let t = T { k: k.clone(), campaigns: campaigns.expect("Campaigns' handle"), tenant, admin: admin.clone(), smtp: smtp.clone() };
 
     // ───────────── Mail setup: an account, settings without a public URL yet ─────────────
-    let comms_settings = uid(&t.insert(&admin, "CommsSettings", json!({"newsletter_hourly_limit": 1000})).await);
+    let comms_settings = uid(&t.insert(&admin, "CommsSettings", json!({})).await);
     t.insert(
         &admin,
         "EmailAccount",
@@ -390,7 +390,9 @@ async fn scenario() {
                "smtp_host": "127.0.0.1", "smtp_port": port, "smtp_security": "None"}),
     )
     .await;
-    let settings = t.insert(mgr, "CampaignSettings", json!({"postal_address": "Acme Ltd\n1 Main Street, Springfield", "soft_bounce_limit": 2})).await;
+    let settings = t
+        .insert(mgr, "CampaignSettings", json!({"postal_address": "Acme Ltd\n1 Main Street, Springfield", "soft_bounce_limit": 2, "hourly_limit": 1000}))
+        .await;
     let rotated = t.action(mgr, "CampaignSettings", uid(&settings), "rotate_webhook_secret", json!({})).await;
     let webhook_secret = rotated["secret"].as_str().unwrap().to_string();
     assert_eq!(webhook_secret.len(), 64);

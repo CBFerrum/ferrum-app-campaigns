@@ -1,5 +1,5 @@
-//! Handing marketing emails to the Mail app: the hourly sending budget shared with its
-//! newsletters, the personalized message (template, tracked links, open pixel, preheader, signed
+//! Handing marketing emails to the Mail app: the hourly sending budget of campaigns and journeys,
+//! the personalized message (template, tracked links, open pixel, preheader, signed
 //! unsubscribe link and footer, a plain-text part) and the `Communication` record the Mail app
 //! delivers after commit — with its retries, account selection and threading.
 
@@ -23,20 +23,19 @@ pub async fn lock_budget(tx: &mut Tx, tenant: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// The Mail app's hourly limit (Communication Settings) for newsletters, campaigns and journeys together.
+/// The workspace's hourly limit (Campaign Settings) for campaigns and journeys together.
 pub async fn hourly_limit(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
     let limit: Option<Option<i64>> =
-        sqlx::query_scalar("select newsletter_hourly_limit from e_comms_settings where tenant_id = $1 limit 1").bind(tenant).fetch_optional(&mut **tx).await?;
+        sqlx::query_scalar("select hourly_limit from e_campaign_settings where tenant_id = $1 limit 1").bind(tenant).fetch_optional(&mut **tx).await?;
     Ok(limit.flatten().unwrap_or(500).max(1))
 }
 
-/// Emails the tenant may still hand over this hour: the hourly limit minus what campaigns,
-/// journeys and the Mail app's newsletters sent in the last hour.
+/// Emails the tenant may still hand over this hour: the hourly limit minus what campaigns and
+/// journeys sent in the last hour.
 pub async fn hourly_room(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
     let limit = hourly_limit(tx, tenant).await?;
     let used: i64 = sqlx::query_scalar(
-        "select (select count(*) from e_campaign_recipient where tenant_id = $1 and communication is not null and queued_at > now() - interval '1 hour') \
-         + (select count(*) from comms_newsletter_delivery where tenant_id = $1 and created_at > now() - interval '1 hour')",
+        "select count(*) from e_campaign_recipient where tenant_id = $1 and communication is not null and queued_at > now() - interval '1 hour'",
     )
     .bind(tenant)
     .fetch_one(&mut **tx)

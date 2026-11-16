@@ -5,8 +5,8 @@
 //! records API or the engine (unsubscribe links, bounces, complaints, confirmations), all of
 //! which go through the kernel — runs [`ContactHook::after_save`], which logs it (audience growth)
 //! and applies what it implies: opt-outs, bounces and complaints are added to the suppression
-//! list, opt-outs and complaints also leave the Mail app's email groups (so newsletters honour
-//! them) and set the linked record's own `unsubscribed` flag (CRM contacts and leads).
+//! list, opt-outs and complaints also leave the Mail app's email groups (so their mailing lists
+//! honour them) and set the linked record's own `unsubscribed` flag (CRM contacts and leads).
 
 use crate::util::{self, id, s, sys, values};
 use async_trait::async_trait;
@@ -337,7 +337,7 @@ pub async fn lift(tx: &mut Tx, tenant: Uuid, email: &str) -> Result<()> {
     Ok(())
 }
 
-/// The address leaves every Mail email group (as the Mail app's own unsubscribe does).
+/// The address leaves every Mail email group.
 async fn leave_groups(tx: &mut Tx, tenant: Uuid, email: &str) -> Result<()> {
     sqlx::query(
         "update e_email_group_member set unsubscribed = true, version = version + 1, updated_at = now() \
