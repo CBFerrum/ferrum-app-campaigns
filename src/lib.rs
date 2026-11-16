@@ -16,6 +16,7 @@ mod delivery;
 mod events;
 mod import;
 mod journey;
+mod keys;
 mod public;
 mod render;
 mod reports;
@@ -50,7 +51,11 @@ pub fn packages() -> std::result::Result<Vec<ferrum_meta::Package>, ferrum_meta:
 }
 
 /// Registers this app's document hooks and its public endpoints.
+/// Call it inside the platform's registration of the app, `hooks.app("campaigns", …)`: it takes its own vault handle
+/// there, which reads its secret fields (`keys.rs`).
 pub fn register(hooks: &mut HookRegistry) {
+    let site: Arc<dyn ferrum_kernel::Site> = Arc::new(public::CampaignsSite);
+    keys::remember(&site, hooks.vault());
     hooks
         .register("MarketingContact", Arc::new(contact::ContactHook))
         .register("EmailSuppression", Arc::new(contact::SuppressionHook))
@@ -65,7 +70,7 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
         .register("SendingDomain", Arc::new(deliverability::DomainHook))
         .add_event_sink(Arc::new(events::JourneySink))
-        .add_site(util::PACKAGE, Arc::new(public::CampaignsSite));
+        .add_site(util::PACKAGE, site);
     hooks.add_personal_held(Arc::new(topics::Erased));
 }
 

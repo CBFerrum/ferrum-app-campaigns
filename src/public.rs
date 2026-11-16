@@ -672,7 +672,7 @@ async fn webhook(k: &Kernel, req: &SiteRequest) -> Result<SiteResponse> {
     let settings: Option<Uuid> =
         sqlx::query_scalar("select id from e_campaign_settings where tenant_id = $1 limit 1").bind(tenant).fetch_optional(&mut *tx).await?;
     let secret = match settings {
-        Some(sid) => k.secret(&mut tx, tenant, "CampaignSettings", sid, "webhook_secret").await?,
+        Some(sid) => crate::keys::field(k, &mut tx, tenant, "CampaignSettings", sid, "webhook_secret").await?,
         None => None,
     };
     let Some(secret) = secret.filter(|s| s.len() >= 16) else { return refused() };

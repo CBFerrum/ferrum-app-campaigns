@@ -83,6 +83,8 @@ impl Smtp {
 
 struct T {
     k: Arc<Kernel>,
+    /// Campaigns\' own handle on the vault, as its registration was given it: what reads its secret fields.
+    campaigns: ferrum_kernel::vault::Vault,
     tenant: Uuid,
     admin: Ctx,
 }
@@ -161,9 +163,9 @@ impl T {
     async fn key(&self) -> Vec<u8> {
         let mut tx = self.k.db.tenant_tx(self.tenant).await.unwrap();
         let sid: Uuid = sqlx::query_scalar("select id from e_campaign_settings where tenant_id = $1").bind(self.tenant).fetch_one(&mut *tx).await.unwrap();
-        let key = self.k.secret(&mut tx, self.tenant, "CampaignSettings", sid, "signing_key").await.unwrap().expect("signing key");
+        let key = self.campaigns.field(&self.k, &mut tx, self.tenant, "CampaignSettings", sid, "signing_key").await.unwrap().expect("signing key");
         tx.commit().await.unwrap();
-        hex::decode(key).unwrap()
+        hex::decode(key.as_str()).unwrap()
     }
 
     /// The signed unsubscribe path of a recipient (as its email carries it).
@@ -229,9 +231,19 @@ async fn scenario() {
     let mut hooks = HookRegistry::default();
     ferrum_domain::register(&mut hooks);
     hooks.app("comms", &[], ferrum_app_comms::register);
-    ferrum_app_erp::register(&mut hooks);
+    let comms_packages: Vec<String> = ferrum_app_comms::packages().unwrap().iter().map(|p| p.name().to_string()).collect();
+    hooks.own("comms", &comms_packages);
+    let erp_packages: Vec<String> = ferrum_app_erp::packages().unwrap().iter().map(|p| p.name().to_string()).collect();
+    hooks.app("erp", &[], ferrum_app_erp::register);
+    hooks.own("erp", &erp_packages);
     ferrum_app_crm::register(&mut hooks);
-    ferrum_app_campaigns::register(&mut hooks);
+    let campaigns_packages: Vec<String> = ferrum_app_campaigns::packages().unwrap().iter().map(|p| p.name().to_string()).collect();
+    let mut campaigns = None;
+    hooks.app("campaigns", &campaigns_packages, |h| {
+        ferrum_app_campaigns::register(h);
+        campaigns = Some(h.vault());
+    });
+    hooks.own("campaigns", &campaigns_packages);
     for source in ferrum_app_campaigns::reports() {
         ferrum_domain::reports::add_source(source);
     }
@@ -254,7 +266,7 @@ async fn scenario() {
     let admin = k.load_ctx(tenant, session.user, Some(session.token_version), "it".into()).await.expect("admin ctx");
     let mgr_id = k.create_user(&admin, "mgr@acme.test", "Mia", Some(PASSWORD), &["Marketing Manager".to_string()], false).await.expect("user");
     let mgr = k.load_ctx(tenant, mgr_id, None, "it".into()).await.unwrap();
-    let t = T { k: k.clone(), tenant, admin: admin.clone() };
+    let t = T { k: k.clone(), campaigns: campaigns.expect("Campaigns' handle"), tenant, admin: admin.clone() };
     let smtp = Smtp::default();
     let port = smtp.start().await;
     t.insert(&admin, "CommsSettings", json!({"newsletter_hourly_limit": 10000, "public_url": "https://erp.acme.test/"})).await;
