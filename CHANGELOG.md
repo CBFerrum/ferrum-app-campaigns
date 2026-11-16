@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5
+
+* **Works with Mail 0.23.** The range of Mail versions Campaigns accepts now includes 0.23 (Mail declares the services that render the meeting server's and the mail server's files from its vault); its suite was run against it. Nothing in Campaigns changes for it.
+
 ## 0.5.4
 
 * **Works with Mail 0.22.** The range of Mail versions Campaigns accepts now includes 0.22 (Mail declares the settings it reads and keeps the meeting and mail servers' secrets in its own vault), which the Mail app already is; nothing in Campaigns changes for it.
