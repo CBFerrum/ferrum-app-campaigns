@@ -39,10 +39,10 @@ and its revenue figures copied out.
 
 | | |
 |---|---|
-| **Version** | 0.5.2 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
+| **Version** | 0.5.5 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
 | **Kind** | Its own interface at `/campaigns/` (campaigns, results, audiences, imports) plus Ferrum's standard lists and forms for every other record |
 | **What it adds** | 18 entities (13 records and 5 line tables), 2 roles, 6 reports, 1 menu with 19 entries, 2 create shortcuts, 1 assistant guide |
-| **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.13.1, <0.23`) |
+| **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.13.1, <0.24`) |
 | **Works with** | Mail (sending, email groups, templates, DNS check), CRM (campaign link and attribution), ERP (sales orders and invoices for revenue), any app whose records start a journey |
 | **Languages** | English, Arabic, Hindi |
 | **Tests** | 27 Rust tests against a real PostgreSQL, 113 interface tests |
