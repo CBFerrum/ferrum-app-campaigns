@@ -39,10 +39,10 @@ and its revenue figures copied out.
 
 | | |
 |---|---|
-| **Version** | 0.5.5 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
+| **Version** | 0.6.0 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
 | **Kind** | Its own interface at `/campaigns/` (campaigns, results, audiences, imports) plus Ferrum's standard lists and forms for every other record |
 | **What it adds** | 18 entities (13 records and 5 line tables), 2 roles, 6 reports, 1 menu with 19 entries, 2 create shortcuts, 1 assistant guide |
-| **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.13.1, <0.24`) |
+| **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.24.0, <0.25`) |
 | **Works with** | Mail (sending, email groups, templates, DNS check), CRM (campaign link and attribution), ERP (sales orders and invoices for revenue), any app whose records start a journey |
 | **Languages** | English, Arabic, Hindi |
 | **Tests** | 27 Rust tests against a real PostgreSQL, 113 interface tests |
@@ -145,7 +145,7 @@ On a phone:
 - **Open and click tracking** with signed links. Opens by privacy proxies and mail scanners are counted apart from human opens.
 - **A/B tests.** Versions of the subject and content go to a share of the audience; after a set number of hours the winner by Opens or Clicks goes to the rest.
 - **Schedule.** Pick a time or send now. The time is on the workspace's clock with its zone named beside the box. Once scheduled, content and audience are fixed; cancel the send to stop it, or duplicate it to change a copy.
-- **Hourly limits.** A workspace-wide limit shared with Mail's newsletters, and a limit per campaign.
+- **Hourly limits.** A workspace-wide limit for campaigns and journeys together, and a limit per campaign.
 - **One-click unsubscribe headers.** Every campaign and journey email carries `List-Unsubscribe` with the recipient's own signed link and `List-Unsubscribe-Post` (RFC 8058). Test sends and confirmation requests do not.
 - **A postal address in every footer** the app adds, from Campaign Settings.
 
@@ -238,7 +238,7 @@ A journey can start from a record event in any app. Every send is checked agains
 | CampaignRecipient | One message to one contact | Status (7), skip reason, opens, clicks, bounce type |
 | MarketingJourney (with JourneyStep, JourneyEventRule) | An automation | Status (Draft, Active, Paused, Stopped), trigger, steps, goal, counts |
 | JourneyEnrollment | A contact's way through a journey | Step, next run, how it ended |
-| CampaignSettings | One settings record | Postal address, bounce limit, link expiry, double opt-in, seed list, attribution |
+| CampaignSettings | One settings record | Postal address, hourly limit, bounce limit, link expiry, double opt-in, seed list, attribution |
 
 ### 👥 Roles
 
@@ -378,13 +378,13 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ## 🚀 Install
 
-Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.3.2, <0.4` and the Mail app (comms `>=0.13.1, <0.21`) installed first.
+Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.3.2, <0.4` and the Mail app (comms `>=0.24.0, <0.25`) installed first.
 
 After installing:
 
-1. In Mail's **Communication Settings** set the **public URL** (campaigns cannot be scheduled until it is set, because tracking, unsubscribe and confirmation links must reach the server) and the hourly sending limit.
+1. In Mail's **Communication Settings** set the **public URL** (campaigns cannot be scheduled until it is set, because tracking, unsubscribe and confirmation links must reach the server).
 2. Add an outgoing **Email Account** in Mail; the default outgoing account is used when a campaign names none.
-3. Open **Campaign Settings**: postal address (printed in every footer), soft-bounce limit, link expiry, double opt-in, seed list, and the revenue settings (sales order or invoice, window in days, clicks or clicks and opens). Rotate the webhook secret to get the bounce webhook's address; it is shown once.
+3. Open **Campaign Settings**: postal address (printed in every footer), the hourly sending limit, soft-bounce limit, link expiry, double opt-in, seed list, and the revenue settings (sales order or invoice, window in days, clicks or clicks and opens). Rotate the webhook secret to get the bounce webhook's address; it is shown once.
 4. Check your **Sending Domain** so SPF, DKIM and DMARC pass.
 5. Give people the roles **Marketing User** and **Marketing Manager**.
 6. Create topics if you want a preference page, and a first segment.

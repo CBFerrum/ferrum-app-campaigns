@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+Needs Mail 0.24 (comms `>=0.24.0, <0.25`), which no longer sends newsletters.
+
+* **The hourly sending limit is Campaigns' own setting**: Emails Per Hour in Campaign Settings (default 500), for campaigns and journeys together, under the same lock as before. It was Mail's `newsletter_hourly_limit`, shared with Mail's newsletters one way only: Campaigns counted newsletters and took the lock, newsletters counted only themselves and took none, so the two together could pass the limit. Mail 0.24 drops its newsletters (bulk mail to email groups is a campaign with the group in its audience), so Campaigns no longer reads Mail's settings or delivery table for the limit.
+
 ## 0.5.5
 
 * **Works with Mail 0.23.** The range of Mail versions Campaigns accepts now includes 0.23 (Mail declares the services that render the meeting server's and the mail server's files from its vault); its suite was run against it. Nothing in Campaigns changes for it.

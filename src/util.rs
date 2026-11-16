@@ -1,5 +1,5 @@
 //! Helpers shared by the package: document access, time, small HTML pages, signed tokens and
-//! the workspace's settings (ours, and the Mail app's public URL and hourly limit).
+//! the workspace's settings (ours, and the Mail app's public URL).
 
 use chrono::{DateTime, SecondsFormat, Utc};
 pub use ferrum_domain::util::{b, id, rows, s, sys};
