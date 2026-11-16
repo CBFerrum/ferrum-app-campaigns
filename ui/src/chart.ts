@@ -81,28 +81,29 @@ export function labelled(n: number, max: number): number[] {
 
 export type Interval = "hour" | "day";
 
-/** "2026-11-01T14:00:00" (the workspace's wall clock) as a Date holding the same wall-clock parts. */
+/** "2026-11-01T14:00:00" (the workspace's wall clock) as a Date holding the same wall-clock parts in UTC, written
+ *  back in UTC: no zone or daylight-saving change of the browser's can move them. */
 export function wall(at: string): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(at);
   if (!m) return new Date(NaN);
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] ?? 0), Number(m[5] ?? 0));
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] ?? 0), Number(m[5] ?? 0)));
 }
 
 /** The label under an axis: a time of day, and the date where a day begins. */
 export function tickLabel(at: string, interval: Interval, first: boolean, locale?: string): string {
   const d = wall(at);
   if (Number.isNaN(d.getTime())) return "";
-  if (interval === "day") return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
-  if (first || d.getHours() === 0) return d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
-  return d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  if (interval === "day") return d.toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
+  if (first || d.getUTCHours() === 0) return d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
 }
 
 /** The full name of a bucket, for a tooltip or a table row. */
 export function bucketName(at: string, interval: Interval, locale?: string): string {
   const d = wall(at);
   if (Number.isNaN(d.getTime())) return at;
-  const day = d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
-  return interval === "day" ? day : `${day}, ${d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}`;
+  const day = d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return interval === "day" ? day : `${day}, ${d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", timeZone: "UTC" })}`;
 }
 
 /** Per-bucket counts of one kind, as the timeline answers them. */

@@ -181,7 +181,7 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       id: "rate",
       level: "info",
       title: t("Goes out at up to {value} an hour: {value2}", { value: (check.rate.per_hour === 1 ? t("1 email") : t("{n} emails", { n: count(check.rate.per_hour) })), value2: sendTime(check.mailable, check.rate.per_hour) }),
-      detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? t("This campaign's own limit applies.") : t("The limit is shared with newsletters and journeys."),
+      detail: check.rate.own > 0 && check.rate.own < check.rate.workspace ? t("This campaign's own limit applies.") : t("The workspace's limit in Campaign Settings applies, shared with journeys."),
     });
   }
   if (check.split) {

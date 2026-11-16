@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { areaPath, bucketName, columnPath, cumulative, labelled, linePath, localBucket, nearest, niceAxis, ratesOver, scaleLinear, tickLabel, wall } from "./chart";
 
 describe("a chart's axis", () => {
@@ -67,8 +67,8 @@ describe("paths and positions", () => {
 describe("points in time", () => {
   it("reads the workspace's wall clock as it is written", () => {
     const d = wall("2026-11-01T14:30:00");
-    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()]).toEqual([2026, 10, 1, 14, 30]);
-    expect(wall("2026-11-01").getHours()).toBe(0);
+    expect([d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()]).toEqual([2026, 10, 1, 14, 30]);
+    expect(wall("2026-11-01").getUTCHours()).toBe(0);
     expect(Number.isNaN(wall("soon").getTime())).toBe(true);
   });
 
@@ -84,6 +84,17 @@ describe("points in time", () => {
     expect(bucketName("2026-11-01T14:00:00", "hour", "en-GB")).toMatch(/1 Nov, 14:00/);
     expect(bucketName("2026-11-01T00:00:00", "day", "en-GB")).toMatch(/1 Nov/);
     expect(bucketName("nonsense", "day")).toBe("nonsense");
+  });
+
+  it("writes a bucket as the workspace's clock has it, whatever the browser's, in a daylight-saving gap too", () => {
+    // 02:00 on 8 March 2026 never happens in New York (its clocks go from 01:59 to 03:00); in the workspace it does.
+    vi.stubEnv("TZ", "America/New_York");
+    try {
+      expect(tickLabel("2026-03-08T02:00:00", "hour", false, "en-GB")).toBe("2:00");
+      expect(bucketName("2026-03-08T02:00:00", "hour", "en-GB")).toMatch(/8 Mar, 2:00/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
