@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+Needs the same platform as 0.6.0. No database change. Interface only, `ui/dist` rebuilt with Ferrum-Frontend `06bd1a2`.
+
+* Setup's hint, the review and the names in Arabic and Hindi say the hourly limit is Campaign Settings', shared with
+  journeys; they still said newsletters shared it.
+* The results chart writes its hours as the workspace's clock has them in any browser, a daylight-saving change
+  included.
+* The two routes to the screens apps no longer have (`apps/:app/settings`, `x/:app/:page`) are gone.
+* The page starts through the frontend's `mountApp`; the
+  interface lint has no baseline file any more.
+
 ## 0.6.0
 
 Needs Mail 0.24 (comms `>=0.24.0, <0.25`), which no longer sends newsletters.

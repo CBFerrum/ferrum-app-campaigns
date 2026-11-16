@@ -223,7 +223,7 @@ export function Setup({ draft, editable, check }: { draft: Draft; editable: bool
             </label>
             <p className="field-hint">{tr("Opens are counted when the email's picture loads; automatic opens by privacy proxies and scanners are kept apart.")}</p>
           </div>
-          <Field label={tr("Emails per hour")} htmlFor="cm-rate" error={errors.hourly_limit} hint={tr("This campaign's own pace. 0: only the workspace's limit, shared with newsletters and journeys.")}>
+          <Field label={tr("Emails per hour")} htmlFor="cm-rate" error={errors.hourly_limit} hint={tr("This campaign's own pace. 0: only the workspace's limit in Campaign Settings, shared with journeys.")}>
             <input
               id="cm-rate"
               className="input num"
