@@ -24,10 +24,30 @@ create table campaigns_click (
   owner_id uuid not null,
   link_no int not null,
   clicked_at timestamptz not null default now(),
+  -- The link's tracking parameters as the click was sent on (campaign, source, medium).
+  utm jsonb,
   foreign key (tenant_id, recipient_id) references e_campaign_recipient (tenant_id, id) on delete cascade
 );
 create index campaigns_click_owner on campaigns_click (tenant_id, owner_id, link_no);
 create index campaigns_click_recipient on campaigns_click (tenant_id, recipient_id);
+
+-- Orders credited to the last email touch before them (docs in src/attribution.rs): one row per order, so two
+-- campaigns that touched the same person never both count it.
+create table campaigns_attribution (
+  tenant_id uuid not null,
+  order_entity text not null,
+  order_id uuid not null,
+  recipient_id uuid not null,
+  owner_id uuid not null,
+  link_no int,
+  contact_id uuid not null,
+  amount numeric not null,
+  touched_at timestamptz not null,
+  ordered_at timestamptz not null,
+  primary key (tenant_id, order_entity, order_id),
+  foreign key (tenant_id, recipient_id) references e_campaign_recipient (tenant_id, id) on delete cascade
+);
+create index campaigns_attribution_owner on campaigns_attribution (tenant_id, owner_id);
 
 -- Consent and attribute changes: `field` is 'consent_status' or 'attr:<key>'.
 create table campaigns_contact_change (
@@ -70,6 +90,50 @@ create table campaigns_journey_log (
 );
 create index campaigns_journey_log_journey on campaigns_journey_log (tenant_id, journey_id, step);
 
+-- Record events a journey's event rules matched for people in it: what its Wait For Event and Branch steps read.
+-- One row per journey, rule, event and person, so a repeated delivery of an event changes nothing.
+create table campaigns_journey_event (
+  tenant_id uuid not null,
+  id bigserial,
+  journey_id uuid not null,
+  rule_no int not null,
+  contact_id uuid not null,
+  entity text not null,
+  record_id uuid not null,
+  event_id bigint not null,
+  at timestamptz not null default now(),
+  primary key (tenant_id, id),
+  unique (tenant_id, journey_id, rule_no, event_id, contact_id),
+  foreign key (tenant_id, journey_id) references e_marketing_journey (tenant_id, id) on delete cascade,
+  foreign key (tenant_id, contact_id) references e_marketing_contact (tenant_id, id) on delete cascade
+);
+create index campaigns_journey_event_person on campaigns_journey_event (tenant_id, journey_id, contact_id, rule_no, at);
+
+-- Who is in a segment as last worked out (a query segment's members are what campaigns and journeys read), and every
+-- entry and exit since: what "entered the segment" means.
+create table campaigns_segment_member (
+  tenant_id uuid not null,
+  segment_id uuid not null,
+  contact_id uuid not null,
+  since timestamptz not null default now(),
+  primary key (tenant_id, segment_id, contact_id),
+  foreign key (tenant_id, segment_id) references e_marketing_segment (tenant_id, id) on delete cascade,
+  foreign key (tenant_id, contact_id) references e_marketing_contact (tenant_id, id) on delete cascade
+);
+
+create table campaigns_segment_change (
+  tenant_id uuid not null,
+  id bigserial,
+  segment_id uuid not null,
+  contact_id uuid not null,
+  change text not null check (change in ('entered', 'left')),
+  at timestamptz not null default now(),
+  primary key (tenant_id, id),
+  foreign key (tenant_id, segment_id) references e_marketing_segment (tenant_id, id) on delete cascade,
+  foreign key (tenant_id, contact_id) references e_marketing_contact (tenant_id, id) on delete cascade
+);
+create index campaigns_segment_change_segment on campaigns_segment_change (tenant_id, segment_id, id);
+
 -- Bounce and complaint events already applied (providers retry deliveries).
 create table campaigns_webhook_event (
   tenant_id uuid not null,
@@ -90,7 +154,8 @@ do $$
 declare t text;
 begin
   foreach t in array array['campaigns_link', 'campaigns_click', 'campaigns_contact_change', 'campaigns_journey_member', 'campaigns_journey_log',
-                           'campaigns_webhook_event'] loop
+                           'campaigns_webhook_event', 'campaigns_journey_event', 'campaigns_segment_member',
+                           'campaigns_segment_change', 'campaigns_attribution'] loop
     execute format('alter table %I enable row level security', t);
     execute format('alter table %I force row level security', t);
     execute format(
