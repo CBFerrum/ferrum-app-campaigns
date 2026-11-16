@@ -7,7 +7,7 @@
 
 <br>
 
-[![Version](https://img.shields.io/badge/version-0.6.1-a63089?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.2-a63089?style=flat-square)](CHANGELOG.md)
 [![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)](LICENSE)
 [![Ferrum platform](https://img.shields.io/badge/runs%20on-Ferrum-2f5bea?style=flat-square)](https://github.com/CBFerrum/Ferrum)
 ![Rust](https://img.shields.io/badge/Rust-server-b7410e?style=flat-square&logo=rust)
@@ -332,6 +332,7 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ### ✅ Recently shipped
 
+- [x] **0.6.2** — Needs Mail 0.25; the package's SQL is one baseline file.
 - [x] **0.6.1** — The sending limit described as 0.6.0 has it, in all three languages; rebuilt on Ferrum-Frontend 06bd1a2 with `mountApp`.
 - [x] **0.5.2** — Accepts Mail 0.20.
 - [x] **0.5.1** — Re-subscribing from the preference page can ask for an email confirmation; journeys need the consent of the channels their steps use; the warm-up counts journey emails.
@@ -455,7 +456,7 @@ tests/                integration tests against a real PostgreSQL
 
 ## 📜 Changelog
 
-Every version is in [CHANGELOG.md](CHANGELOG.md). The latest is **0.6.1**.
+Every version is in [CHANGELOG.md](CHANGELOG.md). The latest is **0.6.2**.
 
 ## 🤝 Contributing
 
