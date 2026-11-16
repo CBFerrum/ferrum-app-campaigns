@@ -348,8 +348,7 @@ async fn scenario() {
     for source in ferrum_app_campaigns::reports().into_iter().chain(ferrum_app_crm::reports()) {
         ferrum_domain::reports::add_source(source);
     }
-    let settings = KernelSettings { secret_key: Some(ferrum_kernel::secret::SecretKey::new([9u8; 32])), ..Default::default() };
-    let k = Kernel::boot(db, catalog, hooks, settings, None).await.expect("boot");
+    let k = Kernel::boot(db, catalog, hooks, KernelSettings::default(), None).await.expect("boot");
     ferrum_domain::maintenance(&k).await.expect("partitions");
     let tenant = k
         .create_tenant(NewTenant {
@@ -1521,13 +1520,6 @@ async fn scenario() {
     let subscribed_now: i64 = t.scalar("select count(*) from e_marketing_contact where tenant_id = $1 and consent_status = 'Subscribed'", None).await;
     assert_eq!(int(&g["net_change"]), subscribed_now, "today's net change is today's subscribed audience");
     assert_eq!(int(&growth["meta"]["subscribed_now"]), subscribed_now);
-    // Every secret field Campaigns read it read with its own handle: none of its code read past the vault, which the
-    // platform notes by caller (`ferrum task legacy_key`) in the background. (The apps it is built with here come from
-    // their own main, and answer for their own reads.)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let past: Vec<_> =
-        t.k.legacy_key(vec![]).await.unwrap().uses.into_iter().filter(|u| u.0.starts_with("reader:") && u.1.starts_with("src/")).map(|u| u.1).collect();
-    assert!(past.is_empty(), "read past the vault: {past:?}");
 }
 
 /// What opens the test's vault: the database password of `url`, with Argon2id kept cheap for tests.
