@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+Needs Mail 0.26 (comms `>=0.26.0, <0.27`) and the same platform as 0.6.2. Interface unchanged. No database change. The suites run on today's Comms; Campaigns itself needed no code change.
+
 ## 0.6.2
 
 Needs Mail 0.25 (comms `>=0.25.0, <0.26`) and the same platform as 0.6.1. Interface unchanged. Database change: the
