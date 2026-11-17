@@ -13,7 +13,7 @@
 ![Rust](https://img.shields.io/badge/Rust-server-b7410e?style=flat-square&logo=rust)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-data-336791?style=flat-square&logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React%20%2B%20TypeScript-interface-0ea5e9?style=flat-square&logo=react&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-27%20Rust%20%2B%20113%20UI-16a34a?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-27%20Rust%20%2B%20114%20UI-16a34a?style=flat-square)
 
 ### Write, check, send and measure email, text and chat-app campaigns, with consent kept honestly.
 
@@ -39,13 +39,13 @@ and its revenue figures copied out.
 
 | | |
 |---|---|
-| **Version** | 0.6.0 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
+| **Version** | 0.6.2 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
 | **Kind** | Its own interface at `/campaigns/` (campaigns, results, audiences, imports) plus Ferrum's standard lists and forms for every other record |
 | **What it adds** | 18 entities (13 records and 5 line tables), 2 roles, 6 reports, 1 menu with 19 entries, 2 create shortcuts, 1 assistant guide |
 | **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.25.0, <0.26`) |
 | **Works with** | Mail (sending, email groups, templates, DNS check), CRM (campaign link and attribution), ERP (sales orders and invoices for revenue), any app whose records start a journey |
 | **Languages** | English, Arabic, Hindi |
-| **Tests** | 27 Rust tests against a real PostgreSQL, 113 interface tests |
+| **Tests** | 27 Rust tests against a real PostgreSQL, 114 interface tests |
 | **Licence** | AGPL-3.0-only |
 
 ## 📸 Screenshots
@@ -195,7 +195,7 @@ flowchart LR
     AUD["Audience: segments, groups, exclusions"] --> CON{"Consent and suppression"}
     CON -->|ok| CL["Recipient claimed (never twice)"]
     CON -->|not ok| SK["Skipped, reason kept"]
-    CL --> MAIL["Mail app (hourly limits)"]
+    CL --> MAIL["Mail app (sending)"]
     MAIL --> TR["Opens and clicks (signed links)"]
     MAIL --> BN["Bounces and complaints"]
     BN --> SUP["Suppression list"]
@@ -266,6 +266,8 @@ Recipients and enrolments are written by the app only: nobody, administrators in
 | Bounce and complaint webhook | One generic signed JSON format, header `x-campaigns-signature` | Your mail provider's events mapped to it |
 | REST, MCP, webhooks | Every record and action | API keys |
 
+**What the tests exercise.** Emails are sent through Mail's accounts to an SMTP server written in the tests that accepts everything, not to a real mail provider. Text and chat-app messages go to a test channel of the platform, not a real gateway. The bounce and complaint webhook is called with the generic JSON format; no mail provider's own events are used.
+
 ## 📊 How it compares
 
 Compared with Mailchimp, HubSpot Marketing Hub, Klaviyo, Brevo and, as open-source options, Mautic and listmonk.
@@ -333,8 +335,8 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 ### ✅ Recently shipped
 
 - [x] **0.6.2** — Needs Mail 0.25; the package's SQL is one baseline file.
-- [x] **0.6.1** — The sending limit described as 0.6.0 has it, in all three languages; rebuilt on Ferrum-Frontend 06bd1a2 with `mountApp`.
-- [x] **0.5.2** — Accepts Mail 0.20.
+- [x] **0.6.1** — Setup, the review and the names in Arabic and Hindi say the hourly limit is Campaign Settings' own, shared with journeys; rebuilt on Ferrum-Frontend 06bd1a2 with `mountApp`.
+- [x] **0.6.0** — The hourly sending limit is Campaigns' own setting (Emails Per Hour, 500 by default), for campaigns and journeys together. Bulk mail to email groups is a campaign with the group in its audience; Mail no longer sends newsletters.
 - [x] **0.5.1** — Re-subscribing from the preference page can ask for an email confirmation; journeys need the consent of the channels their steps use; the warm-up counts journey emails.
 - [x] **0.5.0** — Topics and a preference page, text and chat-app messages, journeys on record events, segments from any data, revenue attribution and sending-domain checks.
 - [x] **0.4.4** — One-click unsubscribe headers on every campaign and journey email.
@@ -380,7 +382,7 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ## 🚀 Install
 
-Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.3.2, <0.4` and the Mail app (comms `>=0.25.0, <0.26`) installed first.
+Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.3.8, <0.4` and the Mail app (comms `>=0.25.0, <0.26`) installed first.
 
 After installing:
 
