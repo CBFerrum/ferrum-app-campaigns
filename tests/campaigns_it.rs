@@ -348,7 +348,7 @@ async fn scenario() {
     for source in ferrum_app_campaigns::reports().into_iter().chain(ferrum_app_crm::reports()) {
         ferrum_domain::reports::add_source(source);
     }
-    let k = Kernel::boot(db, catalog, hooks, KernelSettings::default(), None).await.expect("boot");
+    let k = Kernel::boot(db, catalog, hooks, KernelSettings { connection_hosts: vec!["127.0.0.1".into()], ..Default::default() }, None).await.expect("boot");
     ferrum_domain::maintenance(&k).await.expect("partitions");
     let tenant = k
         .create_tenant(NewTenant {
