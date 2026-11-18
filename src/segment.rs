@@ -606,7 +606,7 @@ pub fn query_of(doc: &Doc, schema: &Schema) -> std::result::Result<(String, Valu
 
 /// The contacts a query segment's rows name, read as the workspace a page at a time: by an email column, a link to a
 /// Marketing Contact, a link to the record a contact came from, or (blank) the rows themselves.
-pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Result<Vec<Uuid>> {
+pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: u64) -> Result<Vec<Uuid>> {
     let (entity, filters) = query_of(doc, &sys.schema).map_err(|m| Error::field("query", m))?;
     let ent = sys.schema.entity(&entity).cloned().ok_or_else(|| Error::field("query", "no entity"))?;
     let person = s(doc, "query_person_field");
@@ -620,7 +620,7 @@ pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Re
             cursor: cursor.take(),
             ..Default::default()
         };
-        let page = k.list(sys, &entity, &q).await?;
+        let page = k.list_with_timeout(sys, &entity, &q, timeout_ms).await?;
         let full = page.rows.len() as u32 == PAGE;
         found.extend(page.rows.iter().filter_map(|r| r.get(&column).and_then(Value::as_str).map(str::to_string)));
         if found.len() > MAX_QUERY_ROWS {
@@ -658,14 +658,15 @@ pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Re
     Ok(ids)
 }
 
-/// Works a segment's membership out again in the caller's transaction and records who entered and who left it:
+/// Works a segment's membership out again in the caller's transaction, its rows read within `timeout_ms` (the report
+/// timeout when no one waits, the statement timeout when someone does), and records who entered and who left it:
 /// `(entered, left)`. A query segment's membership is what campaigns and journeys read; a rule segment's is history
 /// (its rules are evaluated when it is used).
-pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Result<(u64, u64)> {
+pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: u64) -> Result<(u64, u64)> {
     let sid = util::doc_id(doc)?;
     let tenant = sys.tenant;
     let ids: Vec<Uuid> = if s(doc, "source") == Some("Query") {
-        query_contacts(k, sys, tx, doc).await?
+        query_contacts(k, sys, tx, doc, timeout_ms).await?
     } else {
         let seg = parse(doc, &sys.schema).map_err(Error::Validation)?;
         let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("select c.id from e_marketing_contact c where c.tenant_id = ");
@@ -698,11 +699,12 @@ pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc) -> Result<(u
     Ok((entered, left))
 }
 
-/// A query segment an audience names is worked out again before it is used.
+/// A query segment an audience names is worked out again before it is used (a campaign's send, which no one waits
+/// for: the report timeout).
 pub async fn refresh_if_query(k: &Kernel, sys: &Ctx, tx: &mut Tx, segment: Uuid) -> Result<()> {
     let doc = k.get_tx(sys, tx, "MarketingSegment", segment, true).await?;
     if s(&doc, "source") == Some("Query") {
-        refresh(k, sys, tx, &doc).await?;
+        refresh(k, sys, tx, &doc, k.db.config.report_timeout_ms).await?;
     }
     Ok(())
 }
@@ -722,7 +724,7 @@ pub async fn run(k: &Kernel, sys: &Ctx) -> Result<usize> {
     for sid in due {
         let mut tx = k.db.tenant_tx(sys.tenant).await?;
         let doc = k.get_tx(sys, &mut tx, "MarketingSegment", sid, true).await?;
-        match refresh(k, sys, &mut tx, &doc).await {
+        match refresh(k, sys, &mut tx, &doc, k.db.config.report_timeout_ms).await {
             Ok(_) => {
                 tx.commit().await?;
                 done += 1;
@@ -776,7 +778,8 @@ impl DocHook for SegmentHook {
         match name {
             "preview" => {
                 if s(doc, "source") == Some("Query") {
-                    refresh(hc.kernel, &sys(hc.ctx), hc.tx, doc).await?;
+                    // Someone is waiting for the preview: the ordinary statement timeout.
+                    refresh(hc.kernel, &sys(hc.ctx), hc.tx, doc, hc.kernel.db.config.statement_timeout_ms).await?;
                 }
                 let seg = parse(doc, &hc.ctx.schema).map_err(Error::Validation)?;
                 let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;

@@ -6,6 +6,7 @@ Needs Ferrum 0.4.0 (apps' upkeep runs one workspace at a time, on whichever repl
 
 - **Upkeep is one workspace's.** `maintenance(k, tenant)` records delivery outcomes, moves journeys, sends campaigns and purges old bookkeeping for the workspace the platform hands it; the list of workspaces and the installation check are the platform's.
 - **Needs Mail 0.27** (`comms: ">=0.27.0, <0.28"`), the Mail release that does the same.
+- **A large query segment's background refresh and a campaign's send are no longer cut off at the limit meant for someone waiting** (they read with the report timeout; the segment preview keeps the statement timeout).
 
 No database or interface change.
 
