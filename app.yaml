@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.6.3
+version: 0.7.0
 publisher: cbferrum
 summary: "Email, text and chat-app marketing: topics and a preference page, segments over any data, campaigns with A/B tests, journeys on record events, revenue attribution, deliverability and consent"
 description: README.md
@@ -10,8 +10,8 @@ homepage: https://github.com/CBFerrum/ferrum-app-campaigns
 support: https://github.com/CBFerrum/ferrum-app-campaigns/issues
 runtime: native
 requires:
-  comms: ">=0.26.0, <0.27"
-platform: ">=0.3.8, <0.4"
+  comms: ">=0.27.0, <0.28"
+platform: ">=0.4.0, <0.5"
 packages: [campaigns]
 uninstall: ask
 # Its own interface at /campaigns/ (Ferrum docs/plan/apps-ui.md §13): a campaign written, previewed,

@@ -79,40 +79,27 @@ pub fn reports() -> Vec<Arc<dyn ReportSource>> {
     vec![Arc::new(reports::CampaignReports)]
 }
 
-/// Periodic upkeep: every minute, on one replica at a time (advisory lock); must be idempotent and cheap.
-/// Per tenant: record delivery outcomes, move journeys, start and send campaigns, purge old
-/// bookkeeping. A failing step is logged and does not stop the others; the first error is returned.
-pub async fn maintenance(k: &Kernel) -> Result<()> {
-    let mut tx = k.db.system_tx().await?;
-    let tenants: Vec<Uuid> = sqlx::query_scalar("select id from tenant where status = 'active' order by id").fetch_all(&mut *tx).await?;
-    tx.commit().await?;
+/// Periodic upkeep of one workspace: the platform runs it about once a minute, on whichever replica is free; it must be
+/// idempotent and cheap. Record delivery outcomes, move journeys, start and send campaigns, purge old bookkeeping. A
+/// failing step is logged and does not stop the others; the first error is returned.
+pub async fn maintenance(k: &Kernel, tenant: Uuid) -> Result<()> {
+    let sys = Ctx::system(tenant, k.registry.schema(tenant).await?);
     let mut first_error: Option<Error> = None;
-    for tenant in tenants {
-        let schema = match k.registry.schema(tenant).await {
-            Ok(schema) if schema.packages.iter().any(|p| p == util::PACKAGE) => schema,
-            Ok(_) => continue,
-            Err(e) => {
-                first_error.get_or_insert(e);
-                continue;
-            }
-        };
-        let sys = Ctx::system(tenant, schema);
-        // Sending to a list waits behind what people are waiting for (a reset link, an invitation).
-        let bulk = || Trace::at_priority(PRIORITY_BULK);
-        let steps = [
-            ("delivery", delivery::sync(k, &sys).await),
-            ("messages", channels::sync(k, &sys).await.map(|n| n as usize)),
-            ("segments", segment::run(k, &sys).await),
-            ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
-            ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
-            ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
-            ("purge", purge(k, tenant).await),
-        ];
-        for (step, outcome) in steps {
-            if let Err(e) = outcome {
-                tracing::warn!(%tenant, step, "campaigns maintenance failed: {e}");
-                first_error.get_or_insert(e);
-            }
+    // Sending to a list waits behind what people are waiting for (a reset link, an invitation).
+    let bulk = || Trace::at_priority(PRIORITY_BULK);
+    let steps = [
+        ("delivery", delivery::sync(k, &sys).await),
+        ("messages", channels::sync(k, &sys).await.map(|n| n as usize)),
+        ("segments", segment::run(k, &sys).await),
+        ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
+        ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
+        ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
+        ("purge", purge(k, tenant).await),
+    ];
+    for (step, outcome) in steps {
+        if let Err(e) = outcome {
+            tracing::warn!(%tenant, step, "campaigns maintenance failed: {e}");
+            first_error.get_or_insert(e);
         }
     }
     first_error.map_or(Ok(()), Err)

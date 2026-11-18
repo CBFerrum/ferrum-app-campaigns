@@ -135,7 +135,7 @@ impl T {
     }
 
     async fn maint(&self) {
-        ferrum_app_campaigns::maintenance(&self.k).await.expect("maintenance");
+        ferrum_app_campaigns::maintenance(&self.k, self.tenant).await.expect("maintenance");
     }
 
     /// Delivers what the outbox holds: mail, and record events to this app's sink.
@@ -630,8 +630,8 @@ async fn journeys(t: &T, tenant: Uuid, mgr_id: Uuid, [asha, ben]: [Uuid; 2]) -> 
     t.exec("update e_journey_enrollment set next_run_at = now() - interval '1 second' where tenant_id = $1 and journey = $2", Some(j)).await;
     let mut rounds = Vec::new();
     for _ in 0..4 {
-        let k = t.k.clone();
-        rounds.push(tokio::spawn(async move { ferrum_app_campaigns::maintenance(&k).await }));
+        let (k, tenant) = (t.k.clone(), t.tenant);
+        rounds.push(tokio::spawn(async move { ferrum_app_campaigns::maintenance(&k, tenant).await }));
     }
     for r in rounds {
         r.await.unwrap().expect("concurrent maintenance");
