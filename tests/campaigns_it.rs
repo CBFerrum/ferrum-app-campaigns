@@ -214,7 +214,7 @@ impl T {
     }
 
     async fn maint(&self) {
-        ferrum_app_campaigns::maintenance(&self.k).await.expect("maintenance");
+        ferrum_app_campaigns::maintenance(&self.k, self.tenant).await.expect("maintenance");
     }
 
     /// Lets the Mail app deliver everything queued.
@@ -226,8 +226,8 @@ impl T {
     async fn concurrent_maint(&self, n: usize) {
         let mut tasks = Vec::new();
         for _ in 0..n {
-            let k = self.k.clone();
-            tasks.push(tokio::spawn(async move { ferrum_app_campaigns::maintenance(&k).await }));
+            let (k, tenant) = (self.k.clone(), self.tenant);
+            tasks.push(tokio::spawn(async move { ferrum_app_campaigns::maintenance(&k, tenant).await }));
         }
         for t in tasks {
             t.await.unwrap().expect("concurrent maintenance");

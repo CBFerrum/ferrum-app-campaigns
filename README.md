@@ -7,7 +7,7 @@
 
 <br>
 
-[![Version](https://img.shields.io/badge/version-0.6.3-a63089?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0-a63089?style=flat-square)](CHANGELOG.md)
 [![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)](LICENSE)
 [![Ferrum platform](https://img.shields.io/badge/runs%20on-Ferrum-2f5bea?style=flat-square)](https://github.com/CBFerrum/Ferrum)
 ![Rust](https://img.shields.io/badge/Rust-server-b7410e?style=flat-square&logo=rust)
@@ -39,10 +39,10 @@ and its revenue figures copied out.
 
 | | |
 |---|---|
-| **Version** | 0.6.3 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
+| **Version** | 0.7.0 (package `campaigns` 0.1.0, `campaigns_crm` 0.1.0) |
 | **Kind** | Its own interface at `/campaigns/` (campaigns, results, audiences, imports) plus Ferrum's standard lists and forms for every other record |
 | **What it adds** | 18 entities (13 records and 5 line tables), 2 roles, 6 reports, 1 menu with 19 entries, 2 create shortcuts, 1 assistant guide |
-| **Depends on** | Ferrum platform `>=0.3.8, <0.4`; the Mail app (comms `>=0.26.0, <0.27`) |
+| **Depends on** | Ferrum platform `>=0.4.0, <0.5`; the Mail app (comms `>=0.27.0, <0.28`) |
 | **Works with** | Mail (sending, email groups, templates, DNS check), CRM (campaign link and attribution), ERP (sales orders and invoices for revenue), any app whose records start a journey |
 | **Languages** | English, Arabic, Hindi |
 | **Tests** | 27 Rust tests against a real PostgreSQL, 114 interface tests |
@@ -334,6 +334,7 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ### ✅ Recently shipped
 
+- [x] **0.7.0**: Upkeep runs one workspace at a time, on whichever replica is free.
 - [x] **0.6.3** — Needs Mail 0.26.
 - [x] **0.6.2** — Needs Mail 0.25; the package's SQL is one baseline file.
 - [x] **0.6.1** — Setup, the review and the names in Arabic and Hindi say the hourly limit is Campaign Settings' own, shared with journeys; rebuilt on Ferrum-Frontend 06bd1a2 with `mountApp`.
@@ -383,7 +384,7 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ## 🚀 Install
 
-Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.3.8, <0.4` and the Mail app (comms `>=0.26.0, <0.27`) installed first.
+Campaigns is compiled into the Ferrum server image and installed from **Apps** (`/store/`) by a workspace administrator. Self-hosters who build their own image enable the `campaigns` feature of the server. It needs Ferrum `>=0.4.0, <0.5` and the Mail app (comms `>=0.27.0, <0.28`) installed first.
 
 After installing:
 
@@ -459,7 +460,7 @@ tests/                integration tests against a real PostgreSQL
 
 ## 📜 Changelog
 
-Every version is in [CHANGELOG.md](CHANGELOG.md). The latest is **0.6.3**.
+Every version is in [CHANGELOG.md](CHANGELOG.md). The latest is **0.7.0**.
 
 ## 🤝 Contributing
 
