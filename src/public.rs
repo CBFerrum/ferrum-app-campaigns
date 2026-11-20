@@ -697,6 +697,54 @@ pub fn signature_valid(secret: &str, header: Option<&str>, body: &[u8], now: i64
     mac.verify_slice(&sig).is_ok()
 }
 
+/// The recipient a bounce or complaint is about, as `(recipient, address)`: the one named by its id, else the one whose
+/// email Mail gave the provider's message id, else the latest email sent to the address (of `campaign` when named).
+/// The signed webhook and the connections' delivery events both ask it.
+pub async fn find_recipient(
+    tx: &mut Tx,
+    tenant: Uuid,
+    recipient: Option<Uuid>,
+    message_id: Option<&str>,
+    email: Option<&str>,
+    campaign: Option<Uuid>,
+) -> Result<Option<(Uuid, String)>> {
+    if let Some(r) = recipient {
+        let found = sqlx::query_as::<_, (Uuid, String)>("select id, email from e_campaign_recipient where tenant_id = $1 and id = $2")
+            .bind(tenant)
+            .bind(r)
+            .fetch_optional(&mut **tx)
+            .await?;
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    if let Some(mid) = message_id.map(|m| m.trim().trim_matches(['<', '>'])).filter(|m| !m.is_empty()) {
+        let found = sqlx::query_as::<_, (Uuid, String)>(
+            "select r.id, r.email from e_campaign_recipient r join e_communication c on c.tenant_id = r.tenant_id and c.id = r.communication \
+             where r.tenant_id = $1 and c.message_id = $2",
+        )
+        .bind(tenant)
+        .bind(mid)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    match email {
+        Some(e) => Ok(sqlx::query_as::<_, (Uuid, String)>(
+            "select id, email from e_campaign_recipient where tenant_id = $1 and email = $2 and ($3::uuid is null or campaign = $3) \
+             and communication is not null order by queued_at desc nulls last limit 1",
+        )
+        .bind(tenant)
+        .bind(e)
+        .bind(campaign)
+        .fetch_optional(&mut **tx)
+        .await?),
+        None => Ok(None),
+    }
+}
+
 async fn webhook(k: &Kernel, req: &SiteRequest) -> Result<SiteResponse> {
     let tenant = req.tenant;
     let refused = || Err(Error::Unauthorized("invalid or missing signature".into()));
@@ -730,45 +778,16 @@ async fn webhook(k: &Kernel, req: &SiteRequest) -> Result<SiteResponse> {
             continue;
         };
         let message_id = get("message_id").map(|m| m.trim_matches(['<', '>']).to_string());
-        let by_id = match get("recipient").and_then(|r| r.parse::<Uuid>().ok()) {
-            Some(r) => {
-                sqlx::query_as::<_, (Uuid, String)>("select id, email from e_campaign_recipient where tenant_id = $1 and id = $2")
-                    .bind(tenant)
-                    .bind(r)
-                    .fetch_optional(&mut *tx)
-                    .await?
-            }
-            None => None,
-        };
-        let by_message = match (&by_id, &message_id) {
-            (None, Some(mid)) => {
-                sqlx::query_as::<_, (Uuid, String)>(
-                    "select r.id, r.email from e_campaign_recipient r join e_communication c on c.tenant_id = r.tenant_id and c.id = r.communication \
-                 where r.tenant_id = $1 and c.message_id = $2",
-                )
-                .bind(tenant)
-                .bind(mid)
-                .fetch_optional(&mut *tx)
-                .await?
-            }
-            _ => None,
-        };
         let email = get("email").map(str::to_lowercase);
-        let by_email = match (&by_id, &by_message, &email) {
-            (None, None, Some(e)) => {
-                sqlx::query_as::<_, (Uuid, String)>(
-                    "select id, email from e_campaign_recipient where tenant_id = $1 and email = $2 and ($3::uuid is null or campaign = $3) \
-                 and communication is not null order by queued_at desc nulls last limit 1",
-                )
-                .bind(tenant)
-                .bind(e)
-                .bind(get("campaign").and_then(|c| c.parse::<Uuid>().ok()))
-                .fetch_optional(&mut *tx)
-                .await?
-            }
-            _ => None,
-        };
-        let found = by_id.or(by_message).or(by_email);
+        let found = find_recipient(
+            &mut tx,
+            tenant,
+            get("recipient").and_then(|r| r.parse::<Uuid>().ok()),
+            message_id.as_deref(),
+            email.as_deref(),
+            get("campaign").and_then(|c| c.parse::<Uuid>().ok()),
+        )
+        .await?;
         let Some(address) = found.as_ref().map(|f| f.1.clone()).or(email) else {
             ignored += 1;
             continue;

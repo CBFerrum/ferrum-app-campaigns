@@ -204,6 +204,26 @@
     - {label: Last Preview, fields: [contact_count, mailable_count, counted_at]}
   list: {columns: [segment_name, contact_count, mailable_count], sort: segment_name asc}
 
+- name: DeliveryEvent
+  label: Delivery Event
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "A bounce or complaint a mail provider reported through a connection: kept once, applied once to the recipient, the contact and the suppression list. Written by connections only."
+  fields:
+    - {name: event_key, type: data, required: true, unique: true, read_only: true, max_length: 300, description: "The connection and the provider's own id for the event: what keeps one event from being applied twice"}
+    - {name: via_connection, type: data, read_only: true, in_filter: true}
+    - {name: kind, type: data, read_only: true, max_length: 60, in_list: true, description: "hard, soft or complaint, as the connection's description translated the provider's word; anything else is kept and ignored"}
+    - {name: bounce_type, type: data, read_only: true, max_length: 60}
+    - {name: email, type: email, read_only: true, in_list: true}
+    - {name: message_id, type: data, read_only: true, max_length: 998}
+    - {name: reason, type: text, read_only: true, max_length: 500}
+    - {name: occurred_at, type: datetime, read_only: true, in_list: true}
+    - {name: outcome, type: select, options: [Applied, Ignored], read_only: true, in_list: true, in_filter: true}
+    - {name: recipient, type: link, to: CampaignRecipient, on_delete: set_null, read_only: true}
+  list: {columns: [occurred_at, email, kind, outcome], sort: created_at desc}
+
 - name: AudienceImport
   label: Audience Import
   kind: master

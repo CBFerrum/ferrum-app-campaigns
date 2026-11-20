@@ -28,6 +28,7 @@ async fn scenario() {
     frequency_cap(&t, &mgr).await;
     pause_and_resume(&t, &mgr).await;
     send_time(&t, &mgr).await;
+    provider_notices(&t, &mgr).await;
 }
 
 async fn settings_of(t: &T) -> Uuid {
@@ -517,4 +518,134 @@ async fn segments_k0(t: &T, mgr: &Ctx) {
     let p = t.action(&builder, "MarketingSegment", everyone, "preview", json!({})).await;
     assert_eq!(p["sample"][0]["email"], json!("asha@x.test"));
     let _ = (Uuid::nil(), mgr);
+}
+
+
+fn headers(h: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
+    h.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+/// A connection made from the description the package offers, with a test secret.
+async fn take_up(t: &T, name: &str, secret: &str) -> Uuid {
+    let package = ferrum_app_campaigns::packages().unwrap().into_iter().find(|p| p.name() == "campaigns").unwrap();
+    let offer = package.manifest.connections.iter().find(|c| c["name"] == json!(name)).unwrap().clone();
+    let input: ferrum_kernel::connections::ConnectionInput =
+        serde_json::from_value(json!({"name": name, "label": name, "description": offer["description"], "secrets": {"authorization": secret}, "enabled": true})).unwrap();
+    t.k.save_connection_def(&t.admin, None, &input).await.expect("the connection")
+}
+
+async fn jobs(t: &T) {
+    while t.k.run_jobs_once(4).await.unwrap() > 0 {}
+}
+
+async fn events(t: &T, email: &str) -> Vec<Doc> {
+    t.list("DeliveryEvent", json!({"email": email})).await
+}
+
+/// campaigns-4: a provider's notices arrive through a connection described as data, once, and are applied once.
+async fn provider_notices(t: &T, mgr: &Ctx) {
+    const AUTH: &str = "Basic dXNlcjpwYXNzd29yZC0x";
+    let conn = take_up(t, "postmark_bounces", AUTH).await;
+    let ok = headers(&[("authorization", AUTH)]);
+    let none = std::collections::BTreeMap::new();
+    let notice = |kind: &str, id: i64, email: &str, what: &str| {
+        json!({"RecordType": if kind == "SpamComplaint" { "SpamComplaint" } else { "Bounce" }, "ID": id, "Type": kind, "MessageID": format!("m-{id}"),
+               "Email": email, "Description": what, "BouncedAt": "2026-11-20T10:00:00.1234567Z"}).to_string()
+    };
+    let post = |body: String| {
+        let (k, ok, none) = (t.k.clone(), ok.clone(), none.clone());
+        async move { k.connection_inbound(conn, &ok, &none, body.as_bytes()).await }
+    };
+    // a_postmark_hard_bounce_suppresses_the_address
+    let hb = uid(&t.insert(mgr, "MarketingContact", json!({"email": "hb@x.test"})).await);
+    let aud = at_domain(t, mgr, "x.test").await;
+    let (campaign, _) = t.send(mgr, campaign("Provider", &aud)).await;
+    let r = t.recipient_of(campaign, "hb@x.test").await;
+    post(notice("HardBounce", 1, "hb@x.test", "The address does not exist")).await.expect("accepted");
+    jobs(t).await;
+    let e = events(t, "hb@x.test").await;
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert_eq!((e[0]["kind"].clone(), e[0]["outcome"].clone()), (json!("hard"), json!("Applied")), "{:?}", e[0]);
+    assert_eq!(t.get("MarketingContact", hb).await["consent_status"], json!("Bounced"));
+    let sup: i64 = t.scalar("select count(*) from e_email_suppression where tenant_id = $1 and email = 'hb@x.test' and reason = 'Hard Bounce' and $2::uuid is null", None).await;
+    assert_eq!(sup, 1);
+    assert_eq!(t.get("CampaignRecipient", r).await["bounce_type"], json!("Hard"));
+    // a_postmark_complaint_marks_the_contact
+    let cp = uid(&t.insert(mgr, "MarketingContact", json!({"email": "cp@x.test"})).await);
+    post(notice("SpamComplaint", 2, "cp@x.test", "Spam")).await.expect("accepted");
+    jobs(t).await;
+    assert_eq!(t.get("MarketingContact", cp).await["consent_status"], json!("Complained"));
+    // a_soft_bounce_counts_and_suppresses_at_the_limit (the workspace's limit is 3)
+    let sb = uid(&t.insert(mgr, "MarketingContact", json!({"email": "sb@x.test"})).await);
+    for (n, want) in [(10, 1), (11, 2)] {
+        post(notice("SoftBounce", n, "sb@x.test", "Mailbox full")).await.expect("accepted");
+        jobs(t).await;
+        assert_eq!(t.get("MarketingContact", sb).await["soft_bounce_count"], json!(want));
+    }
+    post(notice("SoftBounce", 12, "sb@x.test", "Mailbox full")).await.expect("accepted");
+    jobs(t).await;
+    assert_eq!(t.get("MarketingContact", sb).await["consent_status"], json!("Bounced"));
+    // a_notice_delivered_twice_is_applied_once, two_notices_with_one_event_id_make_one_event
+    let body = notice("SoftBounce", 20, "twice@x.test", "Mailbox full");
+    let twice = uid(&t.insert(mgr, "MarketingContact", json!({"email": "twice@x.test"})).await);
+    post(body.clone()).await.expect("accepted");
+    assert!(post(body).await.is_err(), "the same body again is a replay");
+    post(notice("SoftBounce", 20, "twice@x.test", "Another description")).await.expect("another body, the same provider id");
+    jobs(t).await;
+    assert_eq!(events(t, "twice@x.test").await.len(), 1);
+    assert_eq!(t.get("MarketingContact", twice).await["soft_bounce_count"], json!(1), "counted once");
+    t.insert(mgr, "MarketingContact", json!({"email": "race@x.test"})).await;
+    post(notice("SoftBounce", 21, "race@x.test", "first")).await.expect("accepted");
+    post(notice("SoftBounce", 21, "race@x.test", "second")).await.expect("another body, the same provider id");
+    let (a, b) = tokio::join!(t.k.run_jobs_once(1), t.k.run_jobs_once(1));
+    a.unwrap();
+    b.unwrap();
+    jobs(t).await;
+    assert_eq!(events(t, "race@x.test").await.len(), 1);
+    // a_wrong_secret_is_refused_like_any_other
+    let bad = t.k.connection_inbound(conn, &headers(&[("authorization", "Basic wrong")]), &none, notice("HardBounce", 31, "no@x.test", "x").as_bytes()).await.unwrap_err().to_string();
+    let missing = t.k.connection_inbound(conn, &none, &none, notice("HardBounce", 32, "no@x.test", "x").as_bytes()).await.unwrap_err().to_string();
+    assert_eq!(bad, missing, "every refusal reads the same");
+    jobs(t).await;
+    assert!(events(t, "no@x.test").await.is_empty(), "a refused call leaves nothing");
+    // an_unknown_type_is_kept_and_ignored
+    let un = uid(&t.insert(mgr, "MarketingContact", json!({"email": "un@x.test"})).await);
+    post(notice("AutoResponder", 40, "un@x.test", "Out of office")).await.expect("accepted");
+    jobs(t).await;
+    assert_eq!(events(t, "un@x.test").await[0]["outcome"], json!("Ignored"));
+    assert_eq!(t.get("MarketingContact", un).await["consent_status"], json!("Subscribed"));
+    // a_bounce_for_an_address_never_mailed_still_suppresses
+    post(notice("HardBounce", 50, "ghost@y.test", "x")).await.expect("accepted");
+    jobs(t).await;
+    let g = &events(t, "ghost@y.test").await[0];
+    assert!(g["outcome"] == json!("Applied") && g["recipient"].is_null(), "{g:?}");
+    let sup: i64 = t.scalar("select count(*) from e_email_suppression where tenant_id = $1 and email = 'ghost@y.test' and $2::uuid is null", None).await;
+    assert_eq!(sup, 1);
+    // a_sparkpost_batch_is_mapped_item_by_item
+    let spark = take_up(t, "sparkpost_bounces", AUTH).await;
+    for e in ["sp1@z.test", "sp2@z.test", "sp3@z.test"] {
+        t.insert(mgr, "MarketingContact", json!({"email": e})).await;
+    }
+    let ev = |kind: &str, class: &str, id: &str, to: &str| json!({"msys": {"message_event": {"type": kind, "bounce_class": class, "rcpt_to": to, "message_id": format!("sp-{id}"), "event_id": id, "raw_reason": "x"}}});
+    let batch = json!([ev("bounce", "10", "e1", "sp1@z.test"), ev("spam_complaint", "", "e2", "sp2@z.test"), ev("bounce", "51", "e3", "sp3@z.test")]);
+    t.k.connection_inbound(spark, &ok, &none, batch.to_string().as_bytes()).await.expect("accepted");
+    jobs(t).await;
+    let kinds: Vec<(String, String)> = {
+        let mut v = Vec::new();
+        for e in ["sp1@z.test", "sp2@z.test", "sp3@z.test"] {
+            let d = &events(t, e).await[0];
+            v.push((d["kind"].as_str().unwrap().to_string(), d["outcome"].as_str().unwrap().to_string()));
+        }
+        v
+    };
+    assert_eq!(kinds, [("hard".into(), "Applied".into()), ("complaint".into(), "Applied".into()), ("class:51".into(), "Ignored".into())]);
+    // nobody_writes_a_delivery_event_by_hand
+    let id = uid(&events(t, "hb@x.test").await[0]);
+    refused(t.k.insert(mgr, "DeliveryEvent", obj(json!({"event_key": "by-hand", "email": "a@b.test", "kind": "hard"}))).await);
+    refused(t.k.update(mgr, "DeliveryEvent", id, obj(json!({"outcome": "Ignored"})), None).await);
+    refused(t.k.delete(mgr, "DeliveryEvent", id, None).await);
+    refused(t.k.delete(&t.admin, "DeliveryEvent", id, None).await);
+    // erasure_reaches_delivery_events
+    t.k.erase_personal_data(&t.admin, "un@x.test", "his request").await.expect("erasure");
+    assert!(events(t, "un@x.test").await.is_empty(), "no event keeps the erased address");
 }

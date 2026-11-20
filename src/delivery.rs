@@ -8,7 +8,8 @@
 
 use crate::contact;
 use crate::util::{self, values};
-use ferrum_kernel::{Ctx, Kernel, Result, Tx};
+use async_trait::async_trait;
+use ferrum_kernel::{Ctx, Doc, DocHook, Error, HookCtx, Kernel, Result, Tx};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -136,6 +137,46 @@ pub async fn apply(k: &Kernel, sys: &Ctx, tx: &mut Tx, email: &str, recipient: O
         None => {}
     }
     Ok(())
+}
+
+/// A bounce or complaint a mail provider reported through a connection (`DeliveryEvent`, written by the connection's mapping
+/// as the system, once per provider event). The first save applies it to the recipient, the contact and the suppression
+/// list through `apply`, the function the signed webhook uses, in the same transaction.
+pub struct DeliveryEventHook;
+
+#[async_trait]
+impl DocHook for DeliveryEventHook {
+    async fn validate(&self, hc: &mut HookCtx<'_>, _doc: &Doc) -> Result<()> {
+        if hc.ctx.is_system { Ok(()) } else { Err(Error::Forbidden("delivery events are written by connections".into())) }
+    }
+
+    async fn before_delete(&self, hc: &mut HookCtx<'_>, _doc: &Doc) -> Result<()> {
+        if hc.ctx.is_system { Ok(()) } else { Err(Error::Forbidden("delivery events are written by connections".into())) }
+    }
+
+    async fn after_save(&self, hc: &mut HookCtx<'_>, doc: &Doc, old: Option<&Doc>) -> Result<()> {
+        if old.is_some() {
+            return Ok(());
+        }
+        let (tenant, event) = (hc.ctx.tenant, util::doc_id(doc)?);
+        let sys = util::sys(hc.ctx);
+        let text = |k: &str| doc.get(k).and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+        let Some(kind) = text("kind").and_then(|k| Kind::parse(k, text("bounce_type"))) else {
+            return hc.kernel.set_values_tx(&sys, hc.tx, "DeliveryEvent", event, values([("outcome", json!("Ignored"))])).await;
+        };
+        let email = text("email").map(str::to_lowercase);
+        let found = crate::public::find_recipient(hc.tx, tenant, None, text("message_id"), email.as_deref(), None).await?;
+        let Some(address) = found.as_ref().map(|f| f.1.clone()).or(email) else {
+            return hc.kernel.set_values_tx(&sys, hc.tx, "DeliveryEvent", event, values([("outcome", json!("Ignored"))])).await;
+        };
+        let source = format!("{}: {}", text("via_connection").unwrap_or("connection"), util::cut(text("reason").unwrap_or_default(), 120));
+        apply(hc.kernel, &sys, hc.tx, &address, found.as_ref().map(|f| f.0), kind, &source).await?;
+        let mut v = values([("outcome", json!("Applied"))]);
+        if let Some((r, _)) = found {
+            v.insert("recipient".into(), json!(r.to_string()));
+        }
+        hc.kernel.set_values_tx(&sys, hc.tx, "DeliveryEvent", event, v).await
+    }
 }
 
 /// A human open or click proves the mailbox works: soft bounces start counting again.
