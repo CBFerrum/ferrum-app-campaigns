@@ -147,6 +147,17 @@ impl DocHook for ContactHook {
             Some((st, src, ip)) => (Some(st.as_str()), src.as_deref(), ip.as_deref()),
             None => (None, None, None),
         };
+        // A new time zone starts the counted opens again: they were hours of another clock.
+        if let Some(contact) = id(doc, "id").filter(|_| doc.contains_key("created_at")) {
+            let old_zone: Option<Option<String>> = sqlx::query_scalar("select time_zone from e_marketing_contact where tenant_id = $1 and id = $2")
+                .bind(hc.ctx.tenant)
+                .bind(contact)
+                .fetch_optional(&mut **hc.tx)
+                .await?;
+            if old_zone.is_some_and(|z| z.as_deref() != s(doc, "time_zone")) {
+                doc.insert("open_hours".into(), Value::Null);
+            }
+        }
         if old_status != s(doc, "consent_status") {
             doc.insert("consent_at".into(), json!(util::ts(util::now())));
             // The engine passes its own evidence (what happened, from which address); people are
@@ -180,6 +191,12 @@ impl DocHook for ContactHook {
         let mut errors = Vec::new();
         if let Err(m) = check_attributes(doc.get("attributes")) {
             errors.push(FieldError::new("attributes", m));
+        }
+        if let Some(zone) = s(doc, "time_zone") {
+            let known: bool = sqlx::query_scalar("select exists (select 1 from pg_timezone_names where name = $1)").bind(zone).fetch_one(&mut **hc.tx).await?;
+            if !known {
+                errors.push(FieldError::new("time_zone", "use a time zone by its name, such as Europe/Paris or Asia/Kolkata"));
+            }
         }
         match (s(doc, "record_entity"), s(doc, "record_id")) {
             (None, None) => {}

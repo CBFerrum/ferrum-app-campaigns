@@ -694,6 +694,16 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                     st.next_run_at = util::now() + Duration::minutes(5);
                     break;
                 }
+                // A person at their frequency cap waits: no row is made, and the step is tried again when the oldest
+                // counted email leaves the window. The count comes after the budget lock, as every sender's does.
+                if !reach.operational
+                    && let Some((cap, days)) = send::frequency(&mut tx, tenant).await?
+                    && let Some(oldest) = send::cap_since(&mut tx, tenant, contact_id, cap, days).await?
+                {
+                    st.next_run_at = (oldest + Duration::days(days)).max(util::now() + Duration::minutes(5));
+                    log(&mut tx, tenant, journey, enrollment, here, "waiting: frequency cap").await?;
+                    break;
+                }
                 let recipient = Uuid::now_v7();
                 sqlx::query(
                     "insert into e_campaign_recipient (tenant_id, id, journey, journey_step, enrollment, contact, email, topic, status, queued_at, \
@@ -731,7 +741,11 @@ async fn advance(k: &Kernel, sys: &Ctx, enrollment: Uuid, cache: &Cache) -> Resu
                             .await?;
                         log(&mut tx, tenant, journey, enrollment, here, "sent").await?;
                     }
-                    Ok(Handover::Skipped(_)) => {}
+                    Ok(Handover::Skipped(why)) => {
+                        // The platform refused this person: the row says so now, not after a day as "deleted".
+                        campaign::skip(&mut tx, tenant, recipient, "Skipped", why).await?;
+                        log(&mut tx, tenant, journey, enrollment, here, &format!("skipped: {why}")).await?;
+                    }
                     Err(e) => {
                         sqlx::query("update e_campaign_recipient set status = 'Failed', error = $3, queued_at = null where tenant_id = $1 and id = $2")
                             .bind(tenant)

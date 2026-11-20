@@ -1,5 +1,5 @@
 package: campaigns
-version: 0.1.0
+version: 0.1.1
 label: Campaigns
 description: Email marketing - contacts with consent, segments, campaigns with A/B tests, automated journeys, open and click tracking, bounces, suppression list and double opt-in signup forms.
 depends: [core, comms]
@@ -16,7 +16,7 @@ modules:
 # What a personal-data request exports and erases for a contact (their email). The suppression list
 # keeps unsubscribed addresses, so an erased person is never mailed again.
 personal_data:
-  - {entity: MarketingContact, match: email, phone: phone, erase: [email, phone, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes]}
+  - {entity: MarketingContact, match: email, phone: phone, erase: [email, phone, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes, time_zone, open_hours]}
   - {entity: TopicSubscription, match: email, erase: [email]}
 roles:
   - name: Marketing User
@@ -59,4 +59,19 @@ roles:
       - {entity: EmailTemplate, read: true, write: true, create: true}
       - {entity: EmailAccount, read: true}
       - {entity: Customer, read: true}
+messages:
+  - key: campaigns.campaign_paused
+    label: A campaign paused itself
+    category: operational
+    entity: EmailCampaign
+    channels: [inapp, email]
+    values: [cause, rate]
+    languages:
+      en:
+        inapp:
+          title: "{{ doc.campaign_name }} was paused"
+          text: "{{ values.cause }} reached {{ values.rate }}% of what was sent. Nothing more goes out until a manager resumes it."
+        email:
+          subject: "{{ doc.campaign_name }} was paused"
+          body: "<p>{{ values.cause }} reached {{ values.rate }}% of what was sent. Nothing more goes out until a manager resumes it in Campaigns.</p>"
 export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]

@@ -175,6 +175,30 @@ async fn record_open(k: &Kernel, req: &SiteRequest, token: &str) -> Result<()> {
     .await?;
     if !machine {
         delivery::engaged(&mut tx, req.tenant, contact).await?;
+        // The hour of the person's own clock they opened in. A zone the database no longer knows must not lose the open.
+        let ws_zone = system(k, req.tenant).await?.schema.timezone.clone();
+        sqlx::query("savepoint campaigns_open_hour").execute(&mut *tx).await?;
+        let counted = sqlx::query(
+            "with c as (select id, coalesce(open_hours, (select jsonb_agg(0) from generate_series(1, 24))) as oh, \
+             extract(hour from now() at time zone coalesce((select z.name from pg_timezone_names z where z.name = time_zone), $3))::int as h \
+             from e_marketing_contact where tenant_id = $1 and id = $2) \
+             update e_marketing_contact m set open_hours = (select jsonb_agg(case when o.ord - 1 = c.h then o.v::int + 1 else o.v::int end order by o.ord) \
+             from jsonb_array_elements_text(c.oh) with ordinality o(v, ord)) from c where m.tenant_id = $1 and m.id = c.id",
+        )
+        .bind(req.tenant)
+        .bind(contact)
+        .bind(&ws_zone)
+        .execute(&mut *tx)
+        .await;
+        match counted {
+            Ok(_) => {
+                sqlx::query("release savepoint campaigns_open_hour").execute(&mut *tx).await?;
+            }
+            Err(e) => {
+                sqlx::query("rollback to savepoint campaigns_open_hour").execute(&mut *tx).await?;
+                tracing::warn!(tenant = %req.tenant, "open hour not counted: {e}");
+            }
+        }
     }
     tx.commit().await?;
     Ok(())
@@ -446,6 +470,14 @@ async fn subscribe(k: &Kernel, req: &SiteRequest, form: &str) -> Result<SiteResp
                 ("consent_source", json!(util::cut(&format!("form: {}", s(&f, "form_name").unwrap_or_default()), 200))),
                 ("source", json!("Subscription Form")),
             ]);
+            // A zone the form carries is taken only when the database knows it; anything else is ignored.
+            let mut doc = doc;
+            if let Some(z) = field(&fields, "time_zone") {
+                let known: bool = sqlx::query_scalar("select exists (select 1 from pg_timezone_names where name = $1)").bind(z).fetch_one(&mut *tx).await?;
+                if known {
+                    doc.insert("time_zone".into(), json!(z));
+                }
+            }
             Some(util::doc_id(&k.insert_tx(&sys, &mut tx, "MarketingContact", doc).await?)?)
         }
     };

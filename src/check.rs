@@ -33,23 +33,30 @@ pub struct Tally {
     pub new_contacts: i64,
     /// Would be mailed, but are not in the campaign's topic.
     pub not_in_topic: i64,
+    /// Mailable, and already at the frequency cap (0 when there is none, or the topic is operational).
+    pub capped: i64,
+    /// Mailable, with a time zone of their own.
+    pub with_zone: i64,
+    /// Mailable, with enough counted opens to have a usual hour.
+    pub with_best_hour: i64,
 }
 
 /// Counts what `start` would find: the existing contacts, plus the members of `groups` who are not
 /// contacts yet (added as `Subscribed`, as `import::adopt_group_members` does when sending starts:
 /// keep the two in step), in `include` and not in `exclude`.
 async fn tally(tx: &mut Tx, ctx: &Ctx, reach: &Reach, groups: &[Uuid], include: &[Segment], exclude: &[Segment]) -> Result<Tally> {
+    let cap = if reach.operational || reach.channel != Channel::Email { None } else { send::frequency(tx, ctx.tenant).await? };
     let (tenant, today, tz) = (ctx.tenant, ctx.today(), ctx.schema.timezone.clone());
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
         "with c_all as (select c.tenant_id, c.id, c.email, c.first_name, c.last_name, c.full_name, c.source, c.consent_status, c.record_entity, \
-         c.record_id, c.phone, c.attributes, c.created_at, false as adopted from e_marketing_contact c where c.tenant_id = ",
+         c.record_id, c.phone, c.attributes, c.created_at, false as adopted, c.time_zone, c.open_hours from e_marketing_contact c where c.tenant_id = ",
     );
     qb.push_bind(tenant)
         .push(" union all select ")
         .push_bind(tenant)
         .push(
             ", gen_random_uuid(), x.email, nullif(split_part(x.name, ' ', 1), ''), nullif(btrim(substr(x.name, length(split_part(x.name, ' ', 1)) + 1)), ''), \
-             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, null::text, null::text, '{}'::jsonb, now(), true \
+             nullif(x.name, ''), 'Email Group', 'Subscribed', null::text, null::text, null::text, '{}'::jsonb, now(), true, null::text, null::jsonb \
              from (select distinct on (lower(btrim(m.email))) lower(btrim(m.email)) as email, btrim(coalesce(m.member_name, '')) as name \
              from e_email_group_member m where m.tenant_id = ",
         )
@@ -77,13 +84,32 @@ async fn tally(tx: &mut Tx, ctx: &Ctx, reach: &Reach, groups: &[Uuid], include: 
             qb.push("true");
         }
     }
-    qb.push(")) from c_all c where c.tenant_id = ");
+    qb.push(")), count(*) filter (where ");
+    match cap {
+        Some((n, days)) => {
+            reach.push(&mut qb);
+            qb.push(" and ");
+            send::push_recent(&mut qb, days);
+            qb.push(" >= ").push_bind(n);
+        }
+        None => {
+            qb.push("false");
+        }
+    }
+    qb.push("), count(*) filter (where ");
+    reach.push(&mut qb);
+    qb.push(" and c.time_zone is not null), count(*) filter (where ");
+    reach.push(&mut qb);
+    qb.push(
+        " and jsonb_typeof(c.open_hours) = 'array' and (select sum(v::int) from jsonb_array_elements_text(c.open_hours) v) >= 3) \
+         from c_all c where c.tenant_id = ",
+    );
     qb.push_bind(tenant).push(" and (");
     push_any(&mut qb, include, today, &tz);
     qb.push(") and not (");
     push_any(&mut qb, exclude, today, &tz);
     qb.push(")");
-    let t: (i64, i64, i64, i64, i64, i64, i64, i64, i64) = qb.build_query_as().fetch_one(&mut **tx).await?;
+    let t: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) = qb.build_query_as().fetch_one(&mut **tx).await?;
     Ok(Tally {
         contacts: t.0,
         mailable: t.1,
@@ -94,6 +120,9 @@ async fn tally(tx: &mut Tx, ctx: &Ctx, reach: &Reach, groups: &[Uuid], include: 
         suppressed: t.6,
         new_contacts: t.7,
         not_in_topic: t.8,
+        capped: t.9,
+        with_zone: t.10,
+        with_best_hour: t.11,
     })
 }
 
@@ -187,6 +216,8 @@ pub async fn audience(hc: &mut HookCtx<'_>, doc: &Doc) -> Result<Value> {
         "mailable": all.mailable,
         "left_out": {"pending": all.pending, "unsubscribed": all.unsubscribed, "bounced": all.bounced, "complained": all.complained, "suppressed": all.suppressed,
                      "not_in_topic": all.not_in_topic},
+        "capped": all.capped,
+        "send_time": {"mode": s(doc, "send_time").unwrap_or("At Once"), "with_zone": all.with_zone, "with_best_hour": all.with_best_hour},
         "excluded": before.contacts - all.contacts,
         "new_contacts": all.new_contacts,
         "rows": lines,

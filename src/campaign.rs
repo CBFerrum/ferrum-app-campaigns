@@ -18,11 +18,13 @@ use crate::topics::Reach;
 use crate::util::{self, b, id, int, rows, s, sys, values};
 use async_trait::async_trait;
 use ferrum_domain::util::elevated;
+use ferrum_kernel::messages::{self, Message, Recipient};
 use ferrum_kernel::retention::Purpose;
 use ferrum_kernel::{Ctx, Doc, DocHook, Error, FieldError, HookCtx, Kernel, Result, Tx, with_retry};
+use rust_decimal::Decimal;
 use serde_json::{Map, Value, json};
 use sqlx::{Postgres, QueryBuilder};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -175,6 +177,14 @@ impl DocHook for CampaignHook {
         } else if !variants.is_empty() {
             errors.push(FieldError::new("variants", "turn on the A/B test or remove the variants"));
         }
+        if s(doc, "send_time").is_some_and(|m| m != "At Once") {
+            if b(doc, "ab_test") {
+                errors.push(FieldError::new("send_time", "an A/B test's shares go out together: send it at once"));
+            }
+            if Channel::of(doc) != Channel::Email {
+                errors.push(FieldError::new("send_time", "a time of day for each person applies to emails only"));
+            }
+        }
         if Channel::of(doc) != Channel::Email && b(doc, "ab_test") {
             errors.push(FieldError::new("ab_test", "A/B tests compare emails; a text or chat-app campaign sends one message"));
         }
@@ -292,6 +302,15 @@ impl DocHook for CampaignHook {
                 Ok(Some(send_copies(hc, doc, params, &emails, false).await?))
             }
             "audience_check" => Ok(Some(check::audience(hc, doc).await?)),
+            // A manager sends the rest of a campaign that paused itself; the pause does not stop it again.
+            "resume" => {
+                if s(doc, "status") != Some("Paused") {
+                    return Err(Error::invalid("only a paused campaign can be resumed"));
+                }
+                let v = values([("status", json!("Sending")), ("resumed_at", json!(util::ts(util::now()))), ("resumed_by", json!(hc.ctx.email))]);
+                hc.kernel.set_values_tx(&sys(hc.ctx), hc.tx, "EmailCampaign", util::doc_id(doc)?, v).await?;
+                Ok(Some(json!({"status": "Sending"})))
+            }
             "timeline" => Ok(Some(check::timeline(hc, doc, params).await?)),
             _ => Ok(None),
         }
@@ -387,10 +406,12 @@ pub async fn run(k: &Kernel, sys: &Ctx, budget: Duration) -> Result<usize> {
         with_retry(|| start(k, sys, c)).await?;
     }
     choose_winners(k, sys).await?;
+    guard(k, sys).await?;
     let mut tx = k.db.tenant_tx(tenant).await?;
     let sending: Vec<Uuid> = sqlx::query_scalar(
         "select c.id from e_email_campaign c where c.tenant_id = $1 and c.docstatus = 1 and c.status = 'Sending' \
-         and exists (select 1 from e_campaign_recipient r where r.tenant_id = c.tenant_id and r.campaign = c.id and r.status = 'Pending') \
+         and exists (select 1 from e_campaign_recipient r where r.tenant_id = c.tenant_id and r.campaign = c.id and r.status = 'Pending' \
+         and (r.send_after is null or r.send_after <= now())) \
          order by c.started_at, c.id",
     )
     .bind(tenant)
@@ -507,7 +528,14 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
     };
     import::adopt_group_members(&mut tx, tenant, &groups).await?;
     let (today, tz) = (sys.today(), sys.schema.timezone.clone());
-    let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("with audience as (select c.id, c.email from e_marketing_contact c where c.tenant_id = ");
+    // Each person's own send time: the instant their clock next shows the time of day (decided here, once).
+    let mode = s(&doc, "send_time").unwrap_or("At Once").to_string();
+    let at = util::time(&doc, "schedule_at").unwrap_or_else(util::now);
+    let ws_zone = sys.schema.timezone.clone();
+    let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
+        "with zones as materialized (select name from pg_timezone_names), \
+         audience as (select c.id, c.email, c.time_zone, c.open_hours from e_marketing_contact c where c.tenant_id = ",
+    );
     qb.push_bind(tenant).push(" and ");
     reach.push(&mut qb);
     qb.push(" and (");
@@ -517,10 +545,38 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
     // Ranked by a hash of campaign and contact: the A/B split is the same however often it runs.
     qb.push(")), ranked as (select a.id, a.email, row_number() over (order by sha256(convert_to(")
         .push_bind(campaign.to_string())
-        .push(" || a.id::text, 'UTF8')), a.id) as rn, count(*) over () as n from audience a) ")
+        .push(" || a.id::text, 'UTF8')), a.id) as rn, count(*) over () as n, ");
+    if mode == "At Once" {
+        qb.push("null::timestamptz as send_after from audience a) ");
+    } else {
+        // zone: the person's when the database knows it, else the workspace's. tod: the time of day to send at (none: at the start).
+        // d: that time of day on the person's date of the scheduled instant, or the next day when it has passed there.
+        qb.push("sa.send_after from audience a left join zones zn on zn.name = a.time_zone ")
+            .push("cross join lateral (select coalesce(zn.name, ")
+            .push_bind(ws_zone.clone())
+            .push(") as zone) z ")
+            .push("cross join lateral (select ");
+        if mode == "Local Time" {
+            qb.push("((").push_bind(at).push("::timestamptz at time zone ").push_bind(ws_zone.clone()).push(")::time)::interval");
+        } else {
+            qb.push(
+                "case when jsonb_typeof(a.open_hours) = 'array' and (select sum(v::int) from jsonb_array_elements_text(a.open_hours) v) >= 3 \
+                 then make_interval(hours => (select (o.ord - 1)::int from jsonb_array_elements_text(a.open_hours) with ordinality o(v, ord) \
+                 order by o.v::int desc, o.ord limit 1)) end",
+            );
+        }
+        qb.push(" as tod) td cross join lateral (select (")
+            .push_bind(at)
+            .push("::timestamptz at time zone z.zone) as l) lt ")
+            .push(
+                "cross join lateral (select case when td.tod is null then null else (case when date_trunc('day', lt.l) + td.tod < lt.l \
+                 then date_trunc('day', lt.l) + td.tod + interval '1 day' else date_trunc('day', lt.l) + td.tod end) at time zone z.zone end as send_after) sa) ",
+            );
+    }
+    qb
         .push(
             "insert into e_campaign_recipient (tenant_id, id, campaign, topic, channel, contact, email, variant, status, open_count, machine_open_count, click_count, \
-             created_at, updated_at) select ",
+             created_at, updated_at, send_after) select ",
         )
         .push_bind(tenant)
         .push(", gen_random_uuid(), ")
@@ -547,7 +603,7 @@ async fn start(k: &Kernel, sys: &Ctx, campaign: Uuid) -> Result<()> {
     } else {
         qb.push("null, 'Pending'");
     }
-    qb.push(", 0, 0, 0, now(), now() from ranked r on conflict (tenant_id, campaign, contact) do nothing");
+    qb.push(", 0, 0, 0, now(), now(), r.send_after from ranked r on conflict (tenant_id, campaign, contact) do nothing");
     qb.build().execute(&mut *tx).await?;
     let total: i64 = sqlx::query_scalar("select count(*) from e_campaign_recipient where tenant_id = $1 and campaign = $2")
         .bind(tenant)
@@ -602,7 +658,7 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: Option<&Li
     // rescanned by the join, skip the rows this statement just updated and claim more than `n`.
     let claimed: Vec<(Uuid, Uuid, String, Option<String>)> = sqlx::query_as(
         "with due as materialized (select id from e_campaign_recipient where tenant_id = $1 and campaign = $2 and status = 'Pending' \
-         order by id limit $3 for update skip locked) \
+         and (send_after is null or send_after <= now()) order by id limit $3 for update skip locked) \
          update e_campaign_recipient r set status = 'Queued', queued_at = now(), version = r.version + 1, updated_at = now() \
          from due where r.tenant_id = $1 and r.id = due.id returning r.id, r.contact, r.email, r.variant",
     )
@@ -652,9 +708,18 @@ pub async fn send_batch(k: &Kernel, sys: &Ctx, campaign: Uuid, links: Option<&Li
     };
     let account = id(&doc, "email_account");
     let extra = extra(&doc);
+    // Promotional mail past a person's cap is left out; the budget lock held since the top of this batch makes the count final.
+    let over = match send::frequency(&mut tx, tenant).await? {
+        Some((cap, days)) if !reach.operational => send::capped(&mut tx, tenant, &ids, cap, days).await?,
+        _ => HashSet::new(),
+    };
     let mut drafts: HashMap<Option<String>, Draft> = HashMap::new();
     let mut queued = 0;
     for (recipient, contact_id, email, variant) in claimed {
+        if over.contains(&contact_id) {
+            skip(&mut tx, tenant, recipient, "Skipped", "frequency cap").await?;
+            continue;
+        }
         let d = drafts.entry(variant.clone()).or_insert_with(|| draft(&doc, variant.as_deref())).clone();
         let outcome = match contacts.get(&contact_id) {
             Some((view, true)) => hand_over(k, sys, &mut tx, account, &email, &d, view, &extra, recipient, links, contact_id, reach.purpose()).await,
@@ -719,7 +784,7 @@ pub async fn hand_over(
     }
 }
 
-async fn skip(tx: &mut Tx, tenant: Uuid, recipient: Uuid, status: &str, why: &str) -> Result<()> {
+pub(crate) async fn skip(tx: &mut Tx, tenant: Uuid, recipient: Uuid, status: &str, why: &str) -> Result<()> {
     sqlx::query(
         "update e_campaign_recipient set status = $3, skip_reason = case when $3 = 'Skipped' then $4 end, error = case when $3 = 'Failed' then $4 end, \
          queued_at = null where tenant_id = $1 and id = $2",
@@ -730,6 +795,64 @@ async fn skip(tx: &mut Tx, tenant: Uuid, recipient: Uuid, status: &str, why: &st
     .bind(util::cut(why, 500))
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+/// Pauses a sending campaign whose complaints or hard bounces passed the workspace's rate once enough of it has gone out.
+/// Off until the workspace sets a rate. A campaign a manager resumed is never paused again. The maker is told in the same
+/// transaction; a notice that fails is logged and does not undo the pause.
+async fn guard(k: &Kernel, sys: &Ctx) -> Result<()> {
+    let tenant = sys.tenant;
+    let mut tx = k.db.tenant_tx(tenant).await?;
+    let cfg: Option<(Option<Decimal>, Option<Decimal>, Option<i64>)> =
+        sqlx::query_as("select pause_complaint_percent, pause_bounce_percent, pause_after_sent from e_campaign_settings where tenant_id = $1 limit 1")
+            .bind(tenant)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (pc, pb, after) = cfg.map(|(c, b, a)| (c.unwrap_or_default(), b.unwrap_or_default(), a.unwrap_or(500))).unwrap_or_default();
+    if pc <= Decimal::ZERO && pb <= Decimal::ZERO {
+        tx.rollback().await?;
+        return Ok(());
+    }
+    let paused: Vec<(Uuid, Option<Uuid>, String, Decimal)> = sqlx::query_as(
+        "update e_email_campaign c set status = 'Paused', paused_at = now(), version = c.version + 1, updated_at = now(), \
+         pause_cause = case when $2::numeric > 0 and x.complaints * 100 >= $2::numeric * x.sent then 'Complaints' else 'Hard Bounces' end, \
+         pause_rate = round(case when $2::numeric > 0 and x.complaints * 100 >= $2::numeric * x.sent then x.complaints * 100.0 / x.sent else x.hard * 100.0 / x.sent end, 2) \
+         from (select r.campaign, count(*) filter (where r.communication is not null) as sent, count(*) filter (where r.complained_at is not null) as complaints, \
+               count(*) filter (where r.bounce_type = 'Hard') as hard from e_campaign_recipient r where r.tenant_id = $1 and r.campaign in \
+               (select id from e_email_campaign where tenant_id = $1 and docstatus = 1 and status = 'Sending' and resumed_at is null) group by r.campaign) x \
+         where c.tenant_id = $1 and c.id = x.campaign and c.docstatus = 1 and c.status = 'Sending' and c.resumed_at is null and x.sent >= $4 \
+         and (($2::numeric > 0 and x.complaints * 100 >= $2::numeric * x.sent) or ($3::numeric > 0 and x.hard * 100 >= $3::numeric * x.sent)) \
+         returning c.id, c.created_by, c.pause_cause, c.pause_rate",
+    )
+    .bind(tenant)
+    .bind(pc)
+    .bind(pb)
+    .bind(after)
+    .fetch_all(&mut *tx)
+    .await?;
+    for (campaign, maker, cause, rate) in paused {
+        let Some(maker) = maker else { continue };
+        sqlx::query("savepoint campaigns_paused").execute(&mut *tx).await?;
+        let m = Message {
+            template: "campaigns.campaign_paused".into(),
+            entity: Some("EmailCampaign".into()),
+            record: Some(campaign),
+            to: vec![Recipient::user(maker)],
+            values: values([("cause", json!(cause)), ("rate", json!(rate.to_string()))]),
+            ..Default::default()
+        };
+        match messages::send(k, &mut tx, sys, &m).await {
+            Ok(_) => {
+                sqlx::query("release savepoint campaigns_paused").execute(&mut *tx).await?;
+            }
+            Err(e) => {
+                sqlx::query("rollback to savepoint campaigns_paused").execute(&mut *tx).await?;
+                tracing::warn!(%tenant, %campaign, "pause notice not sent: {e}");
+            }
+        }
+    }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -830,7 +953,7 @@ async fn refresh_stats(k: &Kernel, tenant: Uuid) -> Result<()> {
                count(*) filter (where r.unsubscribed_at is not null) as unsub, count(*) filter (where r.bounced_at is not null) as bounced, \
                count(*) filter (where r.complained_at is not null) as complained \
                from e_campaign_recipient r where r.tenant_id = $1 and r.campaign in (select id from e_email_campaign where tenant_id = $1 and docstatus > 0 \
-               and (status = 'Sending' or finished_at > now() - interval '30 days')) group by r.campaign) x \
+               and (status in ('Sending', 'Paused') or finished_at > now() - interval '30 days')) group by r.campaign) x \
          where c.tenant_id = $1 and c.id = x.campaign and (c.total_recipients, c.sent_count, c.failed_count, c.skipped_count, c.unique_opens, c.total_opens, \
          c.unique_clicks, c.total_clicks, c.unsubscribe_count, c.bounce_count, c.complaint_count) is distinct from \
          (x.total, x.sent, x.failed, x.skipped, x.uo, x.tot_o, x.uc, x.tot_c, x.unsub, x.bounced, x.complained)",
