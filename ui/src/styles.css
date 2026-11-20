@@ -1577,3 +1577,28 @@
   .cm-bd-main { flex-direction: row; align-items: flex-start; }
   .cm-bd-panel { width: 260px; flex: none; }
 }
+
+/* The journey canvas: boxes under an SVG of lines, in lanes that grow toward the inline end. */
+.cm-jc-main { display: flex; flex-direction: column; gap: 0.75rem; }
+.cm-jc-scroll { overflow: auto; flex: 1; min-width: 0; }
+.cm-jc-canvas { position: relative; }
+.cm-jc-lines { position: absolute; inset-inline-start: 0; top: 0; pointer-events: none; }
+[dir="rtl"] .cm-jc-lines { transform: scaleX(-1); }
+.cm-jc-line { fill: none; stroke: var(--border-strong); stroke-width: 2; }
+.cm-jc-line[data-kind="otherwise"] { stroke-dasharray: 6 4; }
+.cm-jc-box { position: absolute; width: 200px; min-height: 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: start; font: inherit; color: var(--text); }
+.cm-jc-trigger { background: var(--surface-3); }
+.cm-jc-step { cursor: pointer; }
+.cm-jc-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.cm-jc-step[aria-pressed="true"] { border-color: var(--primary); }
+.cm-jc-step[data-flagged] { border-color: var(--danger); }
+.cm-jc-kind { font-size: var(--text-xs); color: var(--muted-foreground); text-transform: uppercase; }
+.cm-jc-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.cm-jc-counts { font-size: var(--text-xs); color: var(--muted-foreground); }
+.cm-jc-plus { position: absolute; }
+.cm-jc-unreached { margin-top: 1rem; }
+.cm-jc-panel { padding: 0.75rem; }
+@media (min-width: 900px) {
+  .cm-jc-main { flex-direction: row; align-items: flex-start; }
+  .cm-jc-panel { width: 300px; flex: none; }
+}

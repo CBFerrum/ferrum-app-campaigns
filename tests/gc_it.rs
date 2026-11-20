@@ -31,6 +31,7 @@ async fn scenario() {
     provider_notices(&t, &mgr).await;
     designs(&t, &mgr).await;
     one_issue(&t, &mgr).await;
+    the_funnel_says_who_is_in_each_step(&t, &mgr).await;
 }
 
 async fn settings_of(t: &T) -> Uuid {
@@ -767,4 +768,28 @@ async fn one_issue(t: &T, mgr: &Ctx) {
     // a topic that is turned off is refused, and the reference stays free
     t.update(mgr, "MarketingTopic", topic, json!({"enabled": false})).await;
     assert!(call("issue-4", "week-3", mgr).await.is_err());
+}
+
+
+/// campaigns-7: the funnel says who is in each step now, and how many of them wait.
+async fn the_funnel_says_who_is_in_each_step(t: &T, mgr: &Ctx) {
+    let w = uid(&t.insert(mgr, "MarketingContact", json!({"email": "w@fn.test"})).await);
+    let j = uid(&t
+        .insert(
+            mgr,
+            "MarketingJourney",
+            json!({"journey_name": "Funnel", "trigger_type": "Attribute Changed", "trigger_attribute": "stage",
+                   "steps": [{"step_type": "Wait", "wait_amount": 2, "wait_unit": "Days"}, {"step_type": "Exit"}]}),
+        )
+        .await);
+    t.action(mgr, "MarketingJourney", j, "activate", json!({})).await;
+    t.update(mgr, "MarketingContact", w, json!({"attributes": {"stage": "new"}})).await;
+    t.maint().await;
+    let p: std::collections::HashMap<String, String> = [("journey".to_string(), j.to_string())].into();
+    let report = ferrum_domain::reports::run(&t.k, mgr, "journey_funnel", &p).await.expect("the funnel");
+    let rows = report["rows"].as_array().unwrap();
+    assert_eq!((rows[0]["here"].as_i64(), rows[0]["waiting"].as_i64()), (Some(1), Some(1)), "{rows:?}");
+    assert_eq!(rows[1]["here"].as_i64(), Some(0));
+    let active: i64 = t.scalar(&format!("select count(*) from e_journey_enrollment where tenant_id = $1 and journey = '{j}' and status = 'Active' and current_step = 1 and $2::uuid is null"), None).await;
+    assert_eq!(active, 1);
 }
