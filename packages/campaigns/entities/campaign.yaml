@@ -13,6 +13,7 @@
     - {name: variant, type: data, read_only: true, max_length: 1, in_list: true}
     - {name: subject, type: data, required: true, max_length: 998, in_list: true}
     - {name: content, type: text, description: "HTML; blank = the campaign's content (a subject-only test)"}
+    - {name: design, type: json, description: "The variant's email as blocks (rows, columns, blocks). When set, Content is made from it at every save; clear it to write HTML again"}
 
 - name: EmailCampaign
   label: Email Campaign
@@ -38,6 +39,7 @@
     - {name: topic, type: link, to: MarketingTopic, in_filter: true, description: "Only people in this topic receive it; blank = everyone in the audience who takes marketing mail"}
     - {name: content, type: text, required_if: "doc.channel != 'Text Message' && doc.channel != 'Chat App'",
        description: "HTML (sandboxed template): {{ contact.first_name }}, {{ contact.last_name }}, {{ contact.email }}, {{ contact.attributes.<key> }}, {{ unsubscribe_url }}; values are HTML-escaped and missing ones render empty. A footer with the unsubscribe link and your postal address is added when the content has no {{ unsubscribe_url }}"}
+    - {name: design, type: json, description: "The email as blocks (rows, columns, blocks). When set, Content is made from it at every save and is not written by hand; clear it to write HTML again"}
     - {name: text_content, type: text, label: Plain Text, description: "The plain-text part; blank = derived from the HTML"}
     - {name: audience, type: table, of: CampaignAudience, required: true}
     - {name: schedule_at, type: datetime, in_list: true, description: "Blank = as soon as it is submitted"}

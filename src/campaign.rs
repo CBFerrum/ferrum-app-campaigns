@@ -97,6 +97,23 @@ pub struct CampaignHook;
 #[async_trait]
 impl DocHook for CampaignHook {
     async fn before_validate(&self, hc: &mut HookCtx<'_>, doc: &mut Doc) -> Result<()> {
+        // A design makes the content, here and for each version that has its own: the design wins over what was written.
+        if doc.get("design").is_some_and(Value::is_object) {
+            let html = crate::builder::html(&doc["design"]).map_err(|m| Error::Validation(vec![FieldError::new("design", m)]))?;
+            doc.insert("content".into(), json!(html));
+        }
+        let mut variants = rows(doc, "variants");
+        let mut changed = false;
+        for (i, v) in variants.iter_mut().enumerate() {
+            if v.get("design").is_some_and(Value::is_object) {
+                let html = crate::builder::html(&v["design"]).map_err(|m| Error::Validation(vec![FieldError::new("design", m).in_row("variants", i)]))?;
+                v.insert("content".into(), json!(html));
+                changed = true;
+            }
+        }
+        if changed {
+            doc.insert("variants".into(), Value::Array(variants.into_iter().map(Value::Object).collect()));
+        }
         // A Mail email template fills what is still blank.
         if let Some(t) = id(doc, "email_template")
             && (s(doc, "subject").is_none() || s(doc, "content").is_none())

@@ -30,6 +30,8 @@ minijinja = { version = "2", features = ["fuel"] }
 rand = "0.9"
 regex = "1"
 sha2 = "0.10"
+# MJML to responsive HTML for the email builder (MIT). No loader is compiled in, so `mj-include` reads nothing.
+mrml = { version = "6.0.1", default-features = false, features = ["parse", "render"] }
 
 [dev-dependencies]
 # Emails are Mail's `Communication` records: its tests load Mail's packages and register it. `app.yaml` still requires it.

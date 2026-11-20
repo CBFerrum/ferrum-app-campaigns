@@ -7,6 +7,7 @@
 //! the package never runs them; the public endpoints are a `Site` (see packages/campaigns/README.md).
 
 mod attribution;
+mod builder;
 mod campaign;
 mod channels;
 mod check;

@@ -29,6 +29,7 @@ async fn scenario() {
     pause_and_resume(&t, &mgr).await;
     send_time(&t, &mgr).await;
     provider_notices(&t, &mgr).await;
+    designs(&t, &mgr).await;
 }
 
 async fn settings_of(t: &T) -> Uuid {
@@ -648,4 +649,60 @@ async fn provider_notices(t: &T, mgr: &Ctx) {
     // erasure_reaches_delivery_events
     t.k.erase_personal_data(&t.admin, "un@x.test", "his request").await.expect("erasure");
     assert!(events(t, "un@x.test").await.is_empty(), "no event keeps the erased address");
+}
+
+
+fn design(heading: &str, href: &str) -> Value {
+    json!({"version": 1, "rows": [{"columns": [{"blocks": [
+        {"type": "heading", "text": heading, "level": 1},
+        {"type": "button", "label": "Read more", "href": href},
+        {"type": "text", "html": "<p><a href=\"https://example.com/a\">A link</a></p>"}]}]}]})
+}
+
+/// campaigns-5: a design is the email's source and `content` is what it renders to.
+async fn designs(t: &T, mgr: &Ctx) {
+    people(t, mgr, "d.test", 2).await;
+    let aud = at_domain(t, mgr, "d.test").await;
+    // a_campaign_saved_with_a_design_gets_its_content
+    let c = uid(&t.insert(mgr, "EmailCampaign", json!({"campaign_name": "Designed", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud})).await);
+    let html = t.get("EmailCampaign", c).await["content"].as_str().unwrap().to_string();
+    assert!(html.contains("Hello") && html.contains("https://shop.test/sale"), "{html}");
+    t.update(mgr, "EmailCampaign", c, json!({"design": design("Changed", "https://shop.test/sale")})).await;
+    assert!(t.get("EmailCampaign", c).await["content"].as_str().unwrap().contains("Changed"));
+    t.update(mgr, "EmailCampaign", c, json!({"content": "<p>mine</p>"})).await;
+    assert!(t.get("EmailCampaign", c).await["content"].as_str().unwrap().contains("Changed"), "the design wins over what is written beside it");
+    t.update(mgr, "EmailCampaign", c, json!({"design": null, "content": "<p>mine</p>"})).await;
+    assert_eq!(t.get("EmailCampaign", c).await["content"], json!("<p>mine</p>"), "without a design the content is as written");
+    refused(t.k.update(mgr, "EmailCampaign", c, obj(json!({"design": {"version": 2, "rows": []}})), None).await);
+    // a_designed_campaign_is_sent_like_any_other
+    let (sent, to) = t.send(mgr, json!({"campaign_name": "Designed send", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud})).await;
+    assert_eq!(to.len(), 2);
+    let preview = t.action(mgr, "EmailCampaign", sent, "preview", json!({})).await;
+    assert!(preview["html"].as_str().unwrap().contains("Hello"), "{preview}");
+    let comm: Uuid = t
+        .scalar(&format!("select communication from e_campaign_recipient where tenant_id = $1 and campaign = '{sent}' and communication is not null and $2::uuid is null limit 1"), None)
+        .await;
+    let body: String = t.scalar(&format!("select content from e_communication where tenant_id = $1 and id = '{comm}' and $2::uuid is null"), None).await;
+    assert!(body.contains("/c/") && body.contains("/o/") && body.to_lowercase().contains("unsubscribe"), "a tracked link, the pixel and the footer: {body}");
+    assert!(!body.contains("https://shop.test/sale"), "the button's address is the tracked one");
+    // a_version_with_its_own_design
+    let v = uid(&t
+        .insert(
+            mgr,
+            "EmailCampaign",
+            json!({"campaign_name": "Versions", "subject": "Hi", "content": "<p>a</p>", "audience": aud, "ab_test": true,
+                   "variants": [{"subject": "A"}, {"subject": "B", "design": design("Version B", "https://shop.test/b")}]}),
+        )
+        .await);
+    let b = t.get("EmailCampaign", v).await["variants"][1]["content"].as_str().unwrap().to_string();
+    assert!(b.contains("Version B"), "{b}");
+    let bad = t
+        .k
+        .insert(mgr, "EmailCampaign", obj(json!({"campaign_name": "Bad version", "subject": "Hi", "content": "<p>a</p>", "audience": aud, "ab_test": true,
+            "variants": [{"subject": "A"}, {"subject": "B", "design": {"version": 2, "rows": []}}]})))
+        .await;
+    refused(bad);
+    // a_marketing_user_cannot_design_someone_elses_campaign
+    let uma = t.person("uma2@acme.test", "Marketing User", json!([{"entity": "EmailCampaign", "read": true, "write": true, "create": true, "if_owner": true}])).await;
+    refused(t.k.update(&uma, "EmailCampaign", c, obj(json!({"design": design("Mine", "https://shop.test/sale")})), None).await);
 }
