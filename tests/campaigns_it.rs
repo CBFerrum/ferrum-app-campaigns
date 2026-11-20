@@ -556,6 +556,9 @@ async fn scenario() {
     assert_eq!((int(&preview["contact_count"]), int(&preview["mailable_count"])), (2, 2), "{preview}");
     let emails: Vec<&str> = preview["sample"].as_array().unwrap().iter().map(|r| r["email"].as_str().unwrap()).collect();
     assert_eq!(emails, vec!["asha@x.test", "chen@x.test"]);
+    // K0-6 (design S9: "preview returns the counts and stores none; the refresh stores them"): the saved counts are the refresh's.
+    assert!(t.get("MarketingSegment", pune).await["contact_count"].is_null(), "a preview stores no count");
+    t.action(uma, "MarketingSegment", pune, "refresh", json!({})).await;
     assert_eq!(int(&t.get("MarketingSegment", pune).await["contact_count"]), 2);
     // The screen counts rules as they are edited: the same numbers, and nothing is written.
     let rules_of_pune = t.get("MarketingSegment", pune).await["rules"].clone();
