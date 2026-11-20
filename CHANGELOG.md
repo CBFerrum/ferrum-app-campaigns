@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+Same platform and Mail as 0.7.0. Package `campaigns` 0.1.1 (new fields and one action; nullable, no backfill).
+
+- **A segment's rules read only what the person who saves, counts or previews it may read** (K0-7): a "Record Field" or "Related Records" rule on an entity or field the caller cannot read is refused, as is a count of rules being edited; the sample leaves out columns the caller may not read. The test of the old suite that built such segments as a manager now gives the manager the right to read orders.
+- **A segment's Preview stores nothing** (K0-6): it is a read-only question, so anyone who reads the segment may press it. A query segment is counted from its rows as they are. The new **Refresh** action (needs write) works the membership out and stores it with the counts; the scheduled refresh stores the counts too.
+- **A journey email the platform refuses is Skipped at once**, with why, in the same transaction (before, it stayed Queued for a day and then Failed as "deleted"). Mail is a dev-dependency only.
+- **Frequency cap** (Campaign Settings): at most N promotional emails per person within D days, for campaigns and journeys together. A campaign leaves the person out (Skipped, "frequency cap"); a journey step waits until the oldest counted email leaves the window. Operational topics are neither counted nor held back. The review says how many are at the cap.
+- **A campaign pauses itself** when complaints or hard bounces pass a rate of what was sent, once enough has gone out (all three numbers in Campaign Settings; no rate is set by default, so nothing pauses until an administrator chooses). The maker is told through the platform's messages. **Resume** (needs submit) sends the rest, and the pause does not stop a resumed campaign again.
+- **Each person's own send time**: a campaign can go at the same clock time in each person's time zone, or at the hour each opens most (a contact's `time_zone`, taken from the import and the signup form; the app counts human opens by hour). Everyone has it within a day.
+
+Interface: a Paused status with its alert and Resume button, the send-time choice and the frequency-cap line on the review, a Time zone column in the import. Database: new nullable columns and an index on recipients (`contact`, `queued_at`).
+
 ## 0.7.0
 
 Needs Ferrum 0.4.0 (apps' upkeep runs one workspace at a time, on whichever replica is free).
