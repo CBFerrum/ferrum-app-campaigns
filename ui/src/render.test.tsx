@@ -277,6 +277,16 @@ describe("the pages, drawn from a record in the cache", () => {
     expect(html).toContain("Loading…");
   });
 
+  it("draws the content tab with the builder for a design, the start panel without one, and no palette once scheduled", () => {
+    const designed = { ...campaign, design: { version: 1 as const, page: { width: 600, background: "#f3f4f6", content_background: "#ffffff", font: "sans" as const, text_color: "#374151", link_color: "#2f5bea" }, rows: [{ background: null, padding: 24, columns: [{ blocks: [{ type: "button" as const, label: "Read more", href: "https://example.com", background: null, color: null, align: "left" as const }] }] }] } };
+    const html = page("/c/c1?tab=content", designed);
+    for (const text of ["Button: Read more", "Blocks", "Row 1, column 1", "Design"]) expect(html).toContain(text);
+    expect(page("/c/c1?tab=content", { ...campaign, design: null })).not.toContain("Row 1, column 1");
+    const scheduled = page("/c/c1?tab=content", { ...designed, docstatus: 1, status: "Scheduled" as const });
+    expect(scheduled).toContain("Button: Read more");
+    expect(scheduled).not.toContain("Add a row");
+  });
+
   it("draws a paused campaign with why, and the way to resume for who may send", () => {
     const paused = { ...campaign, docstatus: 1, status: "Paused" as const, started_at: "2026-11-01T10:00:00Z", paused_at: "2026-11-01T11:00:00Z", pause_cause: "Complaints" as const, pause_rate: "1.20" };
     const html = page("/c/c1", paused);

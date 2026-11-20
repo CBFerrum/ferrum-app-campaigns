@@ -3,6 +3,7 @@
 
 import { moment, rate } from "./format";
 import { t } from "@ferrum/client";
+import type { Design } from "./design";
 
 export type Status = "Draft" | "Scheduled" | "Sending" | "Paused" | "Sent" | "Cancelled";
 export type SendTime = "At Once" | "Local Time" | "Best Hour";
@@ -24,6 +25,8 @@ export interface VariantRow {
   variant?: string | null;
   subject?: string | null;
   content?: string | null;
+  /** The version's own design; its content is made from it. */
+  design?: Design | null;
 }
 
 export interface Campaign {
@@ -38,6 +41,8 @@ export interface Campaign {
   email_account?: string | null;
   email_template?: string | null;
   content: string;
+  /** The email as blocks. When set, the server makes `content` from it at every save. */
+  design?: Design | null;
   text_content?: string | null;
   audience: AudienceRow[];
   schedule_at?: string | null;
