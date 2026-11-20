@@ -16,6 +16,7 @@ mod deliverability;
 mod delivery;
 mod events;
 mod import;
+mod issue;
 mod journey;
 mod keys;
 mod public;
@@ -70,6 +71,7 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("CampaignSettings", Arc::new(public::SettingsHook))
         .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
         .register("DeliveryEvent", Arc::new(delivery::DeliveryEventHook))
+        .register("MarketingTopic", Arc::new(issue::TopicHook))
         .register("SendingDomain", Arc::new(deliverability::DomainHook))
         .add_event_sink(Arc::new(events::JourneySink))
         .add_site(util::PACKAGE, site);

@@ -320,12 +320,14 @@ fn compare(t: FieldType, op: &str, value: Option<&str>) -> std::result::Result<C
 
 /// Parses a segment document; errors point at the offending rows.
 pub fn parse(doc: &Doc, schema: &Schema) -> std::result::Result<Segment, Vec<FieldError>> {
-    if s(doc, "source") == Some("Query") {
-        return match (id(doc, "id"), query_of(doc, schema)) {
+    if matches!(s(doc, "source"), Some("Query" | "List")) {
+        // A list is a fixed set of members another app made: it has no query.
+        let checked = if s(doc, "source") == Some("List") { Ok(()) } else { query_of(doc, schema).map(|_| ()) };
+        return match (id(doc, "id"), checked) {
             (_, Err(m)) => Err(vec![FieldError::new("query", m)]),
-            (Some(sid), Ok(_)) => Ok(Segment { all: true, rules: vec![Rule::Members(sid)] }),
+            (Some(sid), Ok(())) => Ok(Segment { all: true, rules: vec![Rule::Members(sid)] }),
             // Not saved yet: nobody, until it is worked out.
-            (None, Ok(_)) => Ok(Segment { all: true, rules: vec![Rule::Members(Uuid::nil())] }),
+            (None, Ok(())) => Ok(Segment { all: true, rules: vec![Rule::Members(Uuid::nil())] }),
         };
     }
     let mut rules = Vec::new();
@@ -670,7 +672,10 @@ pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeo
 pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: u64) -> Result<(u64, u64)> {
     let sid = util::doc_id(doc)?;
     let tenant = sys.tenant;
-    let ids: Vec<Uuid> = if s(doc, "source") == Some("Query") {
+    let ids: Vec<Uuid> = if s(doc, "source") == Some("List") {
+        // A list's members are its own: only the counts are worked out again.
+        sqlx::query_scalar("select contact_id from campaigns_segment_member where tenant_id = $1 and segment_id = $2").bind(tenant).bind(sid).fetch_all(&mut **tx).await?
+    } else if s(doc, "source") == Some("Query") {
         query_contacts(k, sys, tx, doc, timeout_ms).await?
     } else {
         let seg = parse(doc, &sys.schema).map_err(Error::Validation)?;

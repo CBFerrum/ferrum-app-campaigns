@@ -116,6 +116,22 @@
        description: "Everyone is in it until they untick it (contacts that existed before the topic too); off: only those who ticked it or joined it through a signup form"}
     - {name: enabled, type: check, default: true, in_list: true, description: "Shown on the preference page and chosen by campaigns and journeys"}
     - {name: sort_order, type: int, default: 0, description: "Order on the preference page"}
+  actions:
+    # Another app's one composed message to named people, sent once under this topic (Intranet's newsletter).
+    - name: send_issue
+      label: Send One Issue
+      permission: write
+      hidden: true
+      params:
+        - {name: reference, label: Reference, type: data, required: true, description: "The caller's own name for this issue; one issue per topic and reference is ever sent"}
+        - {name: subject, label: Subject, type: data, required: true}
+        - {name: body, label: Text, type: text, required: true, description: "Plain text or Markdown paragraphs, shown escaped"}
+        - {name: recipients, label: Addresses, type: text, required: true, description: "At most 5000 addresses, one a line"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "A campaign to the addresses that are contacts and may be mailed under this topic is scheduled, once for this topic and reference; the others are counted as skipped. Campaigns sends it within its limits with its unsubscribe link and its recipient records say what became of each"
+        returns: {type: object, properties: {campaign: {type: string}, accepted: {type: integer}, skipped: {type: integer}, repeated: {type: boolean}}}
   list: {columns: [topic_name, category, default_in, enabled], sort: sort_order asc}
 
 - name: TopicSubscription
@@ -177,8 +193,8 @@
   description: "A dynamic group of contacts defined by rules on their fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days). Evaluated whenever it is used; Preview counts it without saving anything and Refresh saves the counts."
   fields:
     - {name: segment_name, type: data, required: true, unique: true, in_list: true}
-    - {name: source, type: select, options: [Rules, Query], default: Rules, in_list: true,
-       description: "Rules over contacts and their records, or the rows of a saved query (refreshed when used and on its schedule)"}
+    - {name: source, type: select, options: [Rules, Query, List], default: Rules, in_list: true,
+       description: "Rules over contacts and their records, the rows of a saved query (refreshed when used and on its schedule), or a fixed list of contacts that another app made for one send (never refreshed)"}
     - {name: query, type: json, widget: studio_query, visible_if: "doc.source == 'Query'", required_if: "doc.source == 'Query'",
        description: "A query of rows (its entity and filters; grouping and totals are refused)"}
     - {name: query_person_field, type: data, max_length: 100, visible_if: "doc.source == 'Query'", label: Column Naming The Person,

@@ -30,6 +30,7 @@ async fn scenario() {
     send_time(&t, &mgr).await;
     provider_notices(&t, &mgr).await;
     designs(&t, &mgr).await;
+    one_issue(&t, &mgr).await;
 }
 
 async fn settings_of(t: &T) -> Uuid {
@@ -705,4 +706,46 @@ async fn designs(t: &T, mgr: &Ctx) {
     // a_marketing_user_cannot_design_someone_elses_campaign
     let uma = t.person("drafter@acme.test", "Campaign Drafter", json!([{"entity": "EmailCampaign", "read": true, "write": true, "create": true, "if_owner": true}])).await;
     refused(t.k.update(&uma, "EmailCampaign", c, obj(json!({"design": design("Mine", "https://shop.test/sale")})), None).await);
+}
+
+
+/// interapp: another app's one composed message to named people, once under a topic.
+async fn one_issue(t: &T, mgr: &Ctx) {
+    for e in ["in1@n.test", "in2@n.test", "in3@n.test"] {
+        t.insert(mgr, "MarketingContact", json!({"email": e})).await;
+    }
+    let out = uid(&t.contact("in2@n.test").await);
+    t.update(mgr, "MarketingContact", out, json!({"consent_status": "Unsubscribed"})).await;
+    t.insert(mgr, "EmailSuppression", json!({"email": "in3@n.test", "reason": "Manual"})).await;
+    let topic = uid(&t.insert(mgr, "MarketingTopic", json!({"topic_name": "Weekly", "category": "Promotional"})).await);
+    let call = |key: &str, reference: &str, ctx: &Ctx| {
+        let inv = Invocation::new(
+            "campaigns.marketing_topic.send_issue",
+            json!({"id": topic.to_string(), "params": {"reference": reference, "subject": "The week", "body": "Hello\n\nNews {{ x }}", "recipients": "in1@n.test\nin2@n.test, in3@n.test\nghost@n.test"}}),
+        )
+        .key(key);
+        let (k, ctx) = (t.k.clone(), ctx.clone());
+        async move { k.invoke(&ctx, inv).await }
+    };
+    let first = call("issue-1", "week-1", mgr).await.expect("sent");
+    assert_eq!((first.result["accepted"].as_i64(), first.result["skipped"].as_i64()), (Some(1), Some(3)), "{:?}", first.result);
+    // the same reference again, under another key, is not sent again
+    let again = call("issue-2", "week-1", mgr).await.expect("answered");
+    assert_eq!(again.result["campaign"], first.result["campaign"]);
+    assert_eq!(again.result["repeated"], json!(true));
+    let made: i64 = t.scalar("select count(*) from e_email_campaign where tenant_id = $1 and campaign_name like 'Issue Weekly:%' and $2::uuid is null", None).await;
+    assert_eq!(made, 1);
+    t.maint().await;
+    let campaign = first.result["campaign"].as_str().unwrap().parse::<Uuid>().unwrap();
+    assert_eq!(mailed(t, campaign).await, ["in1@n.test"], "only the one who may be mailed under the topic");
+    let body: String = t
+        .scalar(&format!("select c.content from e_campaign_recipient r join e_communication c on c.id = r.communication where r.tenant_id = $1 and r.campaign = '{campaign}' and $2::uuid is null"), None)
+        .await;
+    assert!(body.contains("&#123;&#123; x }}") || body.contains("{{ x }}") == false, "text is never a template: {body}");
+    // someone who may only read topics cannot send
+    let reader = t.person("topics@acme.test", "Topic Reader", json!([{"entity": "MarketingTopic", "read": true}])).await;
+    assert!(call("issue-3", "week-2", &reader).await.is_err());
+    // a topic that is turned off is refused, and the reference stays free
+    t.update(mgr, "MarketingTopic", topic, json!({"enabled": false})).await;
+    assert!(call("issue-4", "week-3", mgr).await.is_err());
 }

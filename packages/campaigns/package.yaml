@@ -121,4 +121,4 @@ connections:
             email: {at: /msys/message_event/rcpt_to, required: true}
             message_id: /msys/message_event/message_id
             reason: /msys/message_event/raw_reason
-export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]
+export_tables: [campaigns_issue, campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]
