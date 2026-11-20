@@ -823,7 +823,7 @@ pub fn touched(doc: &Doc) -> Vec<(String, String)> {
 
 /// Refuses a segment whose rules read what the caller may not: counts and samples would reveal it (S9 T9). A query
 /// segment is read through the same right a save needs (the rows must be readable). The workspace's own work is not asked.
-pub async fn check_readable(k: &Kernel, ctx: &Ctx, doc: &Doc) -> Result<()> {
+pub async fn check_readable(k: &Kernel, ctx: &Ctx, doc: &Doc, saving: bool) -> Result<()> {
     if ctx.is_system {
         return Ok(());
     }
@@ -831,7 +831,8 @@ pub async fn check_readable(k: &Kernel, ctx: &Ctx, doc: &Doc) -> Result<()> {
         ctx.require(&entity, ferrum_kernel::Action::Read)?;
         ferrum_domain::reports::readable_choice(ctx, &entity, &field)?;
     }
-    if let (Some("Query"), Ok((entity, filters))) = (s(doc, "source"), query_of(doc, &ctx.schema)) {
+    // A query's rows are read by whoever saves it; a reader of the saved segment is told its counts, as before.
+    if let (true, Some("Query"), Ok((entity, filters))) = (saving, s(doc, "source"), query_of(doc, &ctx.schema)) {
         let q = ListQuery { filters: ferrum_kernel::query::parse_filters(&filters)?, limit: Some(1), ..Default::default() };
         k.list(ctx, &entity, &q).await.map_err(|e| Error::field("query", format!("you cannot read these records: {e}")))?;
     }
@@ -846,7 +847,7 @@ impl DocHook for SegmentHook {
         parse(doc, &hc.ctx.schema).map_err(Error::Validation)?;
         // Who saves a segment must be able to read everything its rules read (a query's rows too); it is then worked
         // out as the workspace.
-        check_readable(hc.kernel, hc.ctx, doc).await
+        check_readable(hc.kernel, hc.ctx, doc, true).await
     }
 
     async fn action(&self, hc: &mut HookCtx<'_>, name: &str, doc: &Doc, params: &Value) -> Result<Option<Value>> {
@@ -854,7 +855,7 @@ impl DocHook for SegmentHook {
             // What is in the segment now, counted in a read-only transaction: nothing is stored (a reader presses it).
             // A query's rows are read as they are now; its membership and counts are the refresh's.
             "preview" => {
-                check_readable(hc.kernel, hc.ctx, doc).await?;
+                check_readable(hc.kernel, hc.ctx, doc, false).await?;
                 let seg = if s(doc, "source") == Some("Query") {
                     let ids = query_contacts(hc.kernel, &sys(hc.ctx), hc.tx, doc, hc.kernel.db.config.statement_timeout_ms).await?;
                     Segment { all: true, rules: vec![Rule::Contacts(ids)] }
@@ -884,7 +885,7 @@ impl DocHook for SegmentHook {
                     return Err(Error::field("rules", "send the rules as a list"));
                 }
                 let candidate = values([("match_type", params.get("match_type").cloned().unwrap_or_else(|| json!("All"))), ("rules", rules.clone())]);
-                check_readable(hc.kernel, hc.ctx, &candidate).await?;
+                check_readable(hc.kernel, hc.ctx, &candidate, false).await?;
                 let seg = parse(&candidate, &hc.ctx.schema).map_err(Error::Validation)?;
                 let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
                 Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "sample": sample})))

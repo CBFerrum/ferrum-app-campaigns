@@ -913,7 +913,13 @@ async fn scenario() {
     // ───────────── CRM's attribution: the email's clicks are its CRM campaign's touches ─────────────
     // Chen clicked the spring email; a deal won from a lead at that address is the spring
     // campaign's in CRM, under every model. Asha clicked too, but has no deal.
-    let lead = uid(&t.insert(&admin, "Lead", json!({"first_name": "Chen", "last_name": "Li", "email": "chen@x.test", "company": company.to_string()})).await);
+    let lead = uid(&t
+        .insert(
+            &admin,
+            "Lead",
+            json!({"first_name": "Chen", "last_name": "Li", "email": "chen@x.test", "company": company.to_string(), "allow_duplicate": true}),
+        )
+        .await);
     let made = t.action(&admin, "Lead", lead, "make_opportunity", json!({})).await;
     let deal: Uuid = made["id"].as_str().unwrap().parse().unwrap();
     let won = t.list("SalesStage", json!({"stage_name": "Won"})).await;
