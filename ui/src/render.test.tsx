@@ -91,6 +91,8 @@ const check: AudienceCheck = {
   mailable: 100,
   left_out: { pending: 2, unsubscribed: 10, bounced: 3, complained: 1, suppressed: 4 },
   excluded: 7,
+  capped: 0,
+  send_time: { mode: "At Once", with_zone: 0, with_best_hour: 0 },
   new_contacts: 3,
   rows: [
     { kind: "segment", id: "s1", name: "Pune customers", exclude: false, contacts: 120, mailable: 100 },
@@ -137,6 +139,20 @@ describe("the campaign screens, drawn from real answers", () => {
       expect(html).toContain(text);
     }
     expect(html).not.toContain("undefined");
+  });
+
+  it("offers each person's own send time, with who has a zone, and not under an A/B test", () => {
+    const zoned = { ...check, send_time: { mode: "Local Time" as const, with_zone: 40, with_best_hour: 10 } };
+    const html = render(<ReviewTab draft={draft({ ...campaign, send_time: "Local Time", ab_test: false })} editable canSubmit canCancel go={() => {}} onTest={() => {}} onCancel={() => {}} />, (qc) => qc.setQueryData(["campaigns", "check", "c1", 4], zoned));
+    for (const text of ["Each person gets it", "At this clock time in their own time zone", "At the hour they usually open", "40 of 100 people have a time zone", "within a day of the start"]) expect(html).toContain(text);
+    const ab = render(<ReviewTab draft={draft()} editable canSubmit canCancel go={() => {}} onTest={() => {}} onCancel={() => {}} />, (qc) => qc.setQueryData(["campaigns", "check", "c1", 4], check));
+    expect(ab).toContain("disabled");
+    expect(ab).toContain("An A/B test&#x27;s shares go out together.");
+  });
+
+  it("says how many are at the frequency cap", () => {
+    const html = render(<ReviewTab draft={draft()} editable canSubmit canCancel go={() => {}} onTest={() => {}} onCancel={() => {}} />, (qc) => qc.setQueryData(["campaigns", "check", "c1", 4], { ...check, capped: 12 }));
+    expect(html).toContain("12 people are at the frequency cap now and would be left out.");
   });
 
   it("does not let a person without the right to send do it, and says who can", () => {
@@ -259,6 +275,17 @@ describe("the pages, drawn from a record in the cache", () => {
     const html = page("/c/c1", sent);
     expect(html).toContain("Duplicate");
     expect(html).toContain("Loading…");
+  });
+
+  it("draws a paused campaign with why, and the way to resume for who may send", () => {
+    const paused = { ...campaign, docstatus: 1, status: "Paused" as const, started_at: "2026-11-01T10:00:00Z", paused_at: "2026-11-01T11:00:00Z", pause_cause: "Complaints" as const, pause_rate: "1.20" };
+    const html = page("/c/c1", paused);
+    expect(html).toContain("Paused: spam complaints reached 1.20% of what was sent.");
+    expect(html).toContain("Resume sending");
+    expect(html).toContain("Stop sending");
+    const reader = page("/c/c1", paused, perms({ submit: "none" }));
+    expect(reader).toContain("Paused: spam complaints");
+    expect(reader).not.toContain("Resume sending");
   });
 
   it("opens a cancelled campaign with a way to start again", () => {

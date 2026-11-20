@@ -4,7 +4,8 @@
 import { moment, rate } from "./format";
 import { t } from "@ferrum/client";
 
-export type Status = "Draft" | "Scheduled" | "Sending" | "Sent" | "Cancelled";
+export type Status = "Draft" | "Scheduled" | "Sending" | "Paused" | "Sent" | "Cancelled";
+export type SendTime = "At Once" | "Local Time" | "Best Hour";
 export type Tone = "neutral" | "blue" | "green" | "amber" | "red";
 
 export interface AudienceRow {
@@ -40,6 +41,8 @@ export interface Campaign {
   text_content?: string | null;
   audience: AudienceRow[];
   schedule_at?: string | null;
+  send_time?: SendTime | null;
+  channel?: string | null;
   hourly_limit?: number | null;
   track_opens: boolean;
   track_clicks: boolean;
@@ -65,6 +68,11 @@ export interface Campaign {
   started_at?: string | null;
   finished_at?: string | null;
   last_error?: string | null;
+  paused_at?: string | null;
+  pause_cause?: "Complaints" | "Hard Bounces" | null;
+  pause_rate?: string | number | null;
+  resumed_at?: string | null;
+  resumed_by?: string | null;
   created_at?: string;
   updated_at?: string;
   _titles?: Record<string, string>;
@@ -79,11 +87,12 @@ export const STATUS_FILTERS: { id: "" | Status; label: string }[] = [
   { id: "Draft", get label() { return t("Drafts"); } },
   { id: "Scheduled", get label() { return t("Scheduled"); } },
   { id: "Sending", get label() { return t("Sending"); } },
+  { id: "Paused", get label() { return t("Paused"); } },
   { id: "Sent", get label() { return t("Sent"); } },
   { id: "Cancelled", get label() { return t("Cancelled"); } },
 ];
 
-export const isStatus = (v: string | null | undefined): v is Status => ["Draft", "Scheduled", "Sending", "Sent", "Cancelled"].includes(v ?? "");
+export const isStatus = (v: string | null | undefined): v is Status => ["Draft", "Scheduled", "Sending", "Paused", "Sent", "Cancelled"].includes(v ?? "");
 
 /** The `filters` of the list query for a status chip. */
 export function listFilters(status: string): string | undefined {
@@ -99,6 +108,7 @@ export function tone(status: string | null | undefined): Tone {
     case "Sent":
       return "green";
     case "Cancelled":
+    case "Paused":
       return "red";
     default:
       return "neutral";
@@ -122,7 +132,7 @@ export function progress(c: Pick<Campaign, "total_recipients" | "sent_count" | "
 export const isDraft = (c: Pick<Campaign, "docstatus">): boolean => c.docstatus === 0;
 
 /** Whether there is anything to look at: sending has begun, or did before it was stopped. */
-export const hasResults = (c: Pick<Campaign, "status" | "started_at">): boolean => c.status === "Sending" || c.status === "Sent" || !!c.started_at;
+export const hasResults = (c: Pick<Campaign, "status" | "started_at">): boolean => c.status === "Sending" || c.status === "Paused" || c.status === "Sent" || !!c.started_at;
 
 export type Tab = "setup" | "content" | "review" | "results";
 export const TABS: Tab[] = ["setup", "content", "review", "results"];
@@ -131,17 +141,19 @@ export const isTab = (v: string | null | undefined): v is Tab => TABS.includes(v
 /** Where a campaign opens: a draft to work on, a scheduled one to check, a sent one to judge. */
 export function defaultTab(c: Pick<Campaign, "status" | "started_at">): Tab {
   if (c.status === "Scheduled") return "review";
-  if (c.status === "Sending" || c.status === "Sent") return "results";
+  if (c.status === "Sending" || c.status === "Paused" || c.status === "Sent") return "results";
   return c.status === "Cancelled" && c.started_at ? "results" : "setup";
 }
 
 /** One line of when: what it is waiting for, or what it did. */
-export function whenLine(c: Pick<Campaign, "status" | "schedule_at" | "started_at" | "finished_at">, locale?: string): string {
+export function whenLine(c: Pick<Campaign, "status" | "schedule_at" | "started_at" | "finished_at" | "paused_at">, locale?: string): string {
   switch (c.status) {
     case "Scheduled":
       return c.schedule_at ? t("Scheduled for {value}", { value: moment(c.schedule_at, locale) }) : t("Scheduled: starts within a minute");
     case "Sending":
       return t("Sending since {value}", { value: moment(c.started_at, locale) });
+    case "Paused":
+      return t("Paused since {value}", { value: moment(c.paused_at ?? c.started_at, locale) });
     case "Sent":
       return t("Sent {value}", { value: moment(c.finished_at ?? c.started_at, locale) });
     case "Cancelled":
@@ -215,6 +227,7 @@ export function duplicateBody(c: Campaign): Record<string, unknown> {
     text_content: c.text_content ?? null,
     audience: audienceForSave(c.audience.map(({ id: _id, ...row }) => row)),
     hourly_limit: c.hourly_limit ?? 0,
+    send_time: c.ab_test ? "At Once" : (c.send_time ?? "At Once"),
     track_opens: c.track_opens,
     track_clicks: c.track_clicks,
     ab_test: c.ab_test,

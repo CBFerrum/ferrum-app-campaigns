@@ -7,6 +7,8 @@ const check = (over: Partial<AudienceCheck> = {}): AudienceCheck => ({
   mailable: 100,
   left_out: { pending: 2, unsubscribed: 10, bounced: 3, complained: 0, suppressed: 5 },
   excluded: 7,
+  capped: 0,
+  send_time: { mode: "At Once", with_zone: 0, with_best_hour: 0 },
   new_contacts: 0,
   rows: [],
   split: null,

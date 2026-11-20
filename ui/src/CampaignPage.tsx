@@ -21,7 +21,7 @@ import { useDraft } from "./useDraft";
 import { Problem, SaveLine } from "./ui";
 
 /** Which tab a field is on, for the count of what could not be saved. */
-const TAB_OF: Record<string, Tab> = { content: "content", text_content: "content", schedule_at: "review" };
+const TAB_OF: Record<string, Tab> = { content: "content", text_content: "content", schedule_at: "review", send_time: "review" };
 
 export function CampaignRoute() {
   const { id = "" } = useParams();
@@ -70,7 +70,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   };
 
   const stop = async () => {
-    const sending = doc.status === "Sending";
+    const sending = doc.status === "Sending" || doc.status === "Paused";
     const ok = await confirmDialog({
       title: sending ? tr("Stop sending?") : tr("Cancel this send?"),
       message: sending ? tr("Emails still waiting will not go out. Emails that have already gone cannot be taken back.") : tr("It will not be sent. You can amend it afterwards to start again from a copy."),
@@ -82,6 +82,23 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
     try {
       refresh(await api.post<Campaign>(docPath("EmailCampaign", id, "cancel"), undefined, { ifMatch: doc.version }));
       toast(sending ? tr("Stopped") : tr("Cancelled"));
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  };
+  const resume = async () => {
+    const ok = await confirmDialog({
+      title: tr("Send the rest?"),
+      message: tr("The automatic pause will not stop this campaign again."),
+      confirmLabel: tr("Resume sending"),
+      cancelLabel: tr("Keep it paused"),
+    });
+    if (!ok) return;
+    try {
+      await api.post(docPath("EmailCampaign", id, "actions", "resume"), {});
+      toast(tr("Sending again"));
+      void qc.invalidateQueries({ queryKey: keys.campaign(id) });
+      void qc.invalidateQueries({ queryKey: keys.list });
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -122,7 +139,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
   for (const f of Object.keys(draft.fieldErrors)) failed[TAB_OF[f] ?? "setup"]++;
   for (const r of draft.rowErrors) failed[r.field === "content" ? "content" : "setup"]++;
 
-  const scheduledOrOn = doc.status === "Scheduled" || doc.status === "Sending";
+  const scheduledOrOn = doc.status === "Scheduled" || doc.status === "Sending" || doc.status === "Paused";
   const tabs = [
     { id: "setup", label: <>{tr("Setup")}{failed.setup > 0 && <span className="tab-errors">{failed.setup}</span>}</> },
     { id: "content", label: <>{tr("Content")}{failed.content > 0 && <span className="tab-errors">{failed.content}</span>}</> },
@@ -162,7 +179,7 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
             )}
             {scheduledOrOn && canCancel && (
               <Button variant="danger" onClick={() => void stop()}>
-                {doc.status === "Sending" ? tr("Stop sending") : tr("Cancel the send")}
+                {doc.status === "Sending" || doc.status === "Paused" ? tr("Stop sending") : tr("Cancel the send")}
               </Button>
             )}
             {doc.status === "Sent" && canCreate && (
@@ -214,6 +231,13 @@ function CampaignPage({ id, meta }: { id: string; meta: EntityMeta }) {
           }
         >
           {placed(tr("{p1} You both changed {p2}. Keep what you wrote on top of theirs, or use theirs and lose your changes."), { p1: <strong>{tr("Someone else changed this campaign.")}</strong>, p2: draft.theirs.length ? draft.theirs.map((f) => humanize(f).toLowerCase()).join(", ") : tr("it") })}
+        </Alert>
+      )}
+      {doc.status === "Paused" && (
+        <Alert tone="warning" action={canSubmit ? <Button variant="primary" onClick={() => void resume()}>{tr("Resume sending")}</Button> : undefined}>
+          {doc.pause_cause === "Hard Bounces"
+            ? tr("Paused: addresses that do not exist reached {rate}% of what was sent.", { rate: isolate(String(doc.pause_rate ?? "")) })
+            : tr("Paused: spam complaints reached {rate}% of what was sent.", { rate: isolate(String(doc.pause_rate ?? "")) })}
         </Alert>
       )}
       {!editable && doc.docstatus === 0 && <Alert tone="info">{tr("You can look at this campaign but not change it.")}</Alert>}

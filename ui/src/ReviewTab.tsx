@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { api, docPath, errorMessage, t as tr, isolate } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, Icon, toast, placed, ListSkeleton } from "@ferrum/kit";
-import { type Campaign, type Tab } from "./campaign";
+import { type Campaign, type SendTime, type Tab } from "./campaign";
 import { checkAudience, keys, whole } from "./data";
 import { clock, count, fromLocalInput, moment, toLocalInput, zoneName } from "./format";
 import { type AudienceCheck, canSend, changedSince, type Finding, findings, leftOut, linksIn, type Level } from "./review";
@@ -324,6 +324,32 @@ export function ReviewTab({
                     )}
                     {later && !future && <p className="field-hint">{tr("Pick a time to come. A time that has passed starts it right away.")}</p>}
                   </fieldset>
+                  {(doc.channel ?? "Email") === "Email" && (
+                    <div className="field">
+                      <label className="field-label" htmlFor="cm-send-time">{tr("Each person gets it")}</label>
+                      <select
+                        id="cm-send-time"
+                        className="input"
+                        disabled={doc.ab_test}
+                        value={doc.ab_test ? "At Once" : (doc.send_time ?? "At Once")}
+                        onChange={(e) => draft.set("send_time", e.target.value as SendTime)}
+                      >
+                        <option value="At Once">{tr("At once")}</option>
+                        <option value="Local Time">{tr("At this clock time in their own time zone")}</option>
+                        <option value="Best Hour">{tr("At the hour they usually open")}</option>
+                      </select>
+                      <p className="field-hint">
+                        {doc.ab_test
+                          ? tr("An A/B test's shares go out together.")
+                          : doc.send_time === "Local Time"
+                            ? tr("{count} of {total} people have a time zone; the others get it by the workspace's clock.", { count: count(check.send_time?.with_zone ?? 0), total: count(check.mailable) })
+                            : doc.send_time === "Best Hour"
+                              ? tr("{count} of {total} people have opened enough to have a usual hour; the others get it at the start.", { count: count(check.send_time?.with_best_hour ?? 0), total: count(check.mailable) })
+                              : ""}
+                        {!doc.ab_test && doc.send_time && doc.send_time !== "At Once" && <> {tr("Everyone has it within a day of the start.")}</>}
+                      </p>
+                    </div>
+                  )}
                   {problem && <Alert tone="error">{isolate(problem)}</Alert>}
                   {!canSend(items) && <p className="field-error">{tr("Fix what is marked above first.")}</p>}
                   <div className="row">
