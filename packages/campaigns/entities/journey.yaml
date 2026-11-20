@@ -79,10 +79,31 @@
     - {name: attributed_orders, type: int, read_only: true, no_copy: true, description: "Purchases whose last touch was one of this journey's emails"}
     - {name: attributed_revenue, type: decimal, read_only: true, no_copy: true}
   actions:
-    - {name: activate, label: Activate, permission: write, condition: "doc.status == 'Draft' || doc.status == 'Paused'"}
-    - {name: pause, label: Pause, permission: write, condition: "doc.status == 'Active'"}
-    - {name: stop, label: Stop, permission: write, condition: "doc.status == 'Active' || doc.status == 'Paused'",
-       confirm: "Contacts still in the journey leave it and it cannot be restarted. Continue?"}
+    - name: activate
+      label: Activate
+      permission: write
+      condition: "doc.status == 'Draft' || doc.status == 'Paused'"
+      contract:
+        effect: transactional_action
+        completion: "The journey is Active: contacts enter on its trigger and move through its steps at the next upkeep round"
+        returns: {type: object, properties: {status: {type: string}}}
+    - name: pause
+      label: Pause
+      permission: write
+      condition: "doc.status == 'Active'"
+      contract:
+        effect: transactional_action
+        completion: "The journey is Paused: nobody enters and nobody moves until it is activated again; whoever is in it stays"
+        returns: {type: object, properties: {status: {type: string}}}
+    - name: stop
+      label: Stop
+      permission: write
+      condition: "doc.status == 'Active' || doc.status == 'Paused'"
+      confirm: "Contacts still in the journey leave it and it cannot be restarted. Continue?"
+      contract:
+        effect: transactional_action
+        completion: "The journey is Stopped for good and every contact still in it has left it"
+        returns: {type: object, properties: {status: {type: string}}}
   form:
     - {label: Journey, fields: [journey_name, status, email_account, track_opens, track_clicks]}
     - {label: Trigger, fields: [trigger_type, trigger_rule, trigger_group, trigger_segment, trigger_attribute, trigger_value, anniversary_offset_days, include_existing, allow_reentry,
@@ -120,5 +141,12 @@
   unique: [[journey, contact, trigger_key]]
   indexes: [[status, next_run_at]]
   actions:
-    - {name: exit_journey, label: Take Out Of Journey, permission: write, condition: "doc.status == 'Active'"}
+    - name: exit_journey
+      label: Take Out Of Journey
+      permission: write
+      condition: "doc.status == 'Active'"
+      contract:
+        effect: transactional_action
+        completion: "The contact has left this journey and is not moved again"
+        returns: {type: object, properties: {status: {type: string}, exit_reason: {type: string}, finished_at: {type: string}}}
   list: {columns: [email, journey, status, current_step, next_run_at], sort: email asc}

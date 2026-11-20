@@ -90,9 +90,31 @@
   actions:
     # The campaign page shows a preview itself; the records form would only throw its answer away.
     - {name: preview, label: Preview, permission: read, read_only: true, hidden: true}
-    - {name: send_seed, label: Send To Seed List, permission: write, docstatus: [0, 1]}
-    - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1],
-       params: [{name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}]}
+    - name: send_seed
+      label: Send To Seed List
+      permission: write
+      docstatus: [0, 1]
+      params:
+        - {name: variant, label: Version, type: data, description: "The letter of an A/B version; blank = the campaign's own"}
+        - {name: contact, label: Shown As, type: link, to: MarketingContact, description: "The contact whose values fill the email; blank = a stand-in"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "The campaign, as recipients get it, is handed to the Mail app for each seed address; Mail delivers it after this commits and its Communication records say what became of each"
+        returns: {type: object, properties: {sent: {type: integer}, communications: {type: array, items: {type: string}}}}
+    - name: send_test
+      label: Send Test Email
+      permission: write
+      docstatus: [0, 1]
+      params:
+        - {name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}
+        - {name: variant, label: Version, type: data, description: "The letter of an A/B version; blank = the campaign's own"}
+        - {name: contact, label: Shown As, type: link, to: MarketingContact, description: "The contact whose values fill the email; blank = a stand-in"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "The email, marked as a test, is handed to the Mail app for each address; Mail delivers it after this commits and its Communication records say what became of each"
+        returns: {type: object, properties: {sent: {type: integer}, communications: {type: array, items: {type: string}}}}
     # For the campaign screens (they call these, nobody clicks them): who it would reach if it started now, and what
     # happened to what was sent, by hour or day.
     - name: audience_check

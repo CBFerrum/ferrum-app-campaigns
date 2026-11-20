@@ -33,7 +33,15 @@
     - {name: attribution_touch, type: select, options: [Clicks, Clicks and Opens], default: Clicks,
        description: "What is a touch: a click on a link, or also an open (automatic opens never count)"}
   actions:
-    - {name: rotate_webhook_secret, label: New Webhook Secret, permission: write, confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"}
+    - name: rotate_webhook_secret
+      label: New Webhook Secret
+      permission: write
+      confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"
+      contract:
+        effect: transactional_action
+        completion: "A new webhook secret is stored; webhooks signed with the previous one are refused from now on"
+        returns: {type: object, properties: {secret: {type: string}, path: {type: string}, url: {type: string}, note: {type: string}}}
+        answer_once: {fields: [secret], then: "Make a new secret with New Webhook Secret"}
   form:
     - {label: Compliance, fields: [postal_address]}
     - {label: Deliverability, fields: [hourly_limit, soft_bounce_limit, pause_complaint_percent, pause_bounce_percent, pause_after_sent, webhook_secret]}
@@ -187,7 +195,14 @@
   actions:
     # Counts what is in the segment now and stores nothing, so a reader may press it. Refresh works the membership out
     # again and stores it with the counts.
-    - {name: preview, label: Preview, permission: read, read_only: true}
+    - name: preview
+      label: Preview
+      permission: read
+      read_only: true
+      contract:
+        effect: query
+        completion: "How many contacts are in the segment now and how many can be emailed, with the first twenty by address; nothing is stored"
+        returns: {type: object, properties: {contact_count: {type: integer}, mailable_count: {type: integer}, counted_at: {type: string}, sample: {type: array, items: {type: object}}}}
     - name: refresh
       label: Refresh
       permission: write
@@ -242,7 +257,13 @@
     - {name: unsubscribed_count, type: int, label: Opt-outs Recorded, read_only: true, no_copy: true}
     - {name: invalid_count, type: int, label: Skipped (No Valid Email), read_only: true, no_copy: true}
   actions:
-    - {name: run_import, label: Run Import, permission: write}
+    - name: run_import
+      label: Run Import
+      permission: write
+      contract:
+        effect: transactional_action
+        completion: "Each address of the source that is not a contact yet is one now, opt-outs recorded as unsubscribed, and the counts say how many of each"
+        returns: {type: object, properties: {status: {type: string}, created_count: {type: integer}, existing_count: {type: integer}, unsubscribed_count: {type: integer}, invalid_count: {type: integer}}}
   list: {columns: [import_name, source, status, last_run_at, created_count], sort: import_name asc}
 
 - name: SubscriptionForm
@@ -288,7 +309,13 @@
     - {name: warmup_growth_percent, type: int, default: 50, min: 1, max: 400, label: Daily Growth (%)}
     - {name: warmup_days, type: int, default: 30, min: 1, max: 365, label: Warm-up Days, description: "After these days the domain has no daily limit of its own"}
   actions:
-    - {name: check, label: Check DNS, permission: write}
+    - name: check
+      label: Check DNS
+      permission: write
+      contract:
+        effect: query
+        completion: "The domain's DNS records were read through the Mail app and the verdict is saved on the domain"
+        returns: {type: object, properties: {check_status: {type: string}}}
   form:
     - {label: Domain, fields: [domain, check_status, checked_at]}
     - {label: Records, fields: [spf, dkim, dmarc_policy, aligned, check_notes]}
