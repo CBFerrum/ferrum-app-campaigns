@@ -264,7 +264,7 @@ pub async fn boot(env_var: &str, db_name: &str) -> (T, Ctx, u16) {
             admin_email: "admin@acme.test".into(),
             admin_password: PASSWORD.into(),
             admin_name: None,
-            packages: vec!["core".into(), "comms".into(), "campaigns".into(), "selling".into()],
+            packages: ["core", "comms", "campaigns", "selling", "crm", "campaigns_crm"].iter().map(|p| p.to_string()).collect(),
             settings: Some(json!({"timezone": "UTC"})),
         })
         .await

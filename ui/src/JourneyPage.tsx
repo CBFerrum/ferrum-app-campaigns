@@ -2,7 +2,7 @@
 // step, a panel for the selected step, and, once it runs, how many people reached each step and are on it now.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, ApiError, docPath, errorMessage, isolate, t as tr } from "@ferrum/client";
 import { Alert, Badge, Button, confirmDialog, FormSkeleton, Menu, MenuItem, SaveStatus, toast, useShellTitle } from "@ferrum/kit";
@@ -329,7 +329,7 @@ function JourneyPage({ id, meta }: { id: string; meta: EntityMeta }) {
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
   return (
     <label className="field cm-bd-field">
       <span className="field-label">{label}</span>

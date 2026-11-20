@@ -104,7 +104,9 @@ connections:
     label: "SparkPost: bounces and complaints"
     description:
       apps: [campaigns]
-      meta: {label: "SparkPost: bounces and complaints"}
+      # unverified: the bounce class numbers below are from memory (SparkPost's pages list none, read 21 Nov 2026), and the
+      # header its Basic credentials arrive in is assumed to be Authorization. They are data: change them here, not in Rust.
+      meta: {label: "SparkPost: bounces and complaints", unverified: true, notes: "Bounce classes 10 and 30 are taken as hard and 20 to 24 and 70 as soft, from memory; any other class is kept and ignored. The credentials header is assumed to be Authorization. Check both against your account."}
       inbound:
         verify: {type: token, header: authorization, secret: authorization}
         delivery_header: x-messagesystems-batch-id

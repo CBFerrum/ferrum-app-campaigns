@@ -1,15 +1,26 @@
 package: campaigns_crm
-version: 0.1.0
+version: 0.2.0
 label: Campaigns and CRM
 description: An email campaign belongs to one of CRM's campaigns, and the clicks on it from a lead's or a contact's address count toward that campaign in CRM's Campaign Attribution.
 depends: [campaigns, crm]
 field_prefix: crm_
+
+# CRM's operation it calls through the platform's gate (src/crm.rs), at the versions it was built for.
+uses:
+  - {capability: crm.lead.record_engagement, version: "^0.13"}
 
 overlays:
   - entity: EmailCampaign
     ops:
       - {op: add_field, column: true, after: campaign_name, field: {name: crm_campaign, type: link, to: Campaign, label: CRM Campaign, in_filter: true,
           description: "The CRM campaign this email is part of: clicks on it from a lead's or a contact's address, before their deal is won, count toward it in CRM's Campaign Attribution"}}
+
+  - entity: CampaignRecipient
+    ops:
+      - {op: add_field, column: true, field: {name: crm_open_told_at, type: datetime, read_only: true, hidden: true, no_copy: true,
+          description: "When this email's first open was told to CRM"}}
+      - {op: add_field, column: true, field: {name: crm_click_told_at, type: datetime, read_only: true, hidden: true, no_copy: true,
+          description: "When this email's first click was told to CRM"}}
 
 roles:
   - name: Marketing User

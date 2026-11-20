@@ -19,7 +19,7 @@ pub(crate) fn remember(site: &Arc<dyn Site>, v: Vault) {
     HANDLES.lock().unwrap_or_else(|e| e.into_inner()).push((address(site), v));
 }
 
-fn handle(k: &Kernel) -> Result<Vault> {
+pub(crate) fn handle(k: &Kernel) -> Result<Vault> {
     let missing =
         || Error::Unavailable("Campaigns was registered without its vault handle: register it as the server does, hooks.app(\"campaigns\", …)".into());
     let at = address(k.hooks.site(crate::util::PACKAGE).ok_or_else(missing)?);

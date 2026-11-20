@@ -32,6 +32,7 @@ async fn scenario() {
     designs(&t, &mgr).await;
     one_issue(&t, &mgr).await;
     the_funnel_says_who_is_in_each_step(&t, &mgr).await;
+    told_to_crm(&t, &mgr).await;
 }
 
 async fn settings_of(t: &T) -> Uuid {
@@ -792,4 +793,66 @@ async fn the_funnel_says_who_is_in_each_step(t: &T, mgr: &Ctx) {
     assert_eq!(rows[1]["here"].as_i64(), Some(0));
     let active: i64 = t.scalar(&format!("select count(*) from e_journey_enrollment where tenant_id = $1 and journey = '{j}' and status = 'Active' and current_step = 1 and $2::uuid is null"), None).await;
     assert_eq!(active, 1);
+}
+
+
+async fn click_of(t: &T, recipient: Uuid, n: i32) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(&t.key().await).unwrap();
+    mac.update(format!("click:{recipient}:{n}").as_bytes());
+    format!("/c/{}.{n}.{}", recipient.simple(), hex::encode(&mac.finalize().into_bytes()[..16]))
+}
+
+async fn open_of(t: &T, recipient: Uuid) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(&t.key().await).unwrap();
+    mac.update(format!("open:{recipient}").as_bytes());
+    format!("/o/{}.{}.gif", recipient.simple(), hex::encode(&mac.finalize().into_bytes()[..16]))
+}
+
+/// campaigns-8: a lead's first open and first click reach CRM through CRM's operation, once.
+async fn told_to_crm(t: &T, mgr: &Ctx) {
+    let inr = &t.list("Currency", json!({"code": "INR"})).await[0];
+    t.insert(&t.admin, "Company", json!({"company_name": "Acme Ltd", "abbr": "AC", "default_currency": inr["id"]})).await;
+    let admin = t.reload(&t.admin).await;
+    let company = uid(&t.list("Company", json!({})).await[0]);
+    let lead = uid(&t.insert(&admin, "Lead", json!({"first_name": "Lia", "last_name": "Park", "email": "lia@crmtold.test", "company": company.to_string()})).await);
+    let imp = uid(&t.insert(mgr, "AudienceImport", json!({"import_name": "Leads", "source": "Lead"})).await);
+    t.action(mgr, "AudienceImport", imp, "run_import", json!({})).await;
+    assert_eq!(t.contact("lia@crmtold.test").await["record_entity"], json!("Lead"));
+    // a contact typed by hand with a lead's address is not a lead's contact
+    t.insert(mgr, "MarketingContact", json!({"email": "hand@crmtold.test"})).await;
+    let aud = at_domain(t, mgr, "crmtold.test").await;
+    let (c, _) = t.send(mgr, campaign("Told", &aud)).await;
+    let lia = t.recipient_of(c, "lia@crmtold.test").await;
+    let hand = t.recipient_of(c, "hand@crmtold.test").await;
+    let engagements = || t.scalar::<i64>(&format!("select count(*) from e_lead_engagement where tenant_id = $1 and lead = '{lead}' and $2::uuid is null"), None);
+    // an_automatic_open_is_not_told
+    t.site_ua("GET", &open_of(t, lia).await, "", "Mozilla/5.0").await;
+    t.maint().await;
+    assert_eq!(engagements().await, 0);
+    // an_open_is_told_once
+    t.site_ua("GET", &open_of(t, lia).await, "", "Mozilla/5.0 (Macintosh) Test").await;
+    t.site_ua("GET", &open_of(t, hand).await, "", "Mozilla/5.0 (Macintosh) Test").await;
+    t.site("GET", &click_of(t, lia, 1).await, "").await;
+    t.maint().await;
+    let r = t.get("CampaignRecipient", lia).await;
+    assert!(r["crm_open_told_at"].is_string() && r["crm_click_told_at"].is_string(), "{r:?}");
+    assert_eq!(engagements().await, 2, "one open and one click");
+    t.maint().await;
+    tokio::join!(t.maint(), t.maint());
+    assert_eq!(engagements().await, 2, "told once however many rounds run");
+    let receipts: i64 = t.scalar("select count(*) from logic_effect where tenant_id = $1 and effect_key like 'campaigns:engage:%' and $2::uuid is null", None).await;
+    assert_eq!(receipts, 2);
+    // a_contact_that_is_not_a_lead_is_not_told
+    assert!(t.get("CampaignRecipient", hand).await["crm_open_told_at"].is_null());
+    // a_deleted_lead_is_marked_and_left
+    let lia2 = uid(&t.insert(mgr, "MarketingContact", json!({"email": "lia2@crmtold.test"})).await);
+    let gone = uid(&t.insert(&admin, "Lead", json!({"first_name": "Gone", "last_name": "Soon", "email": "gone@crmtold.test", "company": company.to_string()})).await);
+    let gone_contact = uid(&t.insert(&admin, "MarketingContact", json!({"email": "gone@crmtold.test", "record_entity": "Lead", "record_id": gone.to_string()})).await);
+    let (c2, _) = t.send(mgr, campaign("Told 2", &aud)).await;
+    let gr = t.recipient_of(c2, "gone@crmtold.test").await;
+    t.k.delete(&admin, "Lead", gone, None).await.expect("deleted");
+    t.site_ua("GET", &open_of(t, gr).await, "", "Mozilla/5.0 (Macintosh) Test").await;
+    t.maint().await;
+    assert!(t.get("CampaignRecipient", gr).await["crm_open_told_at"].is_string(), "marked, so it is not asked for ever");
+    let _ = (lia2, gone_contact);
 }

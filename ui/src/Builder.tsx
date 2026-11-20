@@ -2,7 +2,7 @@
 // fields. Every change is a new tree handed to `onChange`; the server makes the HTML from it. A block is moved by its
 // grip (drag), by Alt+Up and Alt+Down, or from its menu; each move is announced.
 
-import { useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { t as tr, isolate } from "@ferrum/client";
 import { announce, Button, confirmDialog, Menu, MenuItem, richTextToPlain, sanitizeRichText } from "@ferrum/kit";
 import {
@@ -67,7 +67,7 @@ export function blockName(b: Block): string {
 const same = (a: At | null, b: At) => !!a && a.row === b.row && a.column === b.column && a.index === b.index;
 const key = (at: At) => `${at.row}-${at.column}-${at.index}`;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field cm-bd-field">
       <span className="field-label">{label}</span>
@@ -233,7 +233,7 @@ export function Builder({ design, onChange, editable, refused }: { design: Desig
     edit(removeRow(design, i), null);
   };
 
-  const onKey = (e: React.KeyboardEvent, at: At) => {
+  const onKey = (e: KeyboardEvent, at: At) => {
     if (!editable) return;
     if (e.altKey && e.key === "ArrowUp" && at.index > 0) (e.preventDefault(), move(at, { ...at, index: at.index - 1 }));
     else if (e.altKey && e.key === "ArrowDown" && at.index < design.rows[at.row].columns[at.column].blocks.length - 1) (e.preventDefault(), move(at, { ...at, index: at.index + 1 }));

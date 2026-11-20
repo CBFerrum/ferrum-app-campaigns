@@ -12,6 +12,7 @@ mod campaign;
 mod channels;
 mod check;
 mod contact;
+mod crm;
 mod deliverability;
 mod delivery;
 mod events;
@@ -98,6 +99,7 @@ pub async fn maintenance(k: &Kernel, tenant: Uuid) -> Result<()> {
         ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
         ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
         ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
+        ("crm", crm::run(k, &sys).await),
         ("purge", purge(k, tenant).await),
     ];
     for (step, outcome) in steps {
@@ -149,6 +151,9 @@ mod tests {
             let map = d.inbound.as_ref().and_then(|i| i.map.as_ref()).expect("an inbound mapping");
             assert_eq!(map.entity, "DeliveryEvent");
             assert!(map.run_as.is_some() && map.set.is_empty(), "written as the system, and a notice that finds its record changes nothing");
+            if c["name"] == "sparkpost_bounces" {
+                assert_eq!(d.meta.as_ref().and_then(|m| m["unverified"].as_bool()), Some(true), "what was not read on the provider's page says so");
+            }
         }
     }
 
