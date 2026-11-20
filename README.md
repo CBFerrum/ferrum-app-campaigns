@@ -264,7 +264,11 @@ Recipients and enrolments are written by the app only: nobody, administrators in
 | Any app | A journey starts on a record event of any entity; a segment reads any entity's fields | None |
 | Text and chat apps | Through the platform's message templates and channel connections; opt-outs, quiet hours and limits are the platform's | A channel connection to a gateway you configure |
 | Bounce and complaint webhook | One generic signed JSON format, header `x-campaigns-signature` | Your mail provider's events mapped to it |
+| Postmark and SparkPost bounces and complaints | Two connections the package offers (Administration, Connections): the provider posts its own payload to the connection's address, with the secret you stored; each notice becomes one Delivery Event, applied once | A provider account; see "Provider notices" below |
+| One composed message to named people (Intranet's newsletter) | `campaigns.marketing_topic.send_issue`, once per topic and reference, to the addresses that are contacts and may be mailed under the topic | Intranet's connector |
 | REST, MCP, webhooks | Every record and action | API keys |
+
+**Provider notices.** `Postmark: bounces and complaints` and `SparkPost: bounces and complaints` are descriptions of connections, data in the package, not code. Take one up, store its secret named `authorization` (the whole header value the provider will send: for Postmark `Basic ` and the base64 of `user:password`, put in the webhook's address settings; Postmark does not sign), and give the connection's inbound address to the provider. Whoever holds the secret can suppress any address of the workspace: rotate it in Administration, Connections. Postmark's payload was read on its bounce and spam-complaint webhook pages on 18 November 2026. SparkPost's was read on 21 November: its webhook page confirms a batch is a JSON array of `msys.message_event` objects and the batch header `X-MessageSystems-Batch-ID`; its page does not list the bounce class numbers, so only classes 10 and 30 (hard) and 20 to 24 and 70 (soft) are mapped, from memory, and every other class is kept and ignored, and it does not name the header that carries the Basic credentials (taken to be `Authorization`). Check both against your account before relying on them.
 
 **What the tests exercise.** Emails are sent through Mail's accounts to an SMTP server written in the tests that accepts everything, not to a real mail provider. Text and chat-app messages go to a test channel of the platform, not a real gateway. The bounce and complaint webhook is called with the generic JSON format; no mail provider's own events are used.
 
@@ -281,10 +285,10 @@ Compared with Mailchimp, HubSpot Marketing Hub, Klaviyo, Brevo and, as open-sour
 | Segments from rules | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
 | Segments over other business data (orders, deals, tickets) | ✅ | 🟡 | ✅ | ✅ | 🟡 | 🟡 | 🟡 |
 | A/B tests | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Drag-and-drop email builder | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
+| Drag-and-drop email builder | 🟡 | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
 | Automation journeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Journeys started by an event in another system | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Visual canvas for journeys | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| Visual canvas for journeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | SMS campaigns | 🟡 [1] | ✅ | 🟡 | ✅ | ✅ | 🟡 | ❌ |
 | WhatsApp or chat-app campaigns | 🟡 [1] | ❌ | 🟡 | 🟡 | ✅ | ❌ | ❌ |
 | Revenue attribution from orders | ✅ | ✅ | ✅ | ✅ | 🟡 | 🟡 | ❌ |
@@ -295,10 +299,10 @@ Compared with Mailchimp, HubSpot Marketing Hub, Klaviyo, Brevo and, as open-sour
 | One-click unsubscribe headers | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Sending-domain DNS check and warm-up | ✅ | 🟡 | 🟡 | 🟡 | ✅ | ❌ | ❌ |
 | Bounce and complaint handling | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Provider-specific bounce adapters (SES, Postmark and so on) | ❌ | ➖ | ➖ | ➖ | ➖ | ✅ | ✅ |
+| Provider-specific bounce adapters (SES, Postmark and so on) | 🟡 | ➖ | ➖ | ➖ | ➖ | ✅ | ✅ |
 | Transactional email | 🟡 [2] | 🟡 | 🟡 | ✅ | ✅ | 🟡 | ✅ |
 | Built-in CRM and lead scoring | 🟡 [3] | 🟡 | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Frequency capping | ❌ | 🟡 | ✅ | ✅ | 🟡 | ✅ | ❌ |
+| Frequency capping | ✅ | 🟡 | ✅ | ✅ | 🟡 | ✅ | ❌ |
 | One consent record shared with accounting, support and sales | ✅ | ❌ | 🟡 | ❌ | 🟡 | ❌ | ❌ |
 | Self-hosted, open source | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | No per-contact or per-send fee from the vendor | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
@@ -320,12 +324,11 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 
 ### 🚧 Where the leaders are still ahead
 
-- **A drag-and-drop email builder and a visual journey canvas.** Campaigns offers an HTML editor with insertable blocks and a table of steps.
+- **Brand kits, saved blocks and dynamic content in the email builder.** The builder has rows, columns and six block types; it has no brand colours, fonts or saved blocks.
 - **Landing pages, website tracking and pop-up forms.**
-- **Send-time optimisation and delivery in each person's time zone.**
+- **A learned best send time.** Campaigns sends at the same clock time in each person's zone, or at the hour a person opens most (counted from their own opens); it does not model more than that.
 - **Ready-made e-commerce flows** (abandoned cart and the like) and shop connectors.
-- **Provider-specific bounce events** (SES, Postmark, SendGrid, Mailgun) and reputation tools.
-- **Frequency caps and automatic pause on high complaint rates.**
+- **More providers' bounce events** (SES, SendGrid, Mailgun: their signing needs a platform change) and reputation tools.
 
 > [!NOTE]
 > Leader columns are from public product information as of November 2026 and may change. Plans and add-ons differ; check each vendor.
@@ -348,21 +351,21 @@ Notes. 🟡 for a leader means a higher plan, an add-on, a partner, or only part
 ### 🔜 Next up
 
 **Writing**
-- [ ] A drag-and-drop block editor with brand colours, fonts and saved blocks. The most common first-day request.
+- [x] A drag-and-drop block editor (0.8.0). [ ] Brand colours, fonts and saved blocks.
 - [ ] Pick pictures from the brand library (Ferrum Digital Assets).
 - [ ] Dynamic content blocks by segment, attribute or language.
 
 **Journeys**
-- [ ] A visual canvas for journeys.
+- [x] A visual canvas for journeys (0.8.0).
 - [ ] Edit a live journey and version it.
 - [ ] More steps: create a task or lead, notify a person, webhook, random split.
 - [ ] Quiet hours and send windows per step.
 
 **Sending and safety**
-- [ ] Frequency caps and a sunset policy across campaigns and journeys.
-- [ ] Automatic pause when bounce or complaint rates pass a threshold.
-- [ ] Provider adapters for bounce and complaint events (SES, Postmark, SendGrid, Mailgun).
-- [ ] Send-time optimisation and delivery in the recipient's time zone.
+- [x] Frequency caps across campaigns and journeys (0.8.0). [ ] A sunset policy.
+- [x] Automatic pause when bounce or complaint rates pass a threshold (0.8.0; off until a rate is set).
+- [x] Provider adapters for Postmark and SparkPost bounce and complaint events (0.8.0). [ ] SES, SendGrid, Mailgun.
+- [x] Delivery at each person's clock time or usual hour (0.8.0).
 
 ### 🔭 Later
 
