@@ -195,7 +195,12 @@ pub fn mjml(design: &Value) -> Result<String, String> {
         return Err("the page width must be 320 to 800".into());
     }
     let stack = font_stack(&p.font).ok_or("the font must be sans, serif or mono")?;
-    for (what, c) in [("the page background", &p.background), ("the content background", &p.content_background), ("the text colour", &p.text_color), ("the link colour", &p.link_color)] {
+    for (what, c) in [
+        ("the page background", &p.background),
+        ("the content background", &p.content_background),
+        ("the text colour", &p.text_color),
+        ("the link colour", &p.link_color),
+    ] {
         if !colour_ok(c) {
             return Err(format!("{what} must be a colour like #2f5bea"));
         }

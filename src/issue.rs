@@ -45,15 +45,12 @@ async fn send_issue(hc: &mut HookCtx<'_>, topic: &Doc, params: &Value) -> Result
     let topic_id = util::doc_id(topic)?;
     let engine = sys(hc.ctx);
     let text = |k: &str| params.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty());
-    let reference = text("reference").filter(|r| r.chars().count() <= 200).ok_or_else(|| Error::field("reference", "name this issue (at most 200 characters)"))?;
+    let reference =
+        text("reference").filter(|r| r.chars().count() <= 200).ok_or_else(|| Error::field("reference", "name this issue (at most 200 characters)"))?;
     let subject = text("subject").filter(|v| v.chars().count() <= 998).ok_or_else(|| Error::field("subject", "give the subject (at most 998 characters)"))?;
     let body = text("body").filter(|b| b.len() <= MAX_BODY).ok_or_else(|| Error::field("body", "give the text (at most 1 MB)"))?;
-    let addresses: BTreeSet<String> = text("recipients")
-        .unwrap_or_default()
-        .split(['\n', ',', ';'])
-        .map(|a| a.trim().to_lowercase())
-        .filter(|a| !a.is_empty())
-        .collect();
+    let addresses: BTreeSet<String> =
+        text("recipients").unwrap_or_default().split(['\n', ',', ';']).map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()).collect();
     if addresses.is_empty() || addresses.len() > MAX_ADDRESSES {
         return Err(Error::field("recipients", format!("give 1 to {MAX_ADDRESSES} addresses, one a line")));
     }
@@ -90,15 +87,22 @@ async fn send_issue(hc: &mut HookCtx<'_>, topic: &Doc, params: &Value) -> Result
         let name = util::cut(&format!("Issue {}: {reference}", util::s(topic, "topic_name").unwrap_or_default()), 140);
         let segment = util::doc_id(
             &hc.kernel
-                .insert_tx(&engine, hc.tx, "MarketingSegment", values([("segment_name", json!(name)), ("source", json!("List")), ("refresh_minutes", json!(0))]))
+                .insert_tx(
+                    &engine,
+                    hc.tx,
+                    "MarketingSegment",
+                    values([("segment_name", json!(name)), ("source", json!("List")), ("refresh_minutes", json!(0))]),
+                )
                 .await?,
         )?;
-        sqlx::query("insert into campaigns_segment_member (tenant_id, segment_id, contact_id) select $1, $2, x from unnest($3::uuid[]) x on conflict do nothing")
-            .bind(tenant)
-            .bind(segment)
-            .bind(&ids)
-            .execute(&mut **hc.tx)
-            .await?;
+        sqlx::query(
+            "insert into campaigns_segment_member (tenant_id, segment_id, contact_id) select $1, $2, x from unnest($3::uuid[]) x on conflict do nothing",
+        )
+        .bind(tenant)
+        .bind(segment)
+        .bind(&ids)
+        .execute(&mut **hc.tx)
+        .await?;
         let made = hc
             .kernel
             .insert_tx(
@@ -136,6 +140,9 @@ mod tests {
 
     #[test]
     fn a_body_becomes_escaped_paragraphs() {
-        assert_eq!(body_html("Hi <b>all</b>\n\n{{ x }} & more\nsecond line"), "<p>Hi &lt;b&gt;all&lt;/b&gt;</p>\n<p>&#123;&#123; x }} &amp; more<br>second line</p>");
+        assert_eq!(
+            body_html("Hi <b>all</b>\n\n{{ x }} & more\nsecond line"),
+            "<p>Hi &lt;b&gt;all&lt;/b&gt;</p>\n<p>&#123;&#123; x }} &amp; more<br>second line</p>"
+        );
     }
 }

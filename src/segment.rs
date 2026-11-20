@@ -674,7 +674,11 @@ pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: 
     let tenant = sys.tenant;
     let ids: Vec<Uuid> = if s(doc, "source") == Some("List") {
         // A list's members are its own: only the counts are worked out again.
-        sqlx::query_scalar("select contact_id from campaigns_segment_member where tenant_id = $1 and segment_id = $2").bind(tenant).bind(sid).fetch_all(&mut **tx).await?
+        sqlx::query_scalar("select contact_id from campaigns_segment_member where tenant_id = $1 and segment_id = $2")
+            .bind(tenant)
+            .bind(sid)
+            .fetch_all(&mut **tx)
+            .await?
     } else if s(doc, "source") == Some("Query") {
         query_contacts(k, sys, tx, doc, timeout_ms).await?
     } else {

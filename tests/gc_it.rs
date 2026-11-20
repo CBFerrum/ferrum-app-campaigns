@@ -522,7 +522,6 @@ async fn segments_k0(t: &T, mgr: &Ctx) {
     let _ = (Uuid::nil(), mgr);
 }
 
-
 fn headers(h: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
     h.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
@@ -531,8 +530,10 @@ fn headers(h: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
 async fn take_up(t: &T, name: &str, secret: &str) -> Uuid {
     let package = ferrum_app_campaigns::packages().unwrap().into_iter().find(|p| p.name() == "campaigns").unwrap();
     let offer = package.manifest.connections.iter().find(|c| c["name"] == json!(name)).unwrap().clone();
-    let input: ferrum_kernel::connections::ConnectionInput =
-        serde_json::from_value(json!({"name": name, "label": name, "description": offer["description"], "secrets": {"authorization": secret}, "enabled": true})).unwrap();
+    let input: ferrum_kernel::connections::ConnectionInput = serde_json::from_value(
+        json!({"name": name, "label": name, "description": offer["description"], "secrets": {"authorization": secret}, "enabled": true}),
+    )
+    .unwrap();
     t.k.save_connection_def(&t.admin, None, &input).await.expect("the connection")
 }
 
@@ -552,7 +553,8 @@ async fn provider_notices(t: &T, mgr: &Ctx) {
     let none = std::collections::BTreeMap::new();
     let notice = |kind: &str, id: i64, email: &str, what: &str| {
         json!({"RecordType": if kind == "SpamComplaint" { "SpamComplaint" } else { "Bounce" }, "ID": id, "Type": kind, "MessageID": format!("m-{id}"),
-               "Email": email, "Description": what, "BouncedAt": "2026-11-20T10:00:00.1234567Z"}).to_string()
+               "Email": email, "Description": what, "BouncedAt": "2026-11-20T10:00:00.1234567Z"})
+        .to_string()
     };
     let post = |body: String| {
         let (k, ok, none) = (t.k.clone(), ok.clone(), none.clone());
@@ -569,7 +571,9 @@ async fn provider_notices(t: &T, mgr: &Ctx) {
     assert_eq!(e.len(), 1, "{e:?}");
     assert_eq!((e[0]["kind"].clone(), e[0]["outcome"].clone()), (json!("hard"), json!("Applied")), "{:?}", e[0]);
     assert_eq!(t.get("MarketingContact", hb).await["consent_status"], json!("Bounced"));
-    let sup: i64 = t.scalar("select count(*) from e_email_suppression where tenant_id = $1 and email = 'hb@x.test' and reason = 'Hard Bounce' and $2::uuid is null", None).await;
+    let sup: i64 = t
+        .scalar("select count(*) from e_email_suppression where tenant_id = $1 and email = 'hb@x.test' and reason = 'Hard Bounce' and $2::uuid is null", None)
+        .await;
     assert_eq!(sup, 1);
     assert_eq!(t.get("CampaignRecipient", r).await["bounce_type"], json!("Hard"));
     // a_postmark_complaint_marks_the_contact
@@ -605,7 +609,11 @@ async fn provider_notices(t: &T, mgr: &Ctx) {
     jobs(t).await;
     assert_eq!(events(t, "race@x.test").await.len(), 1);
     // a_wrong_secret_is_refused_like_any_other
-    let bad = t.k.connection_inbound(conn, &headers(&[("authorization", "Basic wrong")]), &none, notice("HardBounce", 31, "no@x.test", "x").as_bytes()).await.unwrap_err().to_string();
+    let bad =
+        t.k.connection_inbound(conn, &headers(&[("authorization", "Basic wrong")]), &none, notice("HardBounce", 31, "no@x.test", "x").as_bytes())
+            .await
+            .unwrap_err()
+            .to_string();
     let missing = t.k.connection_inbound(conn, &none, &none, notice("HardBounce", 32, "no@x.test", "x").as_bytes()).await.unwrap_err().to_string();
     assert_eq!(bad, missing, "every refusal reads the same");
     jobs(t).await;
@@ -652,7 +660,6 @@ async fn provider_notices(t: &T, mgr: &Ctx) {
     assert!(events(t, "un@x.test").await.is_empty(), "no event keeps the erased address");
 }
 
-
 fn design(heading: &str, href: &str) -> Value {
     json!({"version": 1, "rows": [{"columns": [{"blocks": [
         {"type": "heading", "text": heading, "level": 1},
@@ -665,7 +672,13 @@ async fn designs(t: &T, mgr: &Ctx) {
     people(t, mgr, "d.test", 2).await;
     let aud = at_domain(t, mgr, "d.test").await;
     // a_campaign_saved_with_a_design_gets_its_content
-    let c = uid(&t.insert(mgr, "EmailCampaign", json!({"campaign_name": "Designed", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud})).await);
+    let c = uid(&t
+        .insert(
+            mgr,
+            "EmailCampaign",
+            json!({"campaign_name": "Designed", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud}),
+        )
+        .await);
     let html = t.get("EmailCampaign", c).await["content"].as_str().unwrap().to_string();
     assert!(html.contains("Hello") && html.contains("https://shop.test/sale"), "{html}");
     t.update(mgr, "EmailCampaign", c, json!({"design": design("Changed", "https://shop.test/sale")})).await;
@@ -676,7 +689,8 @@ async fn designs(t: &T, mgr: &Ctx) {
     assert_eq!(t.get("EmailCampaign", c).await["content"], json!("<p>mine</p>"), "without a design the content is as written");
     refused(t.k.update(mgr, "EmailCampaign", c, obj(json!({"design": {"version": 2, "rows": []}})), None).await);
     // a_designed_campaign_is_sent_like_any_other
-    let (sent, to) = t.send(mgr, json!({"campaign_name": "Designed send", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud})).await;
+    let (sent, to) =
+        t.send(mgr, json!({"campaign_name": "Designed send", "subject": "Hi", "design": design("Hello", "https://shop.test/sale"), "audience": aud})).await;
     assert_eq!(to.len(), 2);
     let preview = t.action(mgr, "EmailCampaign", sent, "preview", json!({})).await;
     assert!(preview["html"].as_str().unwrap().contains("Hello"), "{preview}");
@@ -697,17 +711,21 @@ async fn designs(t: &T, mgr: &Ctx) {
         .await);
     let b = t.get("EmailCampaign", v).await["variants"][1]["content"].as_str().unwrap().to_string();
     assert!(b.contains("Version B"), "{b}");
-    let bad = t
-        .k
-        .insert(mgr, "EmailCampaign", obj(json!({"campaign_name": "Bad version", "subject": "Hi", "content": "<p>a</p>", "audience": aud, "ab_test": true,
-            "variants": [{"subject": "A"}, {"subject": "B", "design": {"version": 2, "rows": []}}]})))
+    let bad =
+        t.k.insert(
+            mgr,
+            "EmailCampaign",
+            obj(json!({"campaign_name": "Bad version", "subject": "Hi", "content": "<p>a</p>", "audience": aud, "ab_test": true,
+            "variants": [{"subject": "A"}, {"subject": "B", "design": {"version": 2, "rows": []}}]})),
+        )
         .await;
     refused(bad);
     // a_marketing_user_cannot_design_someone_elses_campaign
-    let uma = t.person("drafter@acme.test", "Campaign Drafter", json!([{"entity": "EmailCampaign", "read": true, "write": true, "create": true, "if_owner": true}])).await;
+    let uma = t
+        .person("drafter@acme.test", "Campaign Drafter", json!([{"entity": "EmailCampaign", "read": true, "write": true, "create": true, "if_owner": true}]))
+        .await;
     refused(t.k.update(&uma, "EmailCampaign", c, obj(json!({"design": design("Mine", "https://shop.test/sale")})), None).await);
 }
-
 
 /// interapp: another app's one composed message to named people, once under a topic.
 async fn one_issue(t: &T, mgr: &Ctx) {
@@ -733,7 +751,8 @@ async fn one_issue(t: &T, mgr: &Ctx) {
     let again = call("issue-2", "week-1", mgr).await.expect("answered");
     assert_eq!(again.result["campaign"], first.result["campaign"]);
     assert_eq!(again.result["repeated"], json!(true));
-    let made: i64 = t.scalar("select count(*) from e_email_campaign where tenant_id = $1 and campaign_name like 'Issue Weekly:%' and $2::uuid is null", None).await;
+    let made: i64 =
+        t.scalar("select count(*) from e_email_campaign where tenant_id = $1 and campaign_name like 'Issue Weekly:%' and $2::uuid is null", None).await;
     assert_eq!(made, 1);
     t.maint().await;
     let campaign = first.result["campaign"].as_str().unwrap().parse::<Uuid>().unwrap();
