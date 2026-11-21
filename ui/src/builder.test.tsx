@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router";
+import { ConfirmHost } from "@ferrum/kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Builder } from "./Builder";
 import type { Campaign } from "./campaign";
@@ -74,6 +75,7 @@ describe("the content tab with a design", () => {
         <QueryClientProvider client={new QueryClient()}>
           <MemoryRouter>
             <Content draft={draft} editable />
+            <ConfirmHost />
           </MemoryRouter>
         </QueryClientProvider>,
       ),

@@ -794,6 +794,10 @@ async fn the_funnel_says_who_is_in_each_step(t: &T, mgr: &Ctx) {
     assert_eq!(active, 1);
 }
 
+async fn engagements(t: &T, lead: Uuid) -> i64 {
+    t.scalar(&format!("select count(*) from e_lead_engagement where tenant_id = $1 and lead = '{lead}' and $2::uuid is null"), None).await
+}
+
 async fn click_of(t: &T, recipient: Uuid, n: i32) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(&t.key().await).unwrap();
     mac.update(format!("click:{recipient}:{n}").as_bytes());
@@ -828,7 +832,7 @@ async fn told_to_crm(t: &T, mgr: &Ctx) {
     // an_automatic_open_is_not_told
     t.site_ua("GET", &open_of(t, lia).await, "", "Mozilla/5.0").await;
     t.maint().await;
-    assert_eq!(engagements().await, 0);
+    assert_eq!(engagements(t, lead).await, 0);
     // an_open_is_told_once
     t.site_ua("GET", &open_of(t, lia).await, "", "Mozilla/5.0 (Macintosh) Test").await;
     t.site_ua("GET", &open_of(t, hand).await, "", "Mozilla/5.0 (Macintosh) Test").await;
@@ -836,10 +840,10 @@ async fn told_to_crm(t: &T, mgr: &Ctx) {
     t.maint().await;
     let r = t.get("CampaignRecipient", lia).await;
     assert!(r["crm_open_told_at"].is_string() && r["crm_click_told_at"].is_string(), "{r:?}");
-    assert_eq!(engagements().await, 2, "one open and one click");
+    assert_eq!(engagements(t, lead).await, 2, "one open and one click");
     t.maint().await;
     tokio::join!(t.maint(), t.maint());
-    assert_eq!(engagements().await, 2, "told once however many rounds run");
+    assert_eq!(engagements(t, lead).await, 2, "told once however many rounds run");
     let receipts: i64 =
         t.scalar("select count(*) from logic_effect where tenant_id = $1 and effect_key like 'campaigns:engage:%' and $2::uuid is null", None).await;
     assert_eq!(receipts, 2);
