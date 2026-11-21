@@ -31,6 +31,9 @@ export interface AudienceCheck {
   mailable: number;
   left_out: { pending: number; unsubscribed: number; bounced: number; complained: number; suppressed: number };
   excluded: number;
+  /** Mailable people already at the frequency cap: starting would leave them out. */
+  capped: number;
+  send_time: { mode: "At Once" | "Local Time" | "Best Hour"; with_zone: number; with_best_hour: number };
   new_contacts: number;
   rows: CheckRow[];
   split: { variants: number; test: number; rest: number } | null;
@@ -131,6 +134,9 @@ export function findings(check: AudienceCheck, c: Pick<Campaign, "subject" | "co
       detail: check.contacts > 0 ? t("Everyone in the audience is left out (see why below).") : t("The audience is empty. Add a segment or an email group."),
       tab: "setup",
     });
+  }
+  if (check.capped > 0) {
+    out.push({ id: "capped", level: "info", title: t("{count} people are at the frequency cap now and would be left out.", { count: check.capped }), tab: "setup" });
   }
   if (!check.ready.public_url) {
     out.push({

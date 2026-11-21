@@ -1,6 +1,6 @@
 id: campaigns
 name: Campaigns
-version: 0.7.0
+version: 0.8.0
 publisher: cbferrum
 summary: "Email, text and chat-app marketing: topics and a preference page, segments over any data, campaigns with A/B tests, journeys on record events, revenue attribution, deliverability and consent"
 description: README.md
@@ -35,6 +35,7 @@ contributes:
     # Campaigns and segments open on their own pages; the rest of its records open in the frame.
     - {id: campaign, entity: EmailCampaign, path: "campaigns/c/{id}", list: campaigns/, priority: 1}
     - {id: segment, entity: MarketingSegment, path: "campaigns/s/{id}", list: campaigns/audiences, priority: 1}
+    - {id: journey, entity: MarketingJourney, path: "campaigns/j/{id}", list: "campaigns/e/MarketingJourney", priority: 1}
     - {id: marketing, package: campaigns, path: "campaigns/e/{entity}/{id}", list: "campaigns/e/{entity}"}
   shell.create:
     - {id: campaign, label: Campaign, path: campaigns/new, entity: EmailCampaign}
@@ -44,7 +45,7 @@ contributes:
     - id: campaigns
       title: "Campaigns"
       instructions: >-
-        An EmailCampaign is Draft, Scheduled, Sending, Sent or Cancelled, and goes to its audience (CampaignAudience:
+        An EmailCampaign is Draft, Scheduled, Sending, Paused (it paused itself on complaints or hard bounces: a manager resumes it), Sent or Cancelled, and goes to its audience (CampaignAudience:
         segments and contacts). Each recipient's outcome is a CampaignRecipient: Pending, Held, Queued, Sent, Failed,
         Skipped or Cancelled. A contact on the suppression list (EmailSuppression) or without consent is skipped,
         never sent to. CampaignVariant rows are an A/B test's versions. A MarketingJourney (Draft, Active, Paused,

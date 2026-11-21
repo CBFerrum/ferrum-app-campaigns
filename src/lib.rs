@@ -7,14 +7,17 @@
 //! the package never runs them; the public endpoints are a `Site` (see packages/campaigns/README.md).
 
 mod attribution;
+mod builder;
 mod campaign;
 mod channels;
 mod check;
 mod contact;
+mod crm;
 mod deliverability;
 mod delivery;
 mod events;
 mod import;
+mod issue;
 mod journey;
 mod keys;
 mod public;
@@ -68,6 +71,8 @@ pub fn register(hooks: &mut HookRegistry) {
         .register("SubscriptionForm", Arc::new(public::FormHook))
         .register("CampaignSettings", Arc::new(public::SettingsHook))
         .register("TopicSubscription", Arc::new(topics::SubscriptionHook))
+        .register("DeliveryEvent", Arc::new(delivery::DeliveryEventHook))
+        .register("MarketingTopic", Arc::new(issue::TopicHook))
         .register("SendingDomain", Arc::new(deliverability::DomainHook))
         .add_event_sink(Arc::new(events::JourneySink))
         .add_site(util::PACKAGE, site);
@@ -94,6 +99,7 @@ pub async fn maintenance(k: &Kernel, tenant: Uuid) -> Result<()> {
         ("journeys", bulk().scope(journey::run(k, &sys, JOURNEY_BUDGET)).await),
         ("campaigns", bulk().scope(campaign::run(k, &sys, SEND_BUDGET)).await),
         ("attribution", attribution::run(k, &sys).await.map(|n| n as usize)),
+        ("crm", crm::run(k, &sys).await),
         ("purge", purge(k, tenant).await),
     ];
     for (step, outcome) in steps {
@@ -134,6 +140,24 @@ async fn purge(k: &Kernel, tenant: Uuid) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn shipped_connections_are_ones_the_platform_takes() {
+        let package = super::packages().expect("app packages").into_iter().find(|p| p.name() == "campaigns").expect("the campaigns package");
+        let offered = &package.manifest.connections;
+        assert_eq!(offered.len(), 2, "Postmark and SparkPost");
+        for c in offered {
+            let d: ferrum_kernel::connections::Description = serde_json::from_value(c["description"].clone()).expect("a description");
+            assert_eq!(d.problem(), None, "{c}");
+            assert!(d.apps.iter().any(|a| a == "campaigns"));
+            let map = d.inbound.as_ref().and_then(|i| i.map.as_ref()).expect("an inbound mapping");
+            assert_eq!(map.entity, "DeliveryEvent");
+            assert!(map.run_as.is_some() && map.set.is_empty(), "written as the system, and a notice that finds its record changes nothing");
+            if c["name"] == "sparkpost_bounces" {
+                assert_eq!(d.meta.as_ref().and_then(|m| m["unverified"].as_bool()), Some(true), "what was not read on the provider's page says so");
+            }
+        }
+    }
+
+    #[test]
     fn packages_are_valid() {
         let mut all = ferrum_domain::packages().expect("platform packages");
         all.extend(ferrum_app_comms::packages().expect("mail packages"));
@@ -145,6 +169,7 @@ mod tests {
         let schema = ferrum_meta::effective::build(&catalog, &["campaigns".to_string()], &[], 1).unwrap_or_else(|e| panic!("{e}"));
         assert!(schema.warnings.is_empty(), "{:?}", schema.warnings);
         assert!(schema.entity("CampaignSettings").is_some_and(|e| e.secret_fields().count() == 2));
+        assert!(schema.entity("DeliveryEvent").is_some());
         assert!(schema.entity("EmailCampaign").is_some_and(|e| e.is_submittable()));
         assert!(super::MANIFEST.contains("packages: [campaigns]"));
     }

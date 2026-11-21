@@ -210,3 +210,13 @@ describe("doing a few things at a time", () => {
     expect(await pool([], 3, async (n: number) => n)).toEqual([]);
   });
 });
+
+describe("a time zone column", () => {
+  it("is guessed from its header and travels with the contact", () => {
+    const headers = ["Email", "Time zone", "TZ"];
+    expect(guessMapping(headers).map((t) => t.kind)).toEqual(["email", "time_zone", "skip"]);
+    const read = readContacts({ rows: [["a@x.test", "Asia/Kolkata", ""]], lines: [2] }, guessMapping(headers));
+    expect(read[0].contact).toEqual({ email: "a@x.test", time_zone: "Asia/Kolkata", attributes: {} });
+    expect(recordFor(read[0].contact!, { mode: "agreed", basis: "form" }).time_zone).toBe("Asia/Kolkata");
+  });
+});

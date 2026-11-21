@@ -23,6 +23,7 @@ const campaign = () => import("./CampaignPage").then((m) => ({ Component: m.Camp
 const audiences = () => import("./Audiences").then((m) => ({ Component: m.Audiences }));
 const newSegment = () => import("./Audiences").then((m) => ({ Component: m.NewSegment }));
 const segment = () => import("./SegmentPage").then((m) => ({ Component: m.SegmentRoute }));
+const journey = () => import("./JourneyPage").then((m) => ({ Component: m.JourneyRoute }));
 const importer = () => import("./Import").then((m) => ({ Component: m.Import }));
 
 /** Campaigns' packages: the sidebar shows their modules. */
@@ -66,11 +67,13 @@ mountApp({
         { path: "audiences", lazy: audiences },
         { path: "s/new", lazy: newSegment },
         { path: "s/:id", lazy: segment },
+        { path: "j/:id", lazy: journey },
         { path: "import", lazy: importer },
         // The frame's list and form of a campaign or a segment are these pages.
         { path: "e/EmailCampaign", lazy: home },
         { path: "e/EmailCampaign/new", lazy: start },
         { path: "e/EmailCampaign/:id", lazy: campaign },
+        { path: "e/MarketingJourney/:id", lazy: journey },
         { path: "e/MarketingSegment", lazy: audiences },
         { path: "e/MarketingSegment/new", lazy: newSegment },
         { path: "e/MarketingSegment/:id", lazy: segment },

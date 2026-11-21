@@ -1,5 +1,5 @@
 package: campaigns
-version: 0.1.0
+version: 0.1.1
 label: Campaigns
 description: Email marketing - contacts with consent, segments, campaigns with A/B tests, automated journeys, open and click tracking, bounces, suppression list and double opt-in signup forms.
 depends: [core, comms]
@@ -9,15 +9,16 @@ modules:
     label: Marketing
     icon: megaphone
     order: 42
-    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, SendingDomain, AudienceImport, EmailSuppression, CampaignRecipient,
+    items: [EmailCampaign, MarketingJourney, MarketingContact, MarketingSegment, MarketingTopic, TopicSubscription, SubscriptionForm, SendingDomain, AudienceImport, EmailSuppression, DeliveryEvent, CampaignRecipient,
             JourneyEnrollment, CampaignSettings, report:email_campaign_performance, report:ab_test_results, report:link_clicks, report:journey_funnel,
             report:audience_growth, report:revenue_attribution]
 
 # What a personal-data request exports and erases for a contact (their email). The suppression list
 # keeps unsubscribed addresses, so an erased person is never mailed again.
 personal_data:
-  - {entity: MarketingContact, match: email, phone: phone, erase: [email, phone, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes]}
+  - {entity: MarketingContact, match: email, phone: phone, erase: [email, phone, first_name, last_name, full_name, consent_source, consent_ip_hash, attributes, time_zone, open_hours]}
   - {entity: TopicSubscription, match: email, erase: [email]}
+  - {entity: DeliveryEvent, match: email, erase: [email, reason, message_id]}
 roles:
   - name: Marketing User
     description: Day-to-day email marketing - keeps the audience (contacts, segments, imports), drafts and tests their own campaigns and reads the results; a manager sends them.
@@ -31,6 +32,7 @@ roles:
       - {entity: MarketingJourney, read: true}
       - {entity: JourneyEnrollment, read: true}
       - {entity: EmailSuppression, read: true, create: true}
+      - {entity: DeliveryEvent, read: true}
       - {entity: AudienceImport, read: true, write: true, create: true, if_owner: true}
       - {entity: SubscriptionForm, read: true}
       - {entity: SendingDomain, read: true}
@@ -50,6 +52,7 @@ roles:
       - {entity: MarketingJourney, read: true, write: true, create: true, delete: true}
       - {entity: JourneyEnrollment, read: true, write: true, export: true}
       - {entity: EmailSuppression, read: true, write: true, create: true, delete: true, export: true, import: true}
+      - {entity: DeliveryEvent, read: true, export: true}
       - {entity: AudienceImport, read: true, write: true, create: true, delete: true}
       - {entity: SubscriptionForm, read: true, write: true, create: true, delete: true}
       - {entity: CampaignSettings, read: true, write: true, create: true}
@@ -59,4 +62,68 @@ roles:
       - {entity: EmailTemplate, read: true, write: true, create: true}
       - {entity: EmailAccount, read: true}
       - {entity: Customer, read: true}
-export_tables: [campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]
+messages:
+  - key: campaigns.campaign_paused
+    label: A campaign paused itself
+    category: operational
+    entity: EmailCampaign
+    channels: [inapp, email]
+    values: [cause, rate]
+    languages:
+      en:
+        inapp:
+          title: "{{ doc.campaign_name }} was paused"
+          text: "{{ values.cause }} reached {{ values.rate }}% of what was sent. Nothing more goes out until a manager resumes it."
+        email:
+          subject: "{{ doc.campaign_name }} was paused"
+          body: "<p>{{ values.cause }} reached {{ values.rate }}% of what was sent. Nothing more goes out until a manager resumes it in Campaigns.</p>"
+connections:
+  # Offered to a workspace turned off: an administrator takes one up in Administration, Connections, stores its secret and gives
+  # the connection's inbound address to the provider. Nothing here names a provider in code; another provider is another description.
+  - name: postmark_bounces
+    label: "Postmark: bounces and complaints"
+    description:
+      apps: [campaigns]
+      # Nothing is sent to the provider: the base is where its API lives, which the platform wants named.
+      base: https://api.postmarkapp.com
+      meta: {label: "Postmark: bounces and complaints"}
+      inbound:
+        verify: {type: token, header: authorization, secret: authorization}
+        max_bytes: 262144
+        map:
+          entity: DeliveryEvent
+          as: system
+          by:
+            event_key: {expr: "connection.id + ':' + string(item.ID)", required: true}
+          create:
+            via_connection: {expr: "connection.id"}
+            kind: {expr: "item.RecordType == 'SpamComplaint' ? 'complaint' : (item.Type == 'HardBounce' ? 'hard' : ((item.Type == 'SoftBounce' || item.Type == 'Transient') ? 'soft' : item.Type))"}
+            email: {at: /Email, required: true}
+            message_id: /MessageID
+            reason: /Description
+            occurred_at: /BouncedAt
+  - name: sparkpost_bounces
+    label: "SparkPost: bounces and complaints"
+    description:
+      apps: [campaigns]
+      base: https://api.sparkpost.com
+      # unverified: the bounce class numbers below are from memory (SparkPost's pages list none, read 21 Nov 2026), and the
+      # header its Basic credentials arrive in is assumed to be Authorization. They are data: change them here, not in Rust.
+      meta: {label: "SparkPost: bounces and complaints", unverified: true, notes: "Bounce classes 10 and 30 are taken as hard and 20 to 24 and 70 as soft, from memory; any other class is kept and ignored. The credentials header is assumed to be Authorization. Check both against your account."}
+      inbound:
+        verify: {type: token, header: authorization, secret: authorization}
+        delivery_header: x-messagesystems-batch-id
+        max_bytes: 262144
+        map:
+          entity: DeliveryEvent
+          as: system
+          items_at: ""
+          by:
+            event_key: {expr: "connection.id + ':' + string(item.msys.message_event.event_id)", required: true}
+          create:
+            via_connection: {expr: "connection.id"}
+            kind: {expr: "item.msys.message_event.type == 'spam_complaint' ? 'complaint' : ((item.msys.message_event.type == 'bounce' || item.msys.message_event.type == 'out_of_band') ? ((string(item.msys.message_event.bounce_class) == '10' || string(item.msys.message_event.bounce_class) == '30') ? 'hard' : ((string(item.msys.message_event.bounce_class) == '20' || string(item.msys.message_event.bounce_class) == '21' || string(item.msys.message_event.bounce_class) == '22' || string(item.msys.message_event.bounce_class) == '23' || string(item.msys.message_event.bounce_class) == '24' || string(item.msys.message_event.bounce_class) == '70') ? 'soft' : 'class:' + string(item.msys.message_event.bounce_class))) : item.msys.message_event.type)"}
+            email: {at: /msys/message_event/rcpt_to, required: true}
+            message_id: /msys/message_event/message_id
+            reason: /msys/message_event/raw_reason
+export_tables: [campaigns_issue, campaigns_link, campaigns_click, campaigns_contact_change, campaigns_journey_member, campaigns_journey_log, campaigns_journey_event, campaigns_segment_member, campaigns_segment_change, campaigns_attribution]

@@ -100,7 +100,7 @@ export function readTable(text: string): Table {
 
 // ── mapping columns ──
 
-export type Target = { kind: "skip" } | { kind: "email" } | { kind: "first_name" } | { kind: "last_name" } | { kind: "full_name" } | { kind: "attribute"; key: string };
+export type Target = { kind: "skip" } | { kind: "email" } | { kind: "first_name" } | { kind: "last_name" } | { kind: "full_name" } | { kind: "time_zone" } | { kind: "attribute"; key: string };
 export type Mapping = Target[];
 
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -108,6 +108,7 @@ const EMAIL = new Set(["email", "emailaddress", "emailid", "mail", "eaddress"]);
 const FIRST = new Set(["firstname", "first", "givenname", "fname", "forename"]);
 const LAST = new Set(["lastname", "last", "surname", "familyname", "lname"]);
 const FULL = new Set(["name", "fullname", "contactname", "customername"]);
+const ZONE = new Set(["timezone", "tz"]);
 
 /** The column that looks like each thing; a column that looks like none is left out until the person says. */
 export function guessMapping(headers: string[], rows: string[][] = []): Mapping {
@@ -123,6 +124,7 @@ export function guessMapping(headers: string[], rows: string[][] = []): Mapping 
     if (FIRST.has(n)) return once("first_name", { kind: "first_name" });
     if (LAST.has(n)) return once("last_name", { kind: "last_name" });
     if (FULL.has(n)) return once("full_name", { kind: "full_name" });
+    if (ZONE.has(n)) return once("time_zone", { kind: "time_zone" });
     return { kind: "skip" };
   });
   // No header says which is the address: the column full of them is.
@@ -175,6 +177,7 @@ export interface Contact {
   email: string;
   first_name?: string;
   last_name?: string;
+  time_zone?: string;
   attributes: Record<string, string>;
 }
 
@@ -222,7 +225,8 @@ export function readContacts(table: Pick<Table, "rows" | "lines">, mapping: Mapp
       if (v.length > VALUE_MAX) return { line, contact: null, problem: tr("A value is longer than {VALUE_MAX} characters ({key})", { VALUE_MAX, key: t.key }) };
       attributes[t.key] = v;
     }
-    return { line, contact: { email, ...(named.first_name ? { first_name: named.first_name } : {}), ...(named.last_name ? { last_name: named.last_name } : {}), attributes } };
+    const zone = cell("time_zone");
+    return { line, contact: { email, ...(named.first_name ? { first_name: named.first_name } : {}), ...(named.last_name ? { last_name: named.last_name } : {}), ...(zone ? { time_zone: zone } : {}), attributes } };
   });
 }
 
@@ -277,6 +281,7 @@ export function recordFor(c: Contact, consent: Consent): Record<string, unknown>
     email: c.email,
     ...(c.first_name ? { first_name: c.first_name } : {}),
     ...(c.last_name ? { last_name: c.last_name } : {}),
+    ...(c.time_zone ? { time_zone: c.time_zone } : {}),
     attributes,
     source: "Import",
     consent_status: consent.mode === "agreed" ? "Subscribed" : "Unsubscribed",

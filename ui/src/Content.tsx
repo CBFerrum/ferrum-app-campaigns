@@ -11,6 +11,8 @@ import { PreviewPane } from "./PreviewPane";
 import { size } from "./format";
 import { attributeTag, BLOCKS, MERGE_TAGS, starter, UNSUBSCRIBE, validKey } from "./snippets";
 import type { Draft } from "./useDraft";
+import { Builder } from "./Builder";
+import { type Design, starterDesign } from "./design";
 import { Problem, insertInto } from "./ui";
 import { t as tr, isolate } from "@ferrum/client";
 
@@ -84,13 +86,29 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
   const { set } = draft;
   const box = useRef<HTMLTextAreaElement>(null);
   const [pane, setPane] = useState<"write" | "preview">("write");
-  const [format, setFormat] = useState<"html" | "text">("html");
+  const [format, setFormat] = useState<"design" | "html" | "text">(() => (draft.doc?.design ? "design" : "html"));
   const [version, setVersion] = useState<string>("main");
   const [dialog, setDialog] = useState<"templates" | "attribute" | null>(null);
   const variants = doc.ab_test ? doc.variants : [];
   const at = variants.findIndex((v) => v.variant === version);
   const onVariant = version !== "main" && at >= 0;
   const text = format === "text" && !onVariant;
+  // The design this version or the campaign is made from (none: HTML written by hand).
+  const design: Design | null = (onVariant ? variants[at].design : doc.design) ?? null;
+  const building = format === "design" && !text;
+  const writeDesign = (d: Design | null) => {
+    if (onVariant) set("variants", doc.variants.map((x, j) => (j === at ? { ...x, design: d } : x)));
+    else set("design", d);
+  };
+  const startDesign = async () => {
+    const own = (onVariant ? (variants[at].content ?? "") : (doc.content ?? "")).trim();
+    if (own && own !== starter().trim() && !(await confirmDialog({ title: tr("Start with the builder?"), message: tr("The builder replaces the HTML you have written."), confirmLabel: tr("Start with the builder") }))) return;
+    writeDesign(starterDesign());
+  };
+  const editAsHtml = async () => {
+    if (!(await confirmDialog({ title: tr("Edit as HTML?"), message: tr("The layout cannot be brought back from HTML."), confirmLabel: tr("Edit as HTML") }))) return;
+    writeDesign(null);
+  };
 
   const value = onVariant ? (variants[at].content ?? "") : text ? (doc.text_content ?? "") : (doc.content ?? "");
   const write = (v: string) => {
@@ -101,8 +119,9 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
   const bytes = new TextEncoder().encode(value).length;
   const problems = [
     ...(onVariant ? draft.rowErrors.filter((e) => e.row[0] === "variants" && e.row[1] === at).map((e) => e.message) : []),
-    ...(!onVariant ? [draft.fieldErrors[text ? "text_content" : "content"]].filter(Boolean) : []),
+    ...(!onVariant ? [draft.fieldErrors[text ? "text_content" : design ? "design" : "content"]].filter(Boolean) : []),
   ];
+  const refused = building ? (problems[0] ?? null) : null;
 
   const applyTemplate = async (t: Template) => {
     const filled = (doc.content ?? "").trim() && doc.content !== starter();
@@ -126,7 +145,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
       </div>
       <section className="cm-write card" aria-label={tr("Write the email")}>
         <div className="cm-toolbar">
-          {editable && (
+          {editable && !building && (
             <>
               <Menu label={tr("Insert")} icon="plus" ariaLabel={tr("Insert a person's detail")} buttonClass="btn btn-default btn-sm">
                 {(close) => (
@@ -161,7 +180,10 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
             </select>
           )}
           <div className="segmented" role="group" aria-label={tr("Format")}>
-            <button type="button" aria-pressed={!text} onClick={() => setFormat("html")}>
+            <button type="button" aria-pressed={building} onClick={() => setFormat("design")}>
+              {tr("Design")}
+            </button>
+            <button type="button" aria-pressed={!text && !building} onClick={() => setFormat("html")}>
               {tr("HTML")}
             </button>
             <button type="button" aria-pressed={text} disabled={onVariant} title={onVariant ? tr("A version with its own content makes its plain text from its HTML") : undefined} onClick={() => setFormat("text")}>
@@ -171,6 +193,31 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
         </div>
         {onVariant && <p className="cm-hint muted">{tr("Only version {version} gets this content. Leave it empty and it uses the content of all versions.", { version })}</p>}
         {text && <p className="cm-hint muted">{tr("The plain text some mail programs show instead. Leave it empty and it is made from the HTML, with the links kept.")}</p>}
+        {building ? (
+          design ? (
+            <Builder design={design} onChange={writeDesign} editable={editable} refused={refused} />
+          ) : (
+            <div className="cm-bd-start">
+              <p className="muted">{tr("Build the email from blocks: headings, text, buttons and pictures in rows and columns. It looks right on a phone too.")}</p>
+              {editable && (
+                <Button variant="primary" onClick={() => void startDesign()}>
+                  {tr("Start with the builder")}
+                </Button>
+              )}
+            </div>
+          )
+        ) : (
+          <>
+            {design && !text && (
+              <p className="cm-hint muted">
+                {tr("This email is made from a design, so the HTML is only shown.")}{" "}
+                {editable && (
+                  <Button size="sm" onClick={() => void editAsHtml()}>
+                    {tr("Edit as HTML")}
+                  </Button>
+                )}
+              </p>
+            )}
         <label className="sr-only" htmlFor="cm-editor">
           {text ? tr("Plain text of the email") : onVariant ? tr("HTML of version {version}", { version }) : tr("HTML of the email")}
         </label>
@@ -181,6 +228,7 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
           spellCheck={false}
           value={value}
           disabled={!editable}
+          readOnly={!!design && !text}
           aria-invalid={problems.length > 0 || undefined}
           aria-describedby="cm-editor-help"
           placeholder={onVariant ? tr("Empty: this version uses the content of all versions") : text ? tr("Empty: made from the HTML") : "<p>Write your email here…</p>"}
@@ -192,14 +240,18 @@ export function Content({ draft, editable }: { draft: Draft; editable: boolean }
             }
           }}
         />
-        {problems.map((m) => (
+          </>
+        )}
+        {!building && problems.map((m) => (
           <p key={m} className="field-error cm-editor-error">
             {isolate(m)}
           </p>
         ))}
+        {!building && (
         <p className="cm-hint faint" id="cm-editor-help">
           {placed(tr("{p1}. Use {p2} for what changes with each person. Unless the content has {p3}, an unsubscribe link and your postal address are added at the bottom."), { p1: isolate(size(bytes)), p2: isolate("{{ contact.first_name }}"), p3: isolate("{{ unsubscribe_url }}") })}
         </p>
+        )}
       </section>
       <section className="cm-see" aria-label={tr("Preview")}>
         <PreviewPane doc={doc} dirty={draft.dirty} editable={editable} />

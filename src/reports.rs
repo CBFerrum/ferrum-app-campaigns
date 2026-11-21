@@ -323,6 +323,18 @@ async fn funnel(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
     .await?
     .into_iter()
     .collect();
+    // Who is on each step now, and how many of them wait.
+    let here: HashMap<i64, (i64, i64)> = sqlx::query_as::<_, (i64, i64, i64)>(
+        "select current_step, count(*), count(*) filter (where waiting) from e_journey_enrollment where tenant_id = $1 and journey = $2 and status = 'Active' \
+         group by current_step",
+    )
+    .bind(ctx.tenant)
+    .bind(journey)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(|(s, n, w)| (s, (n, w)))
+    .collect();
     let mail: HashMap<i64, (i64, i64, i64)> = sqlx::query_as::<_, (i64, i64, i64, i64)>(
         "select journey_step, count(*) filter (where communication is not null), count(*) filter (where opened_at is not null), \
          count(*) filter (where clicked_at is not null) from e_campaign_recipient where tenant_id = $1 and journey = $2 group by journey_step",
@@ -342,13 +354,14 @@ async fn funnel(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
             let n = i + 1;
             let (sent, opens, clicks) = mail.get(&(n as i64)).copied().unwrap_or_default();
             let reach = reached.get(&(n as i32)).copied().unwrap_or_default();
-            json!({"step": n, "step_type": r.get("step_type"), "label": r.get("label"), "reached": reach, "reached_rate": pct(reach, enrolled),
+            let (now, waiting) = here.get(&(n as i64)).copied().unwrap_or_default();
+            json!({"step": n, "step_type": r.get("step_type"), "label": r.get("label"), "reached": reach, "reached_rate": pct(reach, enrolled), "here": now, "waiting": waiting,
                    "emails_sent": sent, "unique_opens": opens, "unique_clicks": clicks, "open_rate": pct(opens, sent), "click_rate": pct(clicks, sent)})
         })
         .collect();
     Ok(json!({
         "columns": [col("step", "Step", "int"), col("step_type", "Type", "data"), col("label", "Label", "data"), col("reached", "Reached", "int"),
-                    col("reached_rate", "Reached %", "percent"), col("emails_sent", "Emails Sent", "int"), col("unique_opens", "Unique Opens", "int"),
+                    col("reached_rate", "Reached %", "percent"), col("here", "In Step Now", "int"), col("emails_sent", "Emails Sent", "int"), col("unique_opens", "Unique Opens", "int"),
                     col("unique_clicks", "Unique Clicks", "int")],
         "rows": rows,
         "totals": {"enrolled": enrolled, "active": active, "completed": completed, "goal_reached": goal, "exited": exited, "conversion_rate": pct(goal, enrolled)},

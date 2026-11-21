@@ -8,6 +8,15 @@
     - {name: hourly_limit, type: int, label: Emails Per Hour, default: 500, min: 1, max: 1000000,
        description: "Emails campaigns and journeys send per hour at most, together (respect your provider's sending limits); a campaign can go slower with its own limit"}
     - {name: soft_bounce_limit, type: int, default: 3, min: 1, max: 20, description: "Soft bounces in a row after which an address is suppressed (an open or click resets the count)"}
+    - {name: frequency_cap, type: int, default: 0, min: 0, max: 1000, label: Promotional Emails Per Person,
+       description: "The most promotional emails one person is sent by campaigns and journeys together within the days below; 0 = no cap. Mail of an operational topic is neither counted nor held back"}
+    - {name: frequency_days, type: int, default: 7, min: 1, max: 90, label: Counted Over (Days)}
+    - {name: pause_complaint_percent, type: percent, min: "0", max: "100", label: Pause At Complaints (%),
+       description: "A sending campaign stops by itself when this share of its sent emails was reported as spam; empty or 0 = never (off until you set it)"}
+    - {name: pause_bounce_percent, type: percent, min: "0", max: "100", label: Pause At Hard Bounces (%),
+       description: "The same for addresses that do not exist; empty or 0 = never (off until you set it)"}
+    - {name: pause_after_sent, type: int, default: 500, min: 50, max: 1000000, label: Judged After (Emails Sent),
+       description: "Rates are judged only once this many emails of the campaign have gone out"}
     - {name: link_expiry_days, type: int, default: 365, min: 30, max: 3650, description: "Days the tracking and unsubscribe links of a sent email keep working"}
     - {name: confirmation_hours, type: int, default: 72, min: 1, max: 720, description: "Hours a double opt-in confirmation link stays valid"}
     - {name: double_opt_in, type: check, default: false, label: Confirm Re-subscribing By Email,
@@ -24,10 +33,19 @@
     - {name: attribution_touch, type: select, options: [Clicks, Clicks and Opens], default: Clicks,
        description: "What is a touch: a click on a link, or also an open (automatic opens never count)"}
   actions:
-    - {name: rotate_webhook_secret, label: New Webhook Secret, permission: write, confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"}
+    - name: rotate_webhook_secret
+      label: New Webhook Secret
+      permission: write
+      confirm: "A new secret is created and webhooks signed with the previous one are refused. Continue?"
+      contract:
+        effect: transactional_action
+        completion: "A new webhook secret is stored; webhooks signed with the previous one are refused from now on"
+        returns: {type: object, properties: {secret: {type: string}, path: {type: string}, url: {type: string}, note: {type: string}}}
+        answer_once: {fields: [secret], then: "Make a new secret with New Webhook Secret"}
   form:
     - {label: Compliance, fields: [postal_address]}
-    - {label: Deliverability, fields: [hourly_limit, soft_bounce_limit, webhook_secret]}
+    - {label: Deliverability, fields: [hourly_limit, soft_bounce_limit, pause_complaint_percent, pause_bounce_percent, pause_after_sent, webhook_secret]}
+    - {label: Frequency, fields: [frequency_cap, frequency_days]}
     - {label: Links, fields: [link_expiry_days, confirmation_hours]}
     - {label: Re-subscribing, fields: [double_opt_in, reconfirm_subject, reconfirm_content]}
     - {label: Attribution, fields: [attribution_document, attribution_days, attribution_touch]}
@@ -46,6 +64,9 @@
     - {name: last_name, type: data, max_length: 100}
     - {name: full_name, type: data, read_only: true, in_list: true}
     - {name: phone, type: phone, description: "For text and chat-app messages, in international form (+ and the country code) or completed with the workspace's calling code. Whether the number takes promotional messages is the platform's record, per channel (a reply with a stop word, the link in a message, staff)"}
+    - {name: time_zone, type: data, max_length: 64, description: "The person's time zone by its name (Europe/Paris, Asia/Kolkata); empty = the workspace's. Local Time and Best Hour campaigns read it"}
+    - {name: open_hours, type: json, read_only: true, hidden: true, no_copy: true,
+       description: "How many emails they opened in each hour of their own clock: 24 numbers, hour 0 first. Counted by the app; cleared when the time zone changes"}
     - {name: consent_status, type: select, options: [Subscribed, Pending, Unsubscribed, Bounced, Complained], default: Subscribed, required: true, in_list: true, in_filter: true,
        description: "Campaigns and journeys mail Subscribed contacts only. Pending: waiting for a double opt-in confirmation"}
     - {name: consent_at, type: datetime, label: Consent Changed At, read_only: true, no_copy: true}
@@ -59,7 +80,7 @@
     - {name: confirmation_sent_at, type: datetime, read_only: true, hidden: true, no_copy: true}
   indexes: [[record_entity, record_id]]
   form:
-    - {label: Contact, fields: [email, phone, first_name, last_name, full_name, source]}
+    - {label: Contact, fields: [email, phone, time_zone, first_name, last_name, full_name, source]}
     - {label: Consent, fields: [consent_status, consent_at, consent_source, consent_ip_hash, soft_bounce_count]}
     - {label: Attributes, fields: [attributes]}
     - {label: Linked Record, collapsible: true, fields: [record_entity, record_id]}
@@ -95,6 +116,22 @@
        description: "Everyone is in it until they untick it (contacts that existed before the topic too); off: only those who ticked it or joined it through a signup form"}
     - {name: enabled, type: check, default: true, in_list: true, description: "Shown on the preference page and chosen by campaigns and journeys"}
     - {name: sort_order, type: int, default: 0, description: "Order on the preference page"}
+  actions:
+    # Another app's one composed message to named people, sent once under this topic (Intranet's newsletter).
+    - name: send_issue
+      label: Send One Issue
+      permission: write
+      hidden: true
+      params:
+        - {name: reference, label: Reference, type: data, required: true, description: "The caller's own name for this issue; one issue per topic and reference is ever sent"}
+        - {name: subject, label: Subject, type: data, required: true}
+        - {name: body, label: Text, type: text, required: true, description: "Plain text or Markdown paragraphs, shown escaped"}
+        - {name: recipients, label: Addresses, type: text, required: true, description: "At most 5000 addresses, one a line"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "A campaign to the addresses that are contacts and may be mailed under this topic is scheduled, once for this topic and reference; the others are counted as skipped. Campaigns sends it within its limits with its unsubscribe link and its recipient records say what became of each"
+        returns: {type: object, properties: {campaign: {type: string}, accepted: {type: integer}, skipped: {type: integer}, repeated: {type: boolean}}}
   list: {columns: [topic_name, category, default_in, enabled], sort: sort_order asc}
 
 - name: TopicSubscription
@@ -153,11 +190,11 @@
   kind: master
   module: marketing
   title_field: segment_name
-  description: "A dynamic group of contacts defined by rules on their fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days). Evaluated whenever it is used; the Preview action counts it."
+  description: "A dynamic group of contacts defined by rules on their fields, attributes, email group membership and engagement (opened, clicked or was sent mail in the last N days). Evaluated whenever it is used; Preview counts it without saving anything and Refresh saves the counts."
   fields:
     - {name: segment_name, type: data, required: true, unique: true, in_list: true}
-    - {name: source, type: select, options: [Rules, Query], default: Rules, in_list: true,
-       description: "Rules over contacts and their records, or the rows of a saved query (refreshed when used and on its schedule)"}
+    - {name: source, type: select, options: [Rules, Query, List], default: Rules, in_list: true,
+       description: "Rules over contacts and their records, the rows of a saved query (refreshed when used and on its schedule), or a fixed list of contacts that another app made for one send (never refreshed)"}
     - {name: query, type: json, widget: studio_query, visible_if: "doc.source == 'Query'", required_if: "doc.source == 'Query'",
        description: "A query of rows (its entity and filters; grouping and totals are refused)"}
     - {name: query_person_field, type: data, max_length: 100, visible_if: "doc.source == 'Query'", label: Column Naming The Person,
@@ -172,7 +209,23 @@
     - {name: mailable_count, type: int, read_only: true, no_copy: true, in_list: true, description: "Of those, subscribed and not suppressed"}
     - {name: counted_at, type: datetime, read_only: true, no_copy: true}
   actions:
-    - {name: preview, label: Preview, permission: read}
+    # Counts what is in the segment now and stores nothing, so a reader may press it. Refresh works the membership out
+    # again and stores it with the counts.
+    - name: preview
+      label: Preview
+      permission: read
+      read_only: true
+      contract:
+        effect: query
+        completion: "How many contacts are in the segment now and how many can be emailed, with the first twenty by address; nothing is stored"
+        returns: {type: object, properties: {contact_count: {type: integer}, mailable_count: {type: integer}, counted_at: {type: string}, sample: {type: array, items: {type: object}}}}
+    - name: refresh
+      label: Refresh
+      permission: write
+      contract:
+        effect: transactional_action
+        completion: The membership is worked out again and the counts are saved
+        returns: {type: object, properties: {entered: {type: integer}, left: {type: integer}, contact_count: {type: integer}, mailable_count: {type: integer}, counted_at: {type: string}}}
     # Counts rules that are being edited without saving them (the segment screen calls it after every change).
     - {name: count, label: Count Without Saving, permission: read, read_only: true, hidden: true}
   form:
@@ -181,6 +234,26 @@
     - {label: Query, fields: [query, query_person_field]}
     - {label: Last Preview, fields: [contact_count, mailable_count, counted_at]}
   list: {columns: [segment_name, contact_count, mailable_count], sort: segment_name asc}
+
+- name: DeliveryEvent
+  label: Delivery Event
+  kind: master
+  module: marketing
+  title_field: email
+  search_fields: [email]
+  description: "A bounce or complaint a mail provider reported through a connection: kept once, applied once to the recipient, the contact and the suppression list. Written by connections only."
+  fields:
+    - {name: event_key, type: data, required: true, unique: true, read_only: true, max_length: 300, description: "The connection and the provider's own id for the event: what keeps one event from being applied twice"}
+    - {name: via_connection, type: data, read_only: true, in_filter: true}
+    - {name: kind, type: data, read_only: true, max_length: 60, in_list: true, description: "hard, soft or complaint, as the connection's description translated the provider's word; anything else is kept and ignored"}
+    - {name: bounce_type, type: data, read_only: true, max_length: 60}
+    - {name: email, type: email, read_only: true, in_list: true}
+    - {name: message_id, type: data, read_only: true, max_length: 998}
+    - {name: reason, type: text, read_only: true, max_length: 500}
+    - {name: occurred_at, type: datetime, read_only: true, in_list: true}
+    - {name: outcome, type: select, options: [Applied, Ignored], read_only: true, in_list: true, in_filter: true}
+    - {name: recipient, type: link, to: CampaignRecipient, on_delete: set_null, read_only: true}
+  list: {columns: [occurred_at, email, kind, outcome], sort: created_at desc}
 
 - name: AudienceImport
   label: Audience Import
@@ -200,7 +273,13 @@
     - {name: unsubscribed_count, type: int, label: Opt-outs Recorded, read_only: true, no_copy: true}
     - {name: invalid_count, type: int, label: Skipped (No Valid Email), read_only: true, no_copy: true}
   actions:
-    - {name: run_import, label: Run Import, permission: write}
+    - name: run_import
+      label: Run Import
+      permission: write
+      contract:
+        effect: transactional_action
+        completion: "Each address of the source that is not a contact yet is one now, opt-outs recorded as unsubscribed, and the counts say how many of each"
+        returns: {type: object, properties: {status: {type: string}, created_count: {type: integer}, existing_count: {type: integer}, unsubscribed_count: {type: integer}, invalid_count: {type: integer}}}
   list: {columns: [import_name, source, status, last_run_at, created_count], sort: import_name asc}
 
 - name: SubscriptionForm
@@ -246,7 +325,13 @@
     - {name: warmup_growth_percent, type: int, default: 50, min: 1, max: 400, label: Daily Growth (%)}
     - {name: warmup_days, type: int, default: 30, min: 1, max: 365, label: Warm-up Days, description: "After these days the domain has no daily limit of its own"}
   actions:
-    - {name: check, label: Check DNS, permission: write}
+    - name: check
+      label: Check DNS
+      permission: write
+      contract:
+        effect: transactional_action
+        completion: "The domain's DNS records were read through the Mail app and the verdict is saved on the domain"
+        returns: {type: object, properties: {check_status: {type: string}}}
   form:
     - {label: Domain, fields: [domain, check_status, checked_at]}
     - {label: Records, fields: [spf, dkim, dmarc_policy, aligned, check_notes]}

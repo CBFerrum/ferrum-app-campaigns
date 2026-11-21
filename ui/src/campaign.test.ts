@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clickRate, defaultTab, delivered, duplicateBody, incomplete, listFilters, openRate, patchOf, progress, savable, tone, whenLine, type Campaign } from "./campaign";
+import { clickRate, defaultTab, delivered, duplicateBody, hasResults, incomplete, listFilters, openRate, patchOf, progress, savable, tone, whenLine, type Campaign } from "./campaign";
 
 const base: Campaign = {
   id: "c1",
@@ -47,8 +47,20 @@ describe("where a campaign opens and what it says about itself", () => {
     expect(defaultTab({ status: "Scheduled" })).toBe("review");
     expect(defaultTab({ status: "Sending" })).toBe("results");
     expect(defaultTab({ status: "Sent" })).toBe("results");
+    expect(defaultTab({ status: "Paused" })).toBe("results");
     expect(defaultTab({ status: "Cancelled", started_at: "2026-11-01T10:00:00Z" })).toBe("results");
     expect(defaultTab({ status: "Cancelled" })).toBe("setup");
+  });
+
+  it("knows a paused campaign: a status, a filter chip, a tone, and results to look at", () => {
+    expect(JSON.parse(listFilters("Paused")!)).toEqual([["status", "=", "Paused"]]);
+    expect(tone("Paused")).toBe("red");
+    expect(hasResults({ status: "Paused", started_at: null })).toBe(true);
+    expect(whenLine({ status: "Paused", paused_at: "2026-11-07T10:30:00Z" })).toContain("Paused since");
+  });
+
+  it("saves the send time with the rest, and a copy of an A/B test goes at once", () => {
+    expect(patchOf({ ...base, send_time: "At Once" } as Campaign, { send_time: "Local Time" })).toEqual({ send_time: "Local Time" });
   });
 
   it("filters the list by a status chip, and ignores anything else", () => {

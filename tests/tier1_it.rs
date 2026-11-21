@@ -432,6 +432,11 @@ async fn revenue(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
 
 /// Item 4: segments over the contact's records and over any data, worked out when used and on a schedule.
 async fn segments(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
+    // K0-7: a rule reads only what its caller may read. The manager builds segments over orders, so the workspace gives
+    // that role the right (the test relied on the fault that the system's reading stood in for it).
+    let orders: ferrum_meta::PermissionDef = serde_json::from_value(json!({"entity": "SalesOrder", "read": true})).unwrap();
+    t.k.set_role_permission(admin, "Marketing Manager", &orders).await.expect("orders");
+    let mgr = &t.k.load_ctx(t.tenant, mgr.user, None, "it".into()).await.unwrap();
     let seg = |name: &str, rules: Value| json!({"segment_name": name, "match_type": "All", "rules": rules});
     let count = |id: Uuid| async move {
         let p = t.action(mgr, "MarketingSegment", id, "preview", json!({})).await;
@@ -467,7 +472,7 @@ async fn segments(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
     // A count with a condition, through an email field of the workspace's own entity.
     let open_carts = uid(&t
         .insert(
-            mgr,
+            admin,
             "MarketingSegment",
             seg(
                 "Open carts",
@@ -476,7 +481,17 @@ async fn segments(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
             ),
         )
         .await);
-    assert_eq!(count(open_carts).await.2, ["asha@x.test", "ben@x.test"]);
+    assert_eq!(
+        t.action(admin, "MarketingSegment", open_carts, "preview", json!({})).await["sample"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["email"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["asha@x.test", "ben@x.test"],
+        "K0-7: the manager cannot read carts, so it is the administrator's segment and the administrator's count"
+    );
+    refused(t.k.run_action(mgr, "MarketingSegment", open_carts, "preview", json!({})).await);
     // A field of the record the contact came from, and one of the contact itself.
     let named = uid(&t
         .insert(
@@ -514,6 +529,8 @@ async fn segments(t: &T, admin: &Ctx, mgr: &Ctx, ben: Uuid) {
     refused(t.k.insert(admin, "MarketingSegment", obj(grouped)).await);
     let q = uid(&t.insert(admin, "MarketingSegment", query).await);
     assert_eq!(count(q).await, (2, 1, vec!["asha@x.test".to_string(), "ben@x.test".to_string()]), "Asha unsubscribed: counted, not mailable");
+    // K0-6 (S9 design: "preview returns the counts and stores none; the refresh stores them"): the membership is the refresh's.
+    t.action(mgr, "MarketingSegment", q, "refresh", json!({})).await;
     let changes = "select count(*) from campaigns_segment_change where tenant_id = $1 and segment_id = $2 and change = ";
     assert_eq!(t.scalar::<i64>(&format!("{changes}'entered'"), Some(q)).await, 2);
     // Ben orders his lamp: on the next scheduled refresh he has left, and that is recorded.

@@ -58,6 +58,7 @@ const KINDS: { id: Target["kind"]; label: string }[] = [
   { id: "first_name", get label() { return tr("First name"); } },
   { id: "last_name", get label() { return tr("Last name"); } },
   { id: "full_name", get label() { return tr("Full name (split in two)"); } },
+  { id: "time_zone", get label() { return tr("Time zone"); } },
   { id: "attribute", get label() { return tr("Keep as an attribute"); } },
 ];
 

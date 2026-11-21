@@ -13,6 +13,7 @@
     - {name: variant, type: data, read_only: true, max_length: 1, in_list: true}
     - {name: subject, type: data, required: true, max_length: 998, in_list: true}
     - {name: content, type: text, description: "HTML; blank = the campaign's content (a subject-only test)"}
+    - {name: design, type: json, description: "The variant's email as blocks (rows, columns, blocks). When set, Content is made from it at every save; clear it to write HTML again"}
 
 - name: EmailCampaign
   label: Email Campaign
@@ -25,7 +26,7 @@
   description: "One email to an audience of segments and email groups. Submitting schedules it; every recipient is claimed before its email goes out (never twice), sent through the Mail app within the hourly limits, with open and click tracking and a signed unsubscribe link. A/B tests send variants to a test share and the winner, by opens or clicks, to the rest. Cancel to stop sending."
   fields:
     - {name: campaign_name, type: data, required: true, in_list: true}
-    - {name: status, type: select, options: [Draft, Scheduled, Sending, Sent, Cancelled], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
+    - {name: status, type: select, options: [Draft, Scheduled, Sending, Paused, Sent, Cancelled], default: Draft, read_only: true, no_copy: true, in_list: true, in_filter: true}
     - {name: channel, type: select, options: [Email, Text Message, Chat App], default: Email, in_list: true, in_filter: true,
        description: "Text and chat-app messages go through the platform's message templates and the workspace's channel connections: the number's own opt-out on that channel, quiet hours and hourly limits are the platform's"}
     - {name: message_template, type: data, max_length: 100, visible_if: "doc.channel == 'Text Message' || doc.channel == 'Chat App'",
@@ -38,9 +39,13 @@
     - {name: topic, type: link, to: MarketingTopic, in_filter: true, description: "Only people in this topic receive it; blank = everyone in the audience who takes marketing mail"}
     - {name: content, type: text, required_if: "doc.channel != 'Text Message' && doc.channel != 'Chat App'",
        description: "HTML (sandboxed template): {{ contact.first_name }}, {{ contact.last_name }}, {{ contact.email }}, {{ contact.attributes.<key> }}, {{ unsubscribe_url }}; values are HTML-escaped and missing ones render empty. A footer with the unsubscribe link and your postal address is added when the content has no {{ unsubscribe_url }}"}
+    - {name: design, type: json, description: "The email as blocks (rows, columns, blocks). When set, Content is made from it at every save and is not written by hand; clear it to write HTML again"}
     - {name: text_content, type: text, label: Plain Text, description: "The plain-text part; blank = derived from the HTML"}
     - {name: audience, type: table, of: CampaignAudience, required: true}
     - {name: schedule_at, type: datetime, in_list: true, description: "Blank = as soon as it is submitted"}
+    - {name: send_time, type: select, options: [At Once, Local Time, Best Hour], default: At Once,
+       visible_if: "doc.channel != 'Text Message' && doc.channel != 'Chat App'",
+       description: "Local Time: each person gets it when their own clock next shows the scheduled clock time, within a day. Best Hour: at the hour they open most, within a day; people with too few opens get it at the start"}
     - {name: hourly_limit, type: int, label: Emails Per Hour, default: 0, min: 0, max: 1000000,
        description: "This campaign's own sending rate; 0 = only the workspace limit (Campaign Settings, shared with journeys)"}
     - {name: track_opens, type: check, default: true}
@@ -77,25 +82,67 @@
     - {name: started_at, type: datetime, read_only: true, no_copy: true}
     - {name: finished_at, type: datetime, read_only: true, no_copy: true}
     - {name: last_error, type: text, read_only: true, no_copy: true}
+    - {name: paused_at, type: datetime, read_only: true, no_copy: true}
+    - {name: pause_cause, type: select, options: [Complaints, Hard Bounces], read_only: true, no_copy: true}
+    - {name: pause_rate, type: percent, read_only: true, no_copy: true, description: "The rate that stopped it"}
+    - {name: resumed_at, type: datetime, read_only: true, no_copy: true}
+    - {name: resumed_by, type: email, read_only: true, no_copy: true}
   actions:
     # The campaign page shows a preview itself; the records form would only throw its answer away.
     - {name: preview, label: Preview, permission: read, read_only: true, hidden: true}
-    - {name: send_seed, label: Send To Seed List, permission: write, docstatus: [0, 1]}
-    - {name: send_test, label: Send Test Email, permission: write, docstatus: [0, 1],
-       params: [{name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}]}
+    - name: send_seed
+      label: Send To Seed List
+      permission: write
+      docstatus: [0, 1]
+      params:
+        - {name: variant, label: Version, type: data, description: "The letter of an A/B version; blank = the campaign's own"}
+        - {name: contact, label: Shown As, type: link, to: MarketingContact, description: "The contact whose values fill the email; blank = a stand-in"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "The campaign, as recipients get it, is handed to the Mail app for each seed address; Mail delivers it after this commits and its Communication records say what became of each"
+        returns: {type: object, properties: {sent: {type: integer}, communications: {type: array, items: {type: string}}}}
+    - name: send_test
+      label: Send Test Email
+      permission: write
+      docstatus: [0, 1]
+      params:
+        - {name: emails, label: Email Addresses, type: text, required: true, description: "Up to 10, separated by commas or lines"}
+        - {name: variant, label: Version, type: data, description: "The letter of an A/B version; blank = the campaign's own"}
+        - {name: contact, label: Shown As, type: link, to: MarketingContact, description: "The contact whose values fill the email; blank = a stand-in"}
+      contract:
+        effect: external_effect
+        unknown_outcome: reconcile
+        completion: "The email, marked as a test, is handed to the Mail app for each address; Mail delivers it after this commits and its Communication records say what became of each"
+        returns: {type: object, properties: {sent: {type: integer}, communications: {type: array, items: {type: string}}}}
     # For the campaign screens (they call these, nobody clicks them): who it would reach if it started now, and what
     # happened to what was sent, by hour or day.
-    - {name: audience_check, label: Check Audience, permission: read, read_only: true, hidden: true}
+    - name: audience_check
+      label: Check Audience
+      permission: read
+      read_only: true
+      hidden: true
+      contract: {effect: query, completion: "Who the campaign would reach if it started now, counted as sending counts it; nothing is changed"}
+    - name: resume
+      label: Resume Sending
+      permission: submit
+      docstatus: [1]
+      condition: "doc.status == 'Paused'"
+      confirm: "Send the rest? The automatic pause will not stop this campaign again."
+      contract:
+        effect: transactional_action
+        returns: {type: object, properties: {status: {type: string}}}
+        completion: "The campaign is Sending again and the automatic pause does not stop it a second time; the next upkeep round sends what waits"
     - {name: timeline, label: Timeline, permission: read, read_only: true, hidden: true}
   form:
     - {label: Campaign, fields: [campaign_name, status, channel, message_template, email_account, topic, subject, preheader, email_template]}
     - {label: Content, fields: [content, text_content]}
     - {label: Audience, fields: [audience]}
-    - {label: Sending, fields: [schedule_at, hourly_limit, track_opens, track_clicks, utm_tags, utm_campaign, utm_source, utm_medium, deliverability_override,
+    - {label: Sending, fields: [schedule_at, send_time, hourly_limit, track_opens, track_clicks, utm_tags, utm_campaign, utm_source, utm_medium, deliverability_override,
                                 override_reason]}
     - {label: A/B Test, collapsible: true, fields: [ab_test, variants, test_percent, winner_metric, winner_after_hours, winner_variant, test_sent_at, winner_chosen_at]}
     - {label: Results, fields: [total_recipients, sent_count, failed_count, skipped_count, unique_opens, total_opens, unique_clicks, total_clicks, unsubscribe_count,
-                                bounce_count, complaint_count, attributed_orders, attributed_revenue, started_at, finished_at, last_error]}
+                                bounce_count, complaint_count, attributed_orders, attributed_revenue, started_at, finished_at, last_error, paused_at, pause_cause, pause_rate, resumed_at, resumed_by]}
   list: {columns: [campaign_name, status, schedule_at, sent_count, unique_opens, unique_clicks], sort: schedule_at desc}
 
 - name: CampaignRecipient
@@ -122,6 +169,7 @@
     - {name: skip_reason, type: data, read_only: true}
     - {name: communication, type: link, to: Communication, on_delete: set_null, read_only: true}
     - {name: queued_at, type: datetime, read_only: true}
+    - {name: send_after, type: datetime, read_only: true, description: "Not handed over before this moment (the campaign's send time for this person)"}
     - {name: sent_at, type: datetime, read_only: true, in_list: true}
     - {name: opened_at, type: datetime, label: First Opened At, read_only: true}
     - {name: last_opened_at, type: datetime, read_only: true}
@@ -136,5 +184,5 @@
     - {name: complained_at, type: datetime, read_only: true}
     - {name: error, type: text, read_only: true}
   unique: [[campaign, contact]]
-  indexes: [[status, queued_at], [queued_at], [communication], [journey, journey_step]]
+  indexes: [[status, queued_at], [queued_at], [communication], [journey, journey_step], [contact, queued_at]]
   list: {columns: [email, campaign, variant, status, sent_at, open_count, click_count], sort: email asc}

@@ -5,11 +5,13 @@
 
 use crate::render::{self, add_preheader, append_to_body, footer, pixel, rewrite_links};
 use crate::util::{self, simple, values};
+use chrono::{DateTime, Utc};
 use ferrum_kernel::retention::Purpose;
 use ferrum_kernel::{Ctx, Error, Kernel, Result, Tx};
 use regex::Regex;
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
+use sqlx::{Postgres, QueryBuilder};
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use uuid::Uuid;
 
@@ -41,6 +43,54 @@ pub async fn hourly_room(tx: &mut Tx, tenant: Uuid) -> Result<i64> {
     .fetch_one(&mut **tx)
     .await?;
     Ok((limit - used).max(0))
+}
+
+/// The frequency cap as `(emails, days)`, when the workspace set one (Campaign Settings; none or 0 = no cap).
+pub async fn frequency(tx: &mut Tx, tenant: Uuid) -> Result<Option<(i64, i64)>> {
+    let row: Option<(Option<i64>, Option<i64>)> = sqlx::query_as("select frequency_cap, frequency_days from e_campaign_settings where tenant_id = $1 limit 1")
+        .bind(tenant)
+        .fetch_optional(&mut **tx)
+        .await?;
+    Ok(row.and_then(|(cap, days)| {
+        let cap = cap.unwrap_or(0);
+        (cap > 0).then(|| (cap, days.unwrap_or(7).max(1)))
+    }))
+}
+
+/// The promotional emails handed to contact `c` within `days`: rows with a `communication` (what Mail was given), on
+/// email, of no topic or one that is not operational. Rows claimed in the running batch have no `communication` yet.
+pub fn push_recent(qb: &mut QueryBuilder<Postgres>, days: i64) {
+    qb.push(
+        "(select count(*) from e_campaign_recipient r left join e_marketing_topic tp on tp.tenant_id = r.tenant_id and tp.id = r.topic          where r.tenant_id = c.tenant_id and r.contact = c.id and r.communication is not null and r.queued_at > now() - make_interval(days => ",
+    )
+    .push_bind(days as i32)
+    .push(") and coalesce(r.channel, 'Email') = 'Email' and coalesce(tp.category, '') <> 'Operational')");
+}
+
+/// Of `contacts`, who already has `cap` promotional emails within `days`. Call it after `lock_budget`: a second sender
+/// then waits for the first one's commit and sees its rows.
+pub async fn capped(tx: &mut Tx, tenant: Uuid, contacts: &[Uuid], cap: i64, days: i64) -> Result<HashSet<Uuid>> {
+    let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("select c.id from e_marketing_contact c where c.tenant_id = ");
+    qb.push_bind(tenant).push(" and c.id = any(").push_bind(contacts.to_vec()).push(") and ");
+    push_recent(&mut qb, days);
+    qb.push(" >= ").push_bind(cap);
+    Ok(qb.build_query_scalar::<Uuid>().fetch_all(&mut **tx).await?.into_iter().collect())
+}
+
+/// When `contact` is at the cap, the time of the oldest counted email (the cap frees when it leaves the window).
+pub async fn cap_since(tx: &mut Tx, tenant: Uuid, contact: Uuid, cap: i64, days: i64) -> Result<Option<DateTime<Utc>>> {
+    let at: Option<Option<DateTime<Utc>>> = sqlx::query_scalar(
+        "select min(r.queued_at) from e_campaign_recipient r left join e_marketing_topic tp on tp.tenant_id = r.tenant_id and tp.id = r.topic \
+         where r.tenant_id = $1 and r.contact = $2 and r.communication is not null and r.queued_at > now() - make_interval(days => $3) \
+         and coalesce(r.channel, 'Email') = 'Email' and coalesce(tp.category, '') <> 'Operational' having count(*) >= $4",
+    )
+    .bind(tenant)
+    .bind(contact)
+    .bind(days as i32)
+    .bind(cap)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(at.flatten())
 }
 
 /// An email before personalization.

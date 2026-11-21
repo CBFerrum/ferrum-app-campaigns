@@ -111,6 +111,8 @@ pub enum Rule {
     },
     /// The members of a segment worked out from a query (`campaigns_segment_member`).
     Members(Uuid),
+    /// Exactly these contacts (a query segment counted without being worked out).
+    Contacts(Vec<Uuid>),
     Text(Subject, TextOp, String),
     /// Attribute greater than (`true`) or less than a number.
     Number(String, bool, Decimal),
@@ -318,12 +320,14 @@ fn compare(t: FieldType, op: &str, value: Option<&str>) -> std::result::Result<C
 
 /// Parses a segment document; errors point at the offending rows.
 pub fn parse(doc: &Doc, schema: &Schema) -> std::result::Result<Segment, Vec<FieldError>> {
-    if s(doc, "source") == Some("Query") {
-        return match (id(doc, "id"), query_of(doc, schema)) {
+    if matches!(s(doc, "source"), Some("Query" | "List")) {
+        // A list is a fixed set of members another app made: it has no query.
+        let checked = if s(doc, "source") == Some("List") { Ok(()) } else { query_of(doc, schema).map(|_| ()) };
+        return match (id(doc, "id"), checked) {
             (_, Err(m)) => Err(vec![FieldError::new("query", m)]),
-            (Some(sid), Ok(_)) => Ok(Segment { all: true, rules: vec![Rule::Members(sid)] }),
+            (Some(sid), Ok(())) => Ok(Segment { all: true, rules: vec![Rule::Members(sid)] }),
             // Not saved yet: nobody, until it is worked out.
-            (None, Ok(_)) => Ok(Segment { all: true, rules: vec![Rule::Members(Uuid::nil())] }),
+            (None, Ok(())) => Ok(Segment { all: true, rules: vec![Rule::Members(Uuid::nil())] }),
         };
     }
     let mut rules = Vec::new();
@@ -484,6 +488,9 @@ fn push_rule(qb: &mut QueryBuilder<Postgres>, rule: &Rule, today: NaiveDate, tz:
             qb.push("exists (select 1 from campaigns_segment_member m where m.tenant_id = c.tenant_id and m.contact_id = c.id and m.segment_id = ")
                 .push_bind(*seg)
                 .push(")");
+        }
+        Rule::Contacts(ids) => {
+            qb.push("c.id = any(").push_bind(ids.clone()).push(")");
         }
         Rule::Text(subject, op, value) => match op {
             TextOp::Equals | TextOp::NotEquals => {
@@ -665,7 +672,14 @@ pub async fn query_contacts(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeo
 pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: u64) -> Result<(u64, u64)> {
     let sid = util::doc_id(doc)?;
     let tenant = sys.tenant;
-    let ids: Vec<Uuid> = if s(doc, "source") == Some("Query") {
+    let ids: Vec<Uuid> = if s(doc, "source") == Some("List") {
+        // A list's members are its own: only the counts are worked out again.
+        sqlx::query_scalar("select contact_id from campaigns_segment_member where tenant_id = $1 and segment_id = $2")
+            .bind(tenant)
+            .bind(sid)
+            .fetch_all(&mut **tx)
+            .await?
+    } else if s(doc, "source") == Some("Query") {
         query_contacts(k, sys, tx, doc, timeout_ms).await?
     } else {
         let seg = parse(doc, &sys.schema).map_err(Error::Validation)?;
@@ -695,7 +709,17 @@ pub async fn refresh(k: &Kernel, sys: &Ctx, tx: &mut Tx, doc: &Doc, timeout_ms: 
     .execute(&mut **tx)
     .await?
     .rows_affected();
-    k.set_values_tx(sys, tx, "MarketingSegment", sid, values([("refreshed_at", json!(util::ts(util::now())))])).await?;
+    // The saved counts are what this worked out, not what a preview showed someone.
+    let mailable: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "select count(*) filter (where {MAILABLE}) from e_marketing_contact c where c.tenant_id = $1 and c.id = any($2)"
+    )))
+    .bind(tenant)
+    .bind(&ids)
+    .fetch_one(&mut **tx)
+    .await?;
+    let now = util::ts(util::now());
+    let v = values([("refreshed_at", json!(now)), ("contact_count", json!(ids.len() as i64)), ("mailable_count", json!(mailable)), ("counted_at", json!(now))]);
+    k.set_values_tx(sys, tx, "MarketingSegment", sid, v).await?;
     Ok((entered, left))
 }
 
@@ -738,7 +762,8 @@ pub async fn run(k: &Kernel, sys: &Ctx) -> Result<usize> {
     Ok(done)
 }
 
-/// `(contacts, mailable)` in a segment, and the first contacts by address.
+/// `(contacts, mailable)` in a segment, and the first contacts by address. A column of a contact's the caller may not
+/// read is left out of the sample, and so is `mailable` (it follows the consent status).
 pub async fn count(tx: &mut Tx, ctx: &Ctx, seg: &Segment, sample: i64) -> Result<(i64, i64, Vec<Value>)> {
     let today = ctx.today();
     let tz = ctx.schema.timezone.clone();
@@ -747,15 +772,71 @@ pub async fn count(tx: &mut Tx, ctx: &Ctx, seg: &Segment, sample: i64) -> Result
     qb.push_bind(ctx.tenant).push(" and ");
     seg.push(&mut qb, today, &tz);
     let (total, mailable): (i64, i64) = qb.build_query_as().fetch_one(&mut **tx).await?;
-    let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(format!(
-        "select jsonb_build_object('id', c.id, 'email', c.email, 'full_name', c.full_name, 'consent_status', c.consent_status, 'mailable', {MAILABLE}) \
-         from e_marketing_contact c where c.tenant_id = "
-    ));
+    let columns = ferrum_domain::reports::readable_columns(
+        ctx,
+        "MarketingContact",
+        ["email", "full_name", "consent_status"].iter().map(|n| json!({"name": n})).collect(),
+    );
+    let mut pairs = String::from("'id', c.id");
+    for c in &columns {
+        let name = c["name"].as_str().unwrap_or_default();
+        pairs.push_str(&format!(", '{name}', c.{name}"));
+    }
+    if columns.iter().any(|c| c["name"] == "consent_status") {
+        pairs.push_str(&format!(", 'mailable', {MAILABLE}"));
+    }
+    let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(format!("select jsonb_build_object({pairs}) from e_marketing_contact c where c.tenant_id = "));
     qb.push_bind(ctx.tenant).push(" and ");
     seg.push(&mut qb, today, &tz);
     qb.push(" order by c.email limit ").push_bind(sample);
     let rows: Vec<Value> = qb.build_query_scalar().fetch_all(&mut **tx).await?;
     Ok((total, mailable, rows))
+}
+
+/// Every `(entity, field)` a segment's rules read, as the rules name them (rows of a rules segment only).
+pub fn touched(doc: &Doc) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for r in rows(doc, "rules") {
+        let mut add = |entity: &str, field: Option<&str>| {
+            if let Some(f) = field {
+                out.push((entity.to_string(), f.to_string()));
+            }
+        };
+        match s(&r, "rule_type").unwrap_or("Contact Field") {
+            "Contact Field" => {
+                let column = FIELDS.iter().find(|(label, _)| Some(*label) == s(&r, "field")).map(|(_, c)| c.trim_start_matches("c."));
+                add("MarketingContact", column);
+            }
+            "Attribute" => add("MarketingContact", Some("attributes")),
+            "Record Field" => add(s(&r, "entity_name").unwrap_or_default(), s(&r, "field_name")),
+            "Related Records" => {
+                let entity = s(&r, "entity_name").unwrap_or_default();
+                for k in ["link_field", "measure_field", "date_field", "match_field"] {
+                    add(entity, s(&r, k));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Refuses a segment whose rules read what the caller may not: counts and samples would reveal it (S9 T9). A query
+/// segment is read through the same right a save needs (the rows must be readable). The workspace's own work is not asked.
+pub async fn check_readable(k: &Kernel, ctx: &Ctx, doc: &Doc, saving: bool) -> Result<()> {
+    if ctx.is_system {
+        return Ok(());
+    }
+    for (entity, field) in touched(doc) {
+        ctx.require(&entity, ferrum_kernel::Action::Read)?;
+        ferrum_domain::reports::readable_choice(ctx, &entity, &field)?;
+    }
+    // A query's rows are read by whoever saves it; a reader of the saved segment is told its counts, as before.
+    if let (true, Some("Query"), Ok((entity, filters))) = (saving, s(doc, "source"), query_of(doc, &ctx.schema)) {
+        let q = ListQuery { filters: ferrum_kernel::query::parse_filters(&filters)?, limit: Some(1), ..Default::default() };
+        k.list(ctx, &entity, &q).await.map_err(|e| Error::field("query", format!("you cannot read these records: {e}")))?;
+    }
+    Ok(())
 }
 
 pub struct SegmentHook;
@@ -764,29 +845,38 @@ pub struct SegmentHook;
 impl DocHook for SegmentHook {
     async fn validate(&self, hc: &mut HookCtx<'_>, doc: &Doc) -> Result<()> {
         parse(doc, &hc.ctx.schema).map_err(Error::Validation)?;
-        // Who saves a query must be able to read its rows; it is then worked out as the workspace.
-        if let (Some("Query"), Ok((entity, filters)), false) = (s(doc, "source"), query_of(doc, &hc.ctx.schema), hc.ctx.is_system) {
-            let q = ListQuery { filters: ferrum_kernel::query::parse_filters(&filters)?, limit: Some(1), ..Default::default() };
-            if let Err(e) = hc.kernel.list(hc.ctx, &entity, &q).await {
-                return Err(Error::field("query", format!("you cannot read these records: {e}")));
-            }
-        }
-        Ok(())
+        // Who saves a segment must be able to read everything its rules read (a query's rows too); it is then worked
+        // out as the workspace.
+        check_readable(hc.kernel, hc.ctx, doc, true).await
     }
 
     async fn action(&self, hc: &mut HookCtx<'_>, name: &str, doc: &Doc, params: &Value) -> Result<Option<Value>> {
         match name {
+            // What is in the segment now, counted in a read-only transaction: nothing is stored (a reader presses it).
+            // A query's rows are read as they are now; its membership and counts are the refresh's.
             "preview" => {
-                if s(doc, "source") == Some("Query") {
-                    // Someone is waiting for the preview: the ordinary statement timeout.
-                    refresh(hc.kernel, &sys(hc.ctx), hc.tx, doc, hc.kernel.db.config.statement_timeout_ms).await?;
-                }
-                let seg = parse(doc, &hc.ctx.schema).map_err(Error::Validation)?;
+                check_readable(hc.kernel, hc.ctx, doc, false).await?;
+                let seg = if s(doc, "source") == Some("Query") {
+                    let ids = query_contacts(hc.kernel, &sys(hc.ctx), hc.tx, doc, hc.kernel.db.config.statement_timeout_ms).await?;
+                    Segment { all: true, rules: vec![Rule::Contacts(ids)] }
+                } else {
+                    parse(doc, &hc.ctx.schema).map_err(Error::Validation)?
+                };
                 let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
-                let counted_at = util::ts(util::now());
-                let v = values([("contact_count", json!(total)), ("mailable_count", json!(mailable)), ("counted_at", json!(counted_at))]);
-                hc.kernel.set_values_tx(hc.ctx, hc.tx, "MarketingSegment", util::doc_id(doc)?, v).await?;
-                Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "counted_at": counted_at, "sample": sample})))
+                Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "counted_at": util::ts(util::now()), "sample": sample})))
+            }
+            // Works the membership out again and stores it with the counts.
+            "refresh" => {
+                // Someone is waiting: the ordinary statement timeout.
+                let (entered, left) = refresh(hc.kernel, &sys(hc.ctx), hc.tx, doc, hc.kernel.db.config.statement_timeout_ms).await?;
+                let saved = hc.kernel.get_tx(&sys(hc.ctx), hc.tx, "MarketingSegment", util::doc_id(doc)?, true).await?;
+                Ok(Some(json!({
+                    "entered": entered,
+                    "left": left,
+                    "contact_count": saved.get("contact_count"),
+                    "mailable_count": saved.get("mailable_count"),
+                    "counted_at": saved.get("counted_at"),
+                })))
             }
             // The same count for rules being edited: nothing is saved, so it can follow every change.
             "count" => {
@@ -795,6 +885,7 @@ impl DocHook for SegmentHook {
                     return Err(Error::field("rules", "send the rules as a list"));
                 }
                 let candidate = values([("match_type", params.get("match_type").cloned().unwrap_or_else(|| json!("All"))), ("rules", rules.clone())]);
+                check_readable(hc.kernel, hc.ctx, &candidate, false).await?;
                 let seg = parse(&candidate, &hc.ctx.schema).map_err(Error::Validation)?;
                 let (total, mailable, sample) = count(hc.tx, hc.ctx, &seg, 20).await?;
                 Ok(Some(json!({"contact_count": total, "mailable_count": mailable, "sample": sample})))
