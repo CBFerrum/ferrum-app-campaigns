@@ -329,7 +329,7 @@
       label: Check DNS
       permission: write
       contract:
-        effect: query
+        effect: transactional_action
         completion: "The domain's DNS records were read through the Mail app and the verdict is saved on the domain"
         returns: {type: object, properties: {check_status: {type: string}}}
   form:

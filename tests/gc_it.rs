@@ -762,7 +762,7 @@ async fn one_issue(t: &T, mgr: &Ctx) {
     let body: String = t
         .scalar(&format!("select c.content from e_campaign_recipient r join e_communication c on c.id = r.communication where r.tenant_id = $1 and r.campaign = '{campaign}' and $2::uuid is null"), None)
         .await;
-    assert!(body.contains("&#123;&#123; x }}") || body.contains("{{ x }}") == false, "text is never a template: {body}");
+    assert!(!body.contains("{{ x }}"), "text is never a template: {body}");
     // someone who may only read topics cannot send
     let reader = t.person("topics@acme.test", "Topic Reader", json!([{"entity": "MarketingTopic", "read": true}])).await;
     assert!(call("issue-3", "week-2", &reader).await.is_err());
