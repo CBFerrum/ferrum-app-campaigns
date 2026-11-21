@@ -229,7 +229,7 @@ async fn pause_and_resume(t: &T, mgr: &Ctx) {
     let first = t.k.invoke(mgr, inv()).await.expect("resumed");
     assert!(!first.repeated);
     assert!(t.k.invoke(mgr, inv()).await.expect("repeat").repeated, "the same key answers repeated");
-    refused(t.k.run_action(mgr, "EmailCampaign", c, "resume", json!({})).await);
+    assert!(t.k.run_action(mgr, "EmailCampaign", c, "resume", json!({})).await.is_err(), "only a paused campaign resumes");
     // a_resumed_campaign_is_not_paused_again
     t.exec("update e_campaign_recipient set queued_at = now() - interval '2 hours' where tenant_id = $1 and $2::uuid is null", None).await;
     t.maint().await;
