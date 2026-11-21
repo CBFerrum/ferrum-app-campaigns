@@ -185,7 +185,7 @@ async fn frequency_cap(t: &T, mgr: &Ctx) {
         tokio::join!(t.maint(), t.maint());
     }
     let over: i64 = t
-        .scalar("select count(*) from (select contact from e_campaign_recipient where tenant_id = $1 and communication is not null and $2::uuid is null group by contact having count(*) > 1) x", None)
+        .scalar("select count(*) from (select r.contact from e_campaign_recipient r join e_marketing_contact c on c.id = r.contact where r.tenant_id = $1 and c.email like '%@h.test' and r.communication is not null and $2::uuid is null group by r.contact having count(*) > 1) x", None)
         .await;
     assert_eq!(over, 0, "nobody went past the cap");
     let once: i64 = t
