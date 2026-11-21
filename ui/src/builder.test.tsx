@@ -26,6 +26,13 @@ const design = (): Design => {
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+  // jsdom has no modal dialogs: the confirm dialog opens and closes by its attribute.
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  };
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);

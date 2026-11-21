@@ -827,8 +827,6 @@ async fn told_to_crm(t: &T, mgr: &Ctx) {
     let (c, _) = t.send(mgr, campaign("Told", &aud)).await;
     let lia = t.recipient_of(c, "lia@crmtold.test").await;
     let hand = t.recipient_of(c, "hand@crmtold.test").await;
-    let engagements =
-        || t.scalar::<i64>(&format!("select count(*) from e_lead_engagement where tenant_id = $1 and lead = '{lead}' and $2::uuid is null"), None);
     // an_automatic_open_is_not_told
     t.site_ua("GET", &open_of(t, lia).await, "", "Mozilla/5.0").await;
     t.maint().await;
