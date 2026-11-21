@@ -24,8 +24,7 @@ pub fn uid(d: &Doc) -> Uuid {
 }
 
 pub fn refused<T: std::fmt::Debug>(r: Result<T, Error>) {
-    // A record or an action the caller has no right to is answered as not found: that is a refusal too.
-    assert!(matches!(r, Err(Error::Invalid(_) | Error::Validation(_) | Error::Forbidden(_) | Error::NotFound(_))), "expected a refusal, got {r:?}");
+    assert!(matches!(r, Err(Error::Invalid(_) | Error::Validation(_) | Error::Forbidden(_))), "expected a refusal, got {r:?}");
 }
 
 /// An SMTP server that accepts everything (the Mail app delivers to it).
@@ -222,6 +221,15 @@ pub fn opener(url: &str) -> ferrum_kernel::vault::Opener {
         kdf: ferrum_kernel::vault::Kdf { m_kib: 64, t: 1, p: 1 },
         ..Default::default()
     }
+}
+
+/// For a caller who may not see the record or the action at all: the platform answers "not found" there, which is a
+/// refusal too. Only for such assertions; every other refusal is checked with the strict `refused`.
+pub fn hidden_or_refused<T: std::fmt::Debug>(r: Result<T, Error>) {
+    assert!(
+        matches!(r, Err(Error::Invalid(_) | Error::Validation(_) | Error::Forbidden(_) | Error::NotFound(_))),
+        "expected a refusal or not found, got {r:?}"
+    );
 }
 
 /// A workspace with Mail, ERP, CRM and Campaigns, the Marketing Manager `mgr` and a mail account that delivers to an

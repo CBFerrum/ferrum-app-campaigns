@@ -223,13 +223,13 @@ async fn pause_and_resume(t: &T, mgr: &Ctx) {
     assert_eq!(t.list("CampaignRecipient", json!({"campaign": c.to_string(), "status": "Pending"})).await.len(), 5, "a paused campaign sends nothing");
     // resume_needs_submit, and only a paused campaign resumes
     let uma = t.person("uma@acme.test", "Campaign Writer", json!([{"entity": "EmailCampaign", "read": true, "write": true}])).await;
-    assert!(t.k.run_action(&uma, "EmailCampaign", c, "resume", json!({})).await.is_err(), "a writer without submit may not resume");
+    hidden_or_refused(t.k.run_action(&uma, "EmailCampaign", c, "resume", json!({})).await);
     // resume_repeats_once
     let inv = || Invocation::new("campaigns.email_campaign.resume", json!({"id": c.to_string()})).key("resume-1");
     let first = t.k.invoke(mgr, inv()).await.expect("resumed");
     assert!(!first.repeated);
     assert!(t.k.invoke(mgr, inv()).await.expect("repeat").repeated, "the same key answers repeated");
-    assert!(t.k.run_action(mgr, "EmailCampaign", c, "resume", json!({})).await.is_err(), "only a paused campaign resumes");
+    hidden_or_refused(t.k.run_action(mgr, "EmailCampaign", c, "resume", json!({})).await);
     // a_resumed_campaign_is_not_paused_again
     t.exec("update e_campaign_recipient set queued_at = now() - interval '2 hours' where tenant_id = $1 and $2::uuid is null", None).await;
     t.maint().await;
@@ -727,7 +727,7 @@ async fn designs(t: &T, mgr: &Ctx) {
     let uma = t
         .person("drafter@acme.test", "Campaign Drafter", json!([{"entity": "EmailCampaign", "read": true, "write": true, "create": true, "if_owner": true}]))
         .await;
-    refused(t.k.update(&uma, "EmailCampaign", c, obj(json!({"design": design("Mine", "https://shop.test/sale")})), None).await);
+    hidden_or_refused(t.k.update(&uma, "EmailCampaign", c, obj(json!({"design": design("Mine", "https://shop.test/sale")})), None).await);
 }
 
 /// interapp: another app's one composed message to named people, once under a topic.
