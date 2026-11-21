@@ -324,7 +324,7 @@ async fn funnel(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
     .into_iter()
     .collect();
     // Who is on each step now, and how many of them wait.
-    let here: HashMap<i32, (i64, i64)> = sqlx::query_as::<_, (i32, i64, i64)>(
+    let here: HashMap<i64, (i64, i64)> = sqlx::query_as::<_, (i64, i64, i64)>(
         "select current_step, count(*), count(*) filter (where waiting) from e_journey_enrollment where tenant_id = $1 and journey = $2 and status = 'Active' \
          group by current_step",
     )
@@ -354,7 +354,7 @@ async fn funnel(k: &Kernel, ctx: &Ctx, p: &Params<'_>) -> Result<Value> {
             let n = i + 1;
             let (sent, opens, clicks) = mail.get(&(n as i64)).copied().unwrap_or_default();
             let reach = reached.get(&(n as i32)).copied().unwrap_or_default();
-            let (now, waiting) = here.get(&(n as i32)).copied().unwrap_or_default();
+            let (now, waiting) = here.get(&(n as i64)).copied().unwrap_or_default();
             json!({"step": n, "step_type": r.get("step_type"), "label": r.get("label"), "reached": reach, "reached_rate": pct(reach, enrolled), "here": now, "waiting": waiting,
                    "emails_sent": sent, "unique_opens": opens, "unique_clicks": clicks, "open_rate": pct(opens, sent), "click_rate": pct(clicks, sent)})
         })
