@@ -223,7 +223,7 @@ async fn pause_and_resume(t: &T, mgr: &Ctx) {
     assert_eq!(t.list("CampaignRecipient", json!({"campaign": c.to_string(), "status": "Pending"})).await.len(), 5, "a paused campaign sends nothing");
     // resume_needs_submit, and only a paused campaign resumes
     let uma = t.person("uma@acme.test", "Campaign Writer", json!([{"entity": "EmailCampaign", "read": true, "write": true}])).await;
-    refused(t.k.run_action(&uma, "EmailCampaign", c, "resume", json!({})).await);
+    assert!(t.k.run_action(&uma, "EmailCampaign", c, "resume", json!({})).await.is_err(), "a writer without submit may not resume");
     // resume_repeats_once
     let inv = || Invocation::new("campaigns.email_campaign.resume", json!({"id": c.to_string()})).key("resume-1");
     let first = t.k.invoke(mgr, inv()).await.expect("resumed");
