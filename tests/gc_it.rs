@@ -153,8 +153,9 @@ async fn frequency_cap(t: &T, mgr: &Ctx) {
     assert!(t.list("CampaignRecipient", json!({"journey": j.to_string()})).await.is_empty(), "no row is made while the cap holds");
     let e = &t.list("JourneyEnrollment", json!({"journey": j.to_string()})).await[0];
     assert_eq!((e["status"].clone(), e["current_step"].clone()), (json!("Active"), json!(1)), "{e:?}");
-    let waits: i64 =
-        t.scalar("select count(*) from campaigns_journey_log where tenant_id = $1 and outcome = 'waiting: frequency cap' and $2::uuid is null", None).await;
+    let waits: i64 = t
+        .scalar(&format!("select count(*) from campaigns_journey_log where tenant_id = $1 and journey_id = '{j}' and outcome = 'waiting: frequency cap' and $2::uuid is null"), None)
+        .await;
     assert_eq!(waits, 1);
     let later: bool = t
         .scalar(
