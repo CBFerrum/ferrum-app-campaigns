@@ -1,0 +1,1 @@
+import{d as t,ag as a}from"./index-CUf1vnrl.js";function l(e,n){const[u,f]=t.useState(!1);return t.useEffect(()=>{let s=!0;return a().canIntent(e,n).then(r=>s&&f(r)).catch(()=>{}),()=>{s=!1}},[e,n]),u}function o(e){t.useEffect(()=>{e&&a().title(e)},[e])}export{l as a,o as u};
