@@ -24,7 +24,8 @@ pub fn uid(d: &Doc) -> Uuid {
 }
 
 pub fn refused<T: std::fmt::Debug>(r: Result<T, Error>) {
-    assert!(matches!(r, Err(Error::Invalid(_) | Error::Validation(_) | Error::Forbidden(_))), "expected a refusal, got {r:?}");
+    // A record or an action the caller has no right to is answered as not found: that is a refusal too.
+    assert!(matches!(r, Err(Error::Invalid(_) | Error::Validation(_) | Error::Forbidden(_) | Error::NotFound(_))), "expected a refusal, got {r:?}");
 }
 
 /// An SMTP server that accepts everything (the Mail app delivers to it).
